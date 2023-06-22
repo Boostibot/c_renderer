@@ -70,14 +70,17 @@ typedef double      f64;
     #define RESTRICT __restrict__
     #define FORCE_INLINE __attribute__((always_inline))
     #define NO_INLINE __attribute__((noinline))
+    #define THREAD_LOCAL __thread
 #elif defined(_MSC_VER)
     #define RESTRICT __restrict
     #define FORCE_INLINE __forceinline
     #define NO_INLINE __declspec(noinline)
+    #define THREAD_LOCAL __declspec(thread)
 #else
     #define RESTRICT
     #define FORCE_INLINE
     #define NO_INLINE
+    #define THREAD_LOCAL __thread
 #endif
 
 #ifndef _MSC_VER

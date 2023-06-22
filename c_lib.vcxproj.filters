@@ -33,6 +33,9 @@
     <ClCompile Include="c_time.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="memory.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="c_allocator.h">

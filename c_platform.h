@@ -19,10 +19,13 @@
 //yield 
  
 //lock_free.h
+//COMPILER_MEMORY_FENCE
+//PROCESSOR_MEMORY_FENCE
+//DEBUG_BREAK
 //PAUSE
+//interlocked_exchange
 //atomics as functions => load/store
 //reentrant spin lock
-//read_write_barrier
 
 //utf.h
 //utf conversion 
@@ -35,10 +38,7 @@
 
 //window.h
 //Make blocking popup
-//Make blocking error
-//Initi window
-//Deinit window
-//Play sound
+//Input struct
 
 //time.h 
 // * good as is *

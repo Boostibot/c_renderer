@@ -133,6 +133,7 @@
     <ClCompile Include="c_time.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="c_string.c" />
+    <ClCompile Include="memory.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="c_allocator.h" />
