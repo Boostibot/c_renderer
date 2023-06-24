@@ -127,25 +127,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="c_allocator.c" />
-    <ClCompile Include="c_allocator_malloc.c" />
-    <ClCompile Include="c_array.c" />
-    <ClCompile Include="c_time.c" />
     <ClCompile Include="main.c" />
-    <ClCompile Include="c_string.c" />
-    <ClCompile Include="memory.c" />
+    <ClCompile Include="platform_windows.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="c_allocator.h" />
-    <ClInclude Include="c_allocator_malloc.h" />
-    <ClInclude Include="c_array.h" />
-    <ClInclude Include="c_defines.h" />
-    <ClInclude Include="c_format.h" />
-    <ClInclude Include="c_hash.h" />
-    <ClInclude Include="c_hash_table.h" />
-    <ClInclude Include="c_platform.h" />
-    <ClInclude Include="c_string.h" />
-    <ClInclude Include="c_time.h" />
+    <ClInclude Include="allocator.h" />
+    <ClInclude Include="allocator_malloc.h" />
+    <ClInclude Include="array.h" />
+    <ClInclude Include="defines.h" />
+    <ClInclude Include="format.h" />
+    <ClInclude Include="hash.h" />
+    <ClInclude Include="hash_table.h" />
+    <ClInclude Include="platform.h" />
+    <ClInclude Include="string.h" />
+    <ClInclude Include="time.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "c_string.h"
+#include "string.h"
 #include <stdio.h>
 #include <stdarg.h>
 

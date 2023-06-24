@@ -18,54 +18,39 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="c_allocator.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="c_allocator_malloc.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="c_array.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="c_string.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="c_time.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="memory.c">
+    <ClCompile Include="platform_windows.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="c_allocator.h">
+    <ClInclude Include="allocator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_allocator_malloc.h">
+    <ClInclude Include="allocator_malloc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_array.h">
+    <ClInclude Include="array.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_defines.h">
+    <ClInclude Include="defines.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_hash.h">
+    <ClInclude Include="hash.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_hash_table.h">
+    <ClInclude Include="hash_table.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_platform.h">
+    <ClInclude Include="platform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_string.h">
+    <ClInclude Include="string.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_time.h">
+    <ClInclude Include="time.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="c_format.h">
+    <ClInclude Include="format.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
