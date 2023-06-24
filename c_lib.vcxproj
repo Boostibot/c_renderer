@@ -138,6 +138,7 @@
     <ClInclude Include="format.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_table.h" />
+    <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="string.h" />
     <ClInclude Include="time.h" />

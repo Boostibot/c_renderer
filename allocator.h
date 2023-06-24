@@ -1,6 +1,19 @@
 #pragma once
 #include "defines.h"
 
+//Since memory allocation is such a prevelent problem we try to maximize profiling. 
+// 
+// We do this firstly by introducing a concept of Allocator. Allocators are structs that know how to allocate with the 
+// advantage over malloc that they can be local and distinct for distinct tasks. This makes them faster and safer then malloc
+// because we can localy see when something goes wrong. They can also be composed where allocators get their 
+// memory from allocators above them (their 'parents') this is especially useful for hierarchical resource management. 
+// By using a hierarchies we can guarantee that all memory will get freed by simply freeing the highest allocator. 
+// This will work even if the lower allocators/systems leak unlike malloc or other global alloctator systems where every 
+// level has to be perfect.
+// 
+// Secondly we pass Source_Info to every allocation procedure. This means we on-the-fly swap our current allocator with debug allocator
+// that for example logs all allocations and checks their correctness.
+
 struct Allocator;
 struct Allocator_Stats;
 struct Source_Info;
@@ -65,10 +78,13 @@ EXPORT void allocator_set_out_of_memory(Allocator_Out_Of_Memory_Func new_handler
 
 //Attempts to call the realloc funtion of the from_allocator. Can return nullptr indicating failiure
 EXPORT void* allocator_try_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
-//Calls the realloc function of from_allocator. If fails calls the currently installed Allocator_Out_Of_Memory_Func. This should be used most of the time
+//Calls the realloc function of from_allocator. If fails calls the currently installed Allocator_Out_Of_Memory_Func (panics). This should be used most of the time
 EXPORT void* allocator_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
+//Calls the realloc function of from_allocator to allocate, if fails panics
 EXPORT void* allocator_allocate(Allocator* from_allocator, isize new_size, isize align, Source_Info called_from);
+//Calls the realloc function of from_allocator to deallocate
 EXPORT void allocator_deallocate(Allocator* from_allocator, void* old_ptr,isize old_size, isize align, Source_Info called_from);
+//Retrieves stats from the allocator. The stats can be only partially filled.
 EXPORT Allocator_Stats allocator_get_stats(Allocator* self);
 
 EXPORT Allocator* allocator_get_default();
@@ -198,10 +214,10 @@ static inline void* align_backward(void* ptr, isize align_to)
     static void default_out_of_memory_handler(struct Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, struct Source_Info called_from, const char*format_string, ...);
 
     //@TODO: make thread local
-    Allocator_Out_Of_Memory_Func out_of_memory_func = default_out_of_memory_handler;
-    Malloc_Allocator global_malloc_allocator = {_malloc_allocator_allocate, _malloc_allocator_get_stats};
-    Allocator* default_allocator = (Allocator*) (void*) &global_malloc_allocator;
-    Allocator* scratch_allocator = (Allocator*) (void*) &global_malloc_allocator;
+    THREAD_LOCAL Allocator_Out_Of_Memory_Func out_of_memory_func = default_out_of_memory_handler;
+    Malloc_Allocator global_malloc_allocator = {_malloc_allocator_allocate, _malloc_allocator_get_stats, "global_malloc_allocator"};
+    THREAD_LOCAL Allocator* default_allocator = (Allocator*) (void*) &global_malloc_allocator;
+    THREAD_LOCAL Allocator* scratch_allocator = (Allocator*) (void*) &global_malloc_allocator;
 
     EXPORT Allocator* allocator_get_default()
     {

@@ -5,6 +5,7 @@
 typedef struct Malloc_Allocator
 {
     Allocator allocator;
+    const char* name;
 
     isize bytes_allocated;
     isize max_bytes_allocated;
@@ -20,8 +21,6 @@ EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* 
 EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_);
 
 
-
-
 #if (defined(LIB_ALL_IMPL) || defined(LIB_MALLOC_ALLOCATOR_IMPL)) && !defined(LIB_MALLOC_ALLOCATOR_HAS_IMPL)
 #define LIB_MALLOC_ALLOCATOR_HAS_IMPL
 EXPORT Malloc_Allocator malloc_allocator_make()
@@ -35,17 +34,14 @@ EXPORT Malloc_Allocator malloc_allocator_make()
 EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
 {
     Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
+    isize size_delta = new_size - old_size;
     if(new_size == 0)
     {
         self->deallocation_count += 1;
         platform_heap_reallocate(0, old_ptr, old_size, align);
-        self->bytes_allocated -= old_size;
-        self->bytes_allocated += new_size;
+        self->bytes_allocated += size_delta;
         return NULL;                
     }
-
-    if(self->max_bytes_allocated < self->bytes_allocated)
-        self->max_bytes_allocated = self->bytes_allocated;
 
     void* out_ptr = NULL;
     if(old_ptr == NULL)
@@ -61,9 +57,7 @@ EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* 
 
     if(out_ptr != NULL)
     {
-        self->bytes_allocated -= old_size;
-        self->bytes_allocated += new_size;
-
+        self->bytes_allocated += size_delta;
         if(self->max_bytes_allocated < self->bytes_allocated)
             self->max_bytes_allocated = self->bytes_allocated;
     }
@@ -76,6 +70,7 @@ EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_)
     Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
     Allocator_Stats out = {0};
     out.type_name = "Malloc_Allocator";
+    out.name = self->name;
     out.parent = NULL;
     out.is_top_level = true;
     out.max_bytes_allocated = self->max_bytes_allocated;

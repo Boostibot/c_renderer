@@ -59,6 +59,8 @@ inline static void platform_memory_fence();
 inline static void platform_processor_pause();
 inline static int64_t platform_interlocked_excahnge64(volatile int64_t* target, int64_t value);
 inline static int32_t platform_interlocked_excahnge32(volatile int32_t* target, int32_t value);
+inline static int32_t platform_interlocked_add32(volatile int32_t* target, int32_t value);
+inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64_t value);
 
 
 //=========================================
@@ -215,4 +217,15 @@ Window_Popup_Controls platform_window_make_popup(Window_Popup_Style desired_styl
     {
         return (int32_t) _InterlockedExchange((volatile long*) target, (long) value);
     }
+    
+    inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64_t value)
+    {
+        return (int64_t) _InterlockedAddLargeStatistic((volatile long long*) target, (long long) value);
+    }
+
+    inline static int32_t platform_interlocked_add32(volatile int32_t* target, int32_t value)
+    {
+        return (int32_t) _InterlockedAdd((volatile long*) target, (long) value);
+    }
+    
 #endif
