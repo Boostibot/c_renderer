@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIB_TIME
+#define LIB_TIME
+
 #include "platform.h"
 
 #define SECOND_MILISECONDS  ((int64_t) 1000)
@@ -39,6 +41,4 @@ static inline double clock_s()
 // 1 / 10Mhz = 1e-7. This precission is held up untill 1e9 secons have passed which is roughly 31 years. 
 // => Please dont run your program for more than 31 years or you will loose precision
 
-
-
-
+#endif // !LIB_TIME

@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIB_MATH
+#define LIB_MATH
+
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
@@ -46,42 +48,36 @@ typedef struct Quat
     float w;
 } Quat;
 
-typedef struct Mat2
+typedef union Mat2
 {
-    union {
-        Vec2 col[2];
+    Vec2 col[2];
 
-        struct {
-            float _11, _21;
-            float _12, _22;
-        };
+    struct {
+        float _11, _21;
+        float _12, _22;
     };
 } Mat2;
 
-typedef struct Mat3
+typedef union Mat3
 {
-    union {
-        Vec3 col[3];
+    Vec3 col[3];
 
-        struct {
-            float _11, _21, _31;
-            float _12, _22, _32;
-            float _13, _23, _33;
-        };
+    struct {
+        float _11, _21, _31;
+        float _12, _22, _32;
+        float _13, _23, _33;
     };
 } Mat3;
 
-typedef struct Mat4
+typedef union Mat4
 {
-    union {
-        Vec4 col[4];
+    Vec4 col[4];
 
-        struct {
-            float _11, _21, _31, _41;
-            float _12, _22, _32, _42;
-            float _13, _23, _33, _43;
-            float _14, _24, _34, _44;
-        };
+    struct {
+        float _11, _21, _31, _41;
+        float _12, _22, _32, _42;
+        float _13, _23, _33, _43;
+        float _14, _24, _34, _44;
     };
 } Mat4;
 
@@ -516,3 +512,5 @@ JMAPI Mat4 mat4_scale_aniso(Mat4 mat, Vec3 scale_by)
     result.col[3] = mat.col[3];
     return result;
 }
+
+#endif

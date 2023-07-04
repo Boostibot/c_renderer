@@ -1,0 +1,188 @@
+#pragma once
+
+#include "_test.h"
+#include "array.h"
+
+static void test_array_stress(f64 seconds)
+{
+	enum Action 
+	{
+		INIT,
+		INIT_BACKED,
+		DEINIT,
+		CLEAR,
+		SET_CAPACITY,
+		PUSH,
+		POP,
+		RESERVE,
+		GROW,
+		RESIZE,
+		APPEND,
+		COPY, //when we assign between the two arrays we switch and use the otehr one
+
+		ACTION_ENUM_COUNT,
+	};
+
+	i32 probabilities[ACTION_ENUM_COUNT] = {0};
+	probabilities[INIT]				= 1;
+	probabilities[INIT_BACKED]		= 1;
+	probabilities[DEINIT]           = 1;
+	probabilities[CLEAR]			= 2;
+	probabilities[SET_CAPACITY]		= 2;
+	probabilities[PUSH]				= 50;
+	probabilities[POP]				= 10;
+	probabilities[RESERVE]			= 5;
+	probabilities[GROW]				= 5;
+	probabilities[RESIZE]			= 5;
+	probabilities[APPEND]			= 20;
+	probabilities[COPY]			    = 5;
+	
+	enum {
+		MAX_ITERS = 1000*1000*10,
+		MIN_ITERS = 100,
+		BACKING = 1000,
+		MAX_CAPACITY = 1000*10,
+	};
+
+	char buffer1[BACKING] = {0};
+	char buffer2[BACKING] = {0};
+	i64_Array array1 = {0};
+	i64_Array array2 = {0};
+
+	char* buffer = buffer1;
+	i64_Array* arr = &array1;
+	
+	char* other_buffer = buffer1;
+	i64_Array* other_array = &array1;
+	
+	Discrete_Distribution dist = random_discrete_make(probabilities, ACTION_ENUM_COUNT);
+	//Random_State rand = random_state_from_seed(0);
+	//random_set_state(rand);
+
+	f64 start = clock_s();
+	for(isize i = 0; i < MAX_ITERS; i++)
+	{
+		if(clock_s() - start >= seconds && i >= MIN_ITERS)
+			break;
+
+		i32 action = random_discrete(dist);
+		TEST(_array_is_invariant(arr, sizeof *arr->data));
+		
+		bool is_reserve = true;
+		switch(action)
+		{
+			case INIT: {
+				array_deinit(arr);
+				array_init(arr, allocator_get_default());
+				break;
+			}
+			
+			case INIT_BACKED: {
+				array_deinit(arr);
+				array_init_backed(arr, allocator_get_default(), buffer, BACKING);
+				break;
+			}
+			
+			case DEINIT: {
+				array_deinit(arr);
+				break;
+			}
+			
+			case CLEAR: {
+				array_clear(arr);
+				break;
+			}
+			
+			case SET_CAPACITY: {
+				isize capacity = random_range(&rand, 0, MAX_CAPACITY);
+				array_set_capacity(arr, capacity);
+				break;
+			}
+			
+			case PUSH: {
+				i64 offset = random_range(&rand, 0, 64);
+				CHECK_BOUNDS(offset, 64);
+				i64 value = (i64) 1 << offset;
+				TEST(value);
+				ASSERT(arr != NULL && arr->data != NULL);
+				array_push(arr, value);
+				break;
+			}
+			
+			case POP: {
+				if(arr->size > 0)
+				{
+					i64 value = array_last(arr);
+					TEST(is_power_of_two_zero(value));
+					array_pop(arr);
+				}
+				break;
+			}
+			
+			case RESERVE: 
+				is_reserve = true;
+			case GROW: {
+				is_reserve = false;
+				isize size_before = arr->size;
+				isize capacity_before = arr->capacity;
+				isize capacity = random_range(&rand, 0, MAX_CAPACITY);
+				if(is_reserve)
+					array_reserve(arr, capacity);
+				else
+					array_grow(arr, capacity);
+
+				TEST(size_before == arr->size);
+				TEST(capacity_before <= arr->capacity);
+				break;
+			}
+
+			case RESIZE: {
+				isize size = random_range(&rand, 0, MAX_CAPACITY);
+				array_resize(arr, size);
+				TEST(arr->size == size);
+				TEST(arr->capacity >= size);
+				break;
+			}
+			
+			case APPEND: {
+				i64 appended[64] = {0};
+				isize append_count = random_range(&rand, 0, 64);
+				
+				CHECK_BOUNDS(append_count, 64)
+				for(isize i = 0; i < append_count; i++)
+				{
+					i64 value = (i64) 1 << random_range(&rand, 0, 64);
+					appended[i] = value;
+				}
+				
+				array_append(arr, appended, append_count);
+				break;
+			}
+			
+			case COPY: {
+				array_copy(other_array, *arr);
+				TEST(other_array->size == arr->size);
+				TEST(other_array->capacity >= arr->capacity);
+
+				swap_any(&other_array, &arr, sizeof(arr));
+				swap_any(&other_buffer, &buffer, sizeof(buffer));
+
+				break;
+			}
+		}
+
+		for(isize i = 0; i < arr->size; i++)
+			TEST(is_power_of_two_zero(arr->data[i]));
+
+		TEST(_array_is_invariant(arr, sizeof *arr->data));
+	}
+
+	random_discrete_deinit(&dist);
+	array_deinit(&array1);
+	array_deinit(&array2);
+}
+
+void test_array()
+{
+	test_array_stress(3.0);
+}

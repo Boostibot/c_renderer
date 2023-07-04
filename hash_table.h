@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIB_HASH_TABLE
+#define LIB_HASH_TABLE
+
 #include "allocator.h"
 #include "array.h"
 
@@ -53,6 +55,8 @@ Hash_Found64    lin_probe_hash64_find_next(const Hash_Table64_Entry* entries, is
 void            lin_probe_hash64_rehash(const Hash_Table64_Entry* entries, isize entries_size, Hash_Table64_Entry* new_entries, isize new_entries_size);
 Hash_Found64    lin_probe_hash64_insert(Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, uint64_t value);
 void            lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entries_size, Hash_Found64 found);
+
+#endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_HASH_TABLE_IMPL)) && !defined(LIB_HASH_TABLE_HAS_IMPL)
 #define LIB_HASH_TABLE_HAS_IMPL

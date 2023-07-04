@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LIB_STRING
+#define LIB_STRING
 
 #include "allocator.h"
 #include "array.h"
@@ -43,6 +44,7 @@ String_Builder cstring_join(const char* a, const char* b); //Allocates a new Str
 String_Builder string_join_any(const String* strings, isize strings_count, String separator); 
 String_Array string_split(String to_split, String split_by);
 
+#endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_STRING_IMPL)) && !defined(LIB_STRING_HAS_IMPL)
 #define LIB_STRING_HAS_IMPL

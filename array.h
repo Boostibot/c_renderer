@@ -23,6 +23,7 @@ DEFINE_ARRAY_TYPE(int64_t,  i64_Array);
 DEFINE_ARRAY_TYPE(float,    f32_Array);
 DEFINE_ARRAY_TYPE(double,   f64_Array);
 DEFINE_ARRAY_TYPE(void*,    ptr_Array);
+typedef i64_Array size_Array;
 
 EXPORT void _array_init(void* array, isize item_size, Allocator* allocator, void* backing, int64_t backing_size); 
 EXPORT void _array_deinit(void* array, isize item_size, Source_Info from);
@@ -36,6 +37,7 @@ EXPORT void _array_reserve(void* array, isize item_size, isize to_capacity, bool
 EXPORT void _array_prepare_push(void* array, isize item_size, Source_Info from);
 EXPORT void _array_append(void* array, isize item_size, const void* data, isize data_count, Source_Info from);
 EXPORT void _array_unappend(void* array, isize item_size, isize data_count);
+EXPORT void _array_clear(void* array, isize item_size);
 
 #define array_set_capacity(darray_ptr, capacity) \
     _array_set_capacity(darray_ptr, sizeof *(darray_ptr)->data, capacity, SOURCE_INFO())
@@ -57,11 +59,10 @@ EXPORT void _array_unappend(void* array, isize item_size, isize data_count);
     _array_reserve(darray_ptr, sizeof *(darray_ptr)->data, to_capacity, true, SOURCE_INFO()) 
 
 #define array_resize(darray_ptr, to_size)              \
-    array_reserve(darray_ptr, to_size),                \
-    (darray_ptr)->size = to_size                       \
+    _array_resize(darray_ptr, sizeof *(darray_ptr)->data, to_size, SOURCE_INFO()) 
     
 #define array_clear(darray_ptr) \
-    (darray_ptr)->size = 0
+    _array_clear(darray_ptr, sizeof *(darray_ptr)->data)
 
 #define array_append(darray_ptr, items, item_count) \
     /* Here is a little hack to typecheck the items array.*/ \
@@ -86,6 +87,11 @@ EXPORT void _array_unappend(void* array, isize item_size, isize data_count);
 #define array_pop(darray_ptr) \
     _array_unappend(darray_ptr, sizeof *(darray_ptr)->data, 1)
     
+#define array_first(darray_ptr) \
+    (darray_ptr)->data[0]
+
+#define array_last(darray_ptr) \
+    (darray_ptr)->data[(darray_ptr)->size - 1]
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ARRAY_IMPL)) && !defined(LIB_ARRAY_HAS_IMPL)
 #define LIB_ARRAY_HAS_IMPL
@@ -122,8 +128,10 @@ EXPORT void _array_set_backed(void* array, isize item_size, bool to)
 
 EXPORT void _array_init(void* array, isize item_size, Allocator* allocator, void* backing, int64_t backing_size)
 {
+    u8_Array null = {0};
     u8_Array* base = (u8_Array*) array;
-    _array_deinit(array, item_size, SOURCE_INFO());
+    *base = null;
+    //_array_deinit(array, item_size, SOURCE_INFO());
 
     base->allocator = allocator; 
     isize backing_item_count = backing_size / item_size;
@@ -180,8 +188,12 @@ EXPORT void _array_set_capacity(void* array, isize item_size, isize capacity, So
 
     if(_array_is_backed(array, item_size))
     {
+        isize copy_size = old_byte_size;
+        if(copy_size > new_byte_size)
+            copy_size = new_byte_size;
+
         void* new_data = allocator_allocate(base->allocator, new_byte_size, DEF_ALIGN, from);
-        memmove(new_data, base->data, old_byte_size);
+        memmove(new_data, base->data, copy_size);
         base->data = (uint8_t*) new_data;
     }
     else
@@ -270,5 +282,12 @@ EXPORT void _array_unappend(void* array, isize item_size, isize data_count)
 
     if(data_count > 0)
         memset(base->data + base->size*item_size, 0, item_size);
+}
+
+EXPORT void _array_clear(void* array, isize item_size)
+{
+    ASSERT(_array_is_invariant(array, item_size));
+    u8_Array* base = (u8_Array*) array;
+    base->size = 0;
 }
 #endif

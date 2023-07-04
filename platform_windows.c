@@ -11,43 +11,45 @@
 #include <windowsx.h>
 #include <intrin.h>
 #include <direct.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
-enum { WINDOWS_FILE_TYPE_PIPE = FILE_TYPE_PIPE };
-#undef FILE_TYPE_PIPE
+enum { WINDOWS_PLATFORM_FILE_TYPE_PIPE = PLATFORM_FILE_TYPE_PIPE };
+#undef PLATFORM_FILE_TYPE_PIPE
 
 //=========================================
 // Virtual memory
 //=========================================
-void* platform_virtual_reallocate(void* adress, isize bytes, Virtual_Allocation_Action action, Memory_Protection protection)
+void* platform_virtual_reallocate(void* adress, int64_t bytes, Platform_Virtual_Allocation action, Platform_Memory_Protection protection)
 {
     //CreateThread();
-    if(action == VIRTUAL_ALLOC_RELEASE)
+    if(action == PLATFORM_VIRTUAL_ALLOC_RELEASE)
     {
         (void) VirtualFree(adress, 0, MEM_RELEASE);  
         return NULL;
     }
 
-    if(action == VIRTUAL_ALLOC_DECOMMIT)
+    if(action == PLATFORM_VIRTUAL_ALLOC_DECOMMIT)
     {
         (void) VirtualFree(adress, bytes, MEM_DECOMMIT);  
         return NULL;
     }
  
     int prot = 0;
-    if(protection == MEMORY_PROT_NO_ACCESS)
+    if(protection == PLATFORM_MEMORY_PROT_NO_ACCESS)
         prot = PAGE_NOACCESS;
-    if(protection == MEMORY_PROT_READ)
+    if(protection == PLATFORM_MEMORY_PROT_READ)
         prot = PAGE_READONLY;
     else
         prot = PAGE_READWRITE;
 
-    if(action == VIRTUAL_ALLOC_RESERVE)
+    if(action == PLATFORM_VIRTUAL_ALLOC_RESERVE)
         return VirtualAlloc(adress, bytes, MEM_RESERVE, prot);
     else
         return VirtualAlloc(adress, bytes, MEM_COMMIT, prot);
 }
 
-void* platform_heap_reallocate(isize new_size, void* old_ptr, isize old_size, isize align)
+void* platform_heap_reallocate(int64_t new_size, void* old_ptr, int64_t old_size, int64_t align)
 {
     if(new_size == 0)
     {
@@ -61,7 +63,7 @@ void* platform_heap_reallocate(isize new_size, void* old_ptr, isize old_size, is
 //=========================================
 // Threading
 //=========================================
-isize platform_thread_get_proccessor_count()
+int64_t platform_thread_get_proccessor_count()
 {
     return GetCurrentProcessorNumber();
 }
@@ -69,20 +71,20 @@ isize platform_thread_get_proccessor_count()
 //typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(
 //    LPVOID lpThreadParameter
 //    );
-Thread platform_thread_create(int (*func)(void*), void* context, isize stack_size)
+Platform_Thread platform_thread_create(int (*func)(void*), void* context, int64_t stack_size)
 {
-    Thread thread = {0};
+    Platform_Thread thread = {0};
     thread.handle = CreateThread(0, stack_size, func, context, 0, &thread.id);
     return thread;
 }
-void platform_thread_destroy(Thread* thread)
+void platform_thread_destroy(Platform_Thread* thread)
 {
-    Thread null = {0};
+    Platform_Thread null = {0};
     CloseHandle(thread->handle);
     *thread = null;
 }
 
-isize platform_thread_get_id()
+int64_t platform_thread_get_id()
 {
     return GetCurrentThreadId();
 }
@@ -90,7 +92,7 @@ void platform_thread_yield()
 {
     SwitchToThread();
 }
-void platform_thread_sleep(isize ms)
+void platform_thread_sleep(int64_t ms)
 {
     Sleep((DWORD) ms);
 }
@@ -100,7 +102,7 @@ void platform_thread_exit(int code)
     ExitThread(code);
 }
 
-int platform_thread_join(Thread thread)
+int platform_thread_join(Platform_Thread thread)
 {
     WaitForSingleObject(thread.handle, INFINITE);
     DWORD code = 0;
@@ -378,7 +380,7 @@ static bool _is_file_link(const wchar_t* directory_path)
     return requiredSize == 0;
 }
 
-bool platform_file_info(const char* file_path, File_Info* info)
+bool platform_file_info(const char* file_path, Platform_File_Info* info)
 {    
     int64_t path_size = _strlen(file_path);
     #define IO_NORMALIZE_PATH_OP(path, path_size, execute)  \
@@ -407,9 +409,9 @@ bool platform_file_info(const char* file_path, File_Info* info)
     info->size = ((int64_t) native_info.nFileSizeHigh << 32) | ((int64_t) native_info.nFileSizeLow);
         
     if(native_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        info->type = FILE_TYPE_DIRECTORY;
+        info->type = PLATFORM_FILE_TYPE_DIRECTORY;
     else
-        info->type = FILE_TYPE_FILE;
+        info->type = PLATFORM_FILE_TYPE_FILE;
 
     return state;
 }
@@ -494,7 +496,7 @@ static void _directory_iterate_deinit(Directory_Visitor* visitor)
     FindClose(visitor->first_found);
 }
 
-static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buffer* entries, isize max_depth)
+static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buffer* entries, int64_t max_depth)
 {
     typedef struct Dir_Context
     {
@@ -533,30 +535,30 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
             _w_concat(dir_context->path, L"\\", dir_context->visitor.current_entry.cFileName, &built_path);
             assert(built_path.data != 0);
         
-            File_Info info = {0};
+            Platform_File_Info info = {0};
             info.created_time = _filetime_to_time_t(dir_context->visitor.current_entry.ftCreationTime);
             info.last_access_time = _filetime_to_time_t(dir_context->visitor.current_entry.ftLastAccessTime);
             info.last_write_time = _filetime_to_time_t(dir_context->visitor.current_entry.ftLastWriteTime);
             info.size = ((int64_t) dir_context->visitor.current_entry.nFileSizeHigh << 32) | ((int64_t) dir_context->visitor.current_entry.nFileSizeLow);
         
-            info.type = FILE_TYPE_FILE;
+            info.type = PLATFORM_FILE_TYPE_FILE;
             if(dir_context->visitor.current_entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                info.type = FILE_TYPE_DIRECTORY;
+                info.type = PLATFORM_FILE_TYPE_DIRECTORY;
             else
-                info.type = FILE_TYPE_FILE;
+                info.type = PLATFORM_FILE_TYPE_FILE;
 
             if(info.is_link)
                 info.is_link = _is_file_link(_wstring(built_path));  
 
 
             int flag = IO_NORMALIZE_LINUX;
-            if(info.type == FILE_TYPE_DIRECTORY)
+            if(info.type == PLATFORM_FILE_TYPE_DIRECTORY)
                 flag |= IO_NORMALIZE_DIRECTORY;
             else
                 flag |= IO_NORMALIZE_FILE;
             _Buffer out_string = _malloc_full_path(_wstring(built_path), flag);
 
-            Directory_Entry entry = {0};
+            Platform_Directory_Entry entry = {0};
             entry.info = info;
             entry.path = _string(out_string);
             entry.path_size = out_string.size;
@@ -564,7 +566,7 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
             _buffer_push(entries, &entry, sizeof(entry));
 
             bool recursion = dir_context->depth + 1 < max_depth || max_depth <= 0;
-            if(info.type == FILE_TYPE_DIRECTORY && info.is_link == false && recursion)
+            if(info.type == PLATFORM_FILE_TYPE_DIRECTORY && info.is_link == false && recursion)
             {
                 _Buffer next_path = _buffer_init(sizeof(wchar_t));
                 _w_concat(_wstring(built_path), NULL, NULL, &next_path);
@@ -588,7 +590,7 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
     }
     
     //Null terminate the entries
-    Directory_Entry terminator = {0};
+    Platform_Directory_Entry terminator = {0};
     _buffer_push(entries, &terminator, sizeof(terminator));
 
     _buffer_deinit(&stack);
@@ -596,22 +598,22 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
     return true;
 }
 
-bool platform_directory_list_contents_malloc(const char* directory_path, Directory_Entry** entries, int64_t* entries_count, isize max_depth)
+bool platform_directory_list_contents_malloc(const char* directory_path, Platform_Directory_Entry** entries, int64_t* entries_count, int64_t max_depth)
 {
     int64_t path_size = _strlen(directory_path);
     assert(entries != NULL && entries_count != NULL);
-    _Buffer entries_stack = _buffer_init(sizeof(Directory_Entry));
+    _Buffer entries_stack = _buffer_init(sizeof(Platform_Directory_Entry));
     IO_NORMALIZE_PATH_OP(directory_path, path_size,
         bool ok = _directory_list_contents_malloc(_wstring(normalized_path), &entries_stack, max_depth);
     )
 
-    *entries = (Directory_Entry*) entries_stack.data;
+    *entries = (Platform_Directory_Entry*) entries_stack.data;
     *entries_count = entries_stack.size;
     return ok;
 }
 
 //Frees previously allocated file list
-void platform_directory_list_contents_free(Directory_Entry* entries)
+void platform_directory_list_contents_free(Platform_Directory_Entry* entries)
 {
     if(entries == NULL)
         return;
@@ -649,39 +651,30 @@ char* platform_directory_get_current_working_malloc()
 typedef struct Window {
     HWND handle;
     WNDCLASSEX class_;
-    RECT rect;  
-    Window_Visibility visibility;
+    RECT window_rect;  
+    RECT client_rect;  
+    Platform_Window_Options options;
+    Platform_Window_Visibility visibility;
+    RECT prev_window_rect;
     bool was_shown;
+
+    Platform_Input input;
 } Window;
 
-typedef int64_t isize;
-Window*     global_windows = NULL;
-isize       global_window_slots = 0;
-bool        global_window_class_registered = false;
-WNDCLASSEX  global_window_class = {0};
-
-static isize _find_window(HWND handle)
-{
-    for(isize i = 0; i < global_window_slots; i++)
-    {
-        assert(global_windows != NULL);
-        if(global_windows[i].handle == handle)
-            return i;
-    }
-    return -1;
-}
-
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 Window* platform_window_init(const char* window_title)
 {
     HINSTANCE hInstance = 0;
     const wchar_t WINDOW_CLASS_NAME[] = L"jot_window_class";
+    static bool        global_window_class_registered = false;
+    static WNDCLASSEX  global_window_class = {0};
+
     if(!global_window_class_registered)
     {
         global_window_class.cbSize        = sizeof(WNDCLASSEX);
         global_window_class.style         = 0;
-        global_window_class.lpfnWndProc   = WndProc;
+        global_window_class.lpfnWndProc   = window_proc;
         global_window_class.cbClsExtra    = 0;
         global_window_class.cbWndExtra    = 0;
         global_window_class.hInstance     = hInstance;
@@ -697,93 +690,460 @@ Window* platform_window_init(const char* window_title)
         global_window_class_registered = true;
     }
 
-    isize empty_index = _find_window(NULL);
-    if(empty_index == -1)
-    {
-        isize new_count = global_window_slots * 2;
-        if(new_count < 8)
-            new_count = 8;
+    Window* window = calloc(2, sizeof(Window));
+    if(window == NULL)
+        return NULL;
 
-        Window* new_data = (Window*) realloc(global_windows, sizeof(Window)*new_count);
-        if(new_data == NULL)
-            return NULL;
-
-        memset(new_data + global_window_slots, 0, (new_count - global_window_slots)*sizeof(Window));
-        empty_index = global_window_slots;
-        global_windows = new_data;
-        global_window_slots = new_count;
-    }
-
-    Window* created = &global_windows[empty_index];
-    assert(created->handle == NULL);
 
     char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
     _Buffer wide_title = _buffer_init_backed(window_title_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
     _utf8_to_utf16(window_title, _strlen(window_title), &wide_title);
-
-    created->handle = CreateWindowExW(
+        
+    //wprintf(_wstring(wide_title));
+    window->handle = CreateWindowExW(
         WS_EX_CLIENTEDGE,
         WINDOW_CLASS_NAME,
         _wstring(wide_title),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-        NULL, NULL, hInstance, NULL);
-        
+        NULL, NULL, hInstance, window);
+
     _buffer_deinit(&wide_title);
-    if(created->handle == NULL)
-        return NULL;
     
-    RAWINPUTDEVICE raw_input_device;
+    RAWINPUTDEVICE raw_input_device = {0};
     raw_input_device.usUsagePage = HID_USAGE_PAGE_GENERIC; 
     raw_input_device.usUsage = HID_USAGE_GENERIC_MOUSE; 
     raw_input_device.dwFlags = RIDEV_INPUTSINK;   
-    raw_input_device.hwndTarget = created->handle;
+    raw_input_device.hwndTarget = window->handle;
     RegisterRawInputDevices(&raw_input_device, 1, sizeof(raw_input_device));
 
-    created->class_ = global_window_class;
-    return created;
+    window->class_ = global_window_class;
+    return window;
 }
 
 void platform_window_deinit(Window* window)
 {
-    assert(window->handle != NULL);
-    DestroyWindow(window->handle);
-    Window null = {0};
-    *window = null;
+    if(window->handle != NULL);
+        DestroyWindow(window->handle);
+    free(window);
 }
 
-//@TODO: make better
-static void _window_show_buttons(Window* window, bool close, bool minimize, bool maximize)
-{
-    UINT close_flags = 0;
-    LONG other_flags = GetWindowLongW(window->handle, GWL_STYLE);
-    if(close)
-        close_flags = MF_BYCOMMAND | MF_ENABLED;
-    else
-        close_flags = MF_BYCOMMAND | MF_DISABLED | MF_GRAYED;
+Platform_Input platform_window_process_messages(Window* window) {
+    assert(window != NULL); 
 
-    if(minimize)
-        other_flags |= WS_MINIMIZE;
+    MSG message = {0};
+    while (PeekMessageW(&message, window->handle, 0, 0, PM_REMOVE)) 
+    {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+
+    Platform_Input out = window->input;
+    POINT cursor = {0};
+    (void) GetCursorPos(&cursor);
+
+    out.client_position_x = window->client_rect.left;
+    out.client_position_y = window->client_rect.top;
+    
+    out.client_size_x = window->client_rect.right - window->client_rect.left;
+    out.client_size_y = window->client_rect.bottom - window->client_rect.top;
+
+    assert(out.client_size_x >= 0);
+    assert(out.client_size_y >= 0);
+    
+    out.window_position_x = window->window_rect.left;
+    out.window_position_y = window->window_rect.top;
+    
+    out.window_size_x = window->window_rect.right - window->window_rect.left;
+    out.window_size_y = window->window_rect.bottom - window->window_rect.top;
+
+    assert(out.window_size_x >= 0);
+    assert(out.window_size_y >= 0);
+
+    out.mouse_screen_x = cursor.x;
+    out.mouse_screen_y = cursor.y;
+    
+    Platform_Input null = {0};
+    window->input = null;
+    return out;
+}
+
+static uint8_t _offset_half_trans_count(uint8_t current, int8_t offset, bool is_down)
+{
+    uint8_t down_bit = 1 << 7;
+    uint8_t masked = current & ~down_bit;
+                
+    //Increment the half transition counter but cap it so it doesnt wrap
+    int16_t upcast = masked + offset;
+    if(upcast < 0)
+        upcast = 0;
+
+    if(upcast > down_bit - 1)
+        upcast = down_bit - 1;
+
+    masked = (uint8_t) upcast;
+    //set the down_bit 
+    if(is_down)
+        masked = masked | down_bit;
     else
-        other_flags &= ~WS_MINIMIZE;
+        masked = masked & ~down_bit;
+
+    return masked;
+}
+
+LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param) 
+{
+    if (msg == WM_NCCREATE) 
+    {
+        CREATESTRUCTW* create_struct = (CREATESTRUCTW*) l_param;
+        void* user_data = create_struct->lpCreateParams;
+        // store window instance pointer in window user data
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR) user_data);
+    }
+    Window* window = (Window*) GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!window) 
+        return DefWindowProcW(hwnd, msg, w_param, l_param);
+
+    switch (msg) 
+    {
+        case WM_NCCALCSIZE: 
+        {
+            if (w_param == TRUE && window->options.no_border) {
+                NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*) l_param;
+                RECT* rect = &params->rgrc[0];
+                WINDOWPLACEMENT placement = {0};
+                if (!GetWindowPlacement(hwnd, &placement))
+                    break;
+
+                bool is_maximized = placement.showCmd == SW_MAXIMIZE;
+                HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+                if (!monitor) 
+                    break;
+
+                MONITORINFO monitor_info = {0};
+                monitor_info.cbSize = sizeof(monitor_info);
+                if (!GetMonitorInfoW(monitor, &monitor_info)) 
+                    break;
+
+                *rect = monitor_info.rcWork;
+                return 0;
+            }
+            break;
+        }
+
+        case WM_NCHITTEST: {
+            // When we have no border or title bar, we need to perform our
+            // own hit testing to allow resizing and moving.
+            if (!window->options.no_border) 
+                break;
+
+            POINT mouse = {0};
+            mouse.x = GET_X_LPARAM(l_param);
+            mouse.y = GET_Y_LPARAM(l_param);
+
+            // identify borders and corners to allow resizing the window.
+            // Note: On Windows 10, windows behave differently and
+            // allow resizing outside the visible window frame.
+            // This implementation does not replicate that behavior.
+            POINT border = {0};
+            border.x = GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+            border.y = GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+
+            LRESULT drag = window->options.no_border_allow_move ? HTCAPTION : HTCLIENT;
+            RECT window_rect = {0};
+            if(!GetWindowRect(window->handle, &window_rect))
+                return HTNOWHERE;
+
+            enum region_mask {
+                client = 0,
+                left   = 1,
+                right  = 2,
+                top    = 4,
+                bottom = 8,
+            };
+
+            int result =
+                left    * (mouse.x <  (window_rect.left   + border.x)) |
+                right   * (mouse.x >= (window_rect.right  - border.x)) |
+                top     * (mouse.y <  (window_rect.top    + border.y)) |
+                bottom  * (mouse.y >= (window_rect.bottom - border.y));
+
+            if(result != 0)
+            {
+                int i = 4;
+            }
+            bool allow_resize = window->options.no_border_allow_resize;
+            switch (result) {
+                case left          : return allow_resize ? HTLEFT        : drag;
+                case right         : return allow_resize ? HTRIGHT       : drag;
+                case top           : return allow_resize ? HTTOP         : drag;
+                case bottom        : return allow_resize ? HTBOTTOM      : drag;
+                case top | left    : return allow_resize ? HTTOPLEFT     : drag;
+                case top | right   : return allow_resize ? HTTOPRIGHT    : drag;
+                case bottom | left : return allow_resize ? HTBOTTOMLEFT  : drag;
+                case bottom | right: return allow_resize ? HTBOTTOMRIGHT : drag;
+                case client        : return drag;
+                default            : return HTNOWHERE;
+            }
+        }
+
+        case WM_ERASEBKGND:
+            // Notify the OS that erasing will be handled by the application to prevent flicker.
+            return 1;
+        case WM_CLOSE: {
+            window->input.should_quit = true;
+            return 0;
+        }
+        case WM_DESTROY: {
+            PostQuitMessage(0);
+            return 0;
+        }
+            
+        case WM_SIZE: {
+            RECT window_rect = {0};
+            RECT client_rect = {0};
+
+            //bool ok1 = GetWindowRect(hwnd, &window_rect);
+            bool ok1 = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &window_rect, sizeof window_rect) == S_OK;
+            bool ok2 = GetClientRect(hwnd, &client_rect);
+
+            POINT top_left = {0, 0};
+            bool ok3 = ClientToScreen(hwnd, &top_left);
+            assert(ok1 && ok2 && ok3);
+
+            client_rect.left += top_left.x;
+            client_rect.right += top_left.x;
+            client_rect.top += top_left.y;
+            client_rect.bottom += top_left.y;
+
+            window->window_rect = window_rect;
+            window->client_rect = client_rect;
+        } break;
+
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYUP: 
+        {
+            // Key pressed/released
+            bool is_down = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
+            uint32_t key = (uint32_t)w_param;
+
+            // Check for extended scan code.
+            bool is_extended = (HIWORD(l_param) & KF_EXTENDED) == KF_EXTENDED;
+
+            // Keypress only determines if _any_ alt/ctrl/shift key is pressed. Determine which one if so.
+            if (w_param == VK_MENU) 
+                key = is_extended ? PLATFORM_KEY_RALT : PLATFORM_KEY_LALT;
+            else if (w_param == VK_CONTROL) 
+                key = is_extended ? PLATFORM_KEY_RCONTROL : PLATFORM_KEY_LCONTROL;
+            else if (w_param == VK_SHIFT) 
+            {
+                // Annoyingly, KF_EXTENDED is not set for shift keys.
+                uint32_t left_shift = MapVirtualKeyW(VK_LSHIFT, MAPVK_VK_TO_VSC);
+                uint32_t scancode = ((l_param & (0xFF << 16)) >> 16);
+
+                key = scancode == left_shift ? PLATFORM_KEY_LSHIFT : PLATFORM_KEY_RSHIFT;
+            }
+            
+            assert(key < PLATFORM_KEY_ENUM_COUNT);
+            
+            uint8_t* key_ptr = &window->input.key_half_transitions[key];
+            *key_ptr = _offset_half_trans_count(*key_ptr, 1, is_down);
+
+            // Return 0 to prevent default window behaviour for some keypresses, such as alt.
+            return 0;
+        }
         
-    if(maximize)
-        other_flags |= WS_MAXIMIZE;
+        case WM_INPUT: 
+        {
+            UINT dwSize = sizeof(RAWINPUT);
+            uint8_t lpb[sizeof(RAWINPUT)] = {0};
+
+            GetRawInputData((HRAWINPUT) l_param, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
+
+            RAWINPUT* raw = (RAWINPUT*)lpb;
+
+            if (raw->header.dwType == RIM_TYPEMOUSE) 
+            {
+                window->input.mouse_native_delta_x += raw->data.mouse.lLastX;
+                window->input.mouse_native_delta_y += raw->data.mouse.lLastY;
+            } 
+            break;
+        }
+
+        case WM_MOUSEWHEEL: {
+            int32_t z_delta = GET_WHEEL_DELTA_WPARAM(w_param);
+            window->input.mouse_wheel_delta += z_delta;
+            break;
+        } 
+
+        case WM_LBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_XBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_RBUTTONUP: 
+        case WM_XBUTTONUP: {
+            Platform_Mouse_Button mouse_button = PLATFORM_MOUSE_BUTTON_ENUM_COUNT;
+            bool is_down = false;
+            int return_ = 0;
+
+            switch (msg) 
+            {
+                case WM_LBUTTONDOWN: 
+                    is_down = true;
+                case WM_LBUTTONUP:
+                    mouse_button = PLATFORM_MOUSE_BUTTON_LEFT;
+                    break;
+                
+                case WM_MBUTTONDOWN:
+                    is_down = true;
+                case WM_MBUTTONUP:
+                    mouse_button = PLATFORM_MOUSE_BUTTON_MIDDLE;
+                    break;
+                
+                case WM_RBUTTONDOWN:
+                    is_down = true;
+                case WM_RBUTTONUP:
+                    mouse_button = PLATFORM_MOUSE_BUTTON_RIGHT;
+                    break;
+                    
+                case WM_XBUTTONDOWN:
+                    is_down = true;
+                case WM_XBUTTONUP:
+                    if (GET_XBUTTON_WPARAM(w_param) == XBUTTON1)
+                        mouse_button = PLATFORM_MOUSE_BUTTON_4;
+                    else
+                        mouse_button = PLATFORM_MOUSE_BUTTON_5;
+                    return_ = TRUE;
+                    break;
+            }
+
+            if(mouse_button != PLATFORM_MOUSE_BUTTON_ENUM_COUNT)
+            {
+                uint8_t* button = &window->input.mouse_button_half_transitions[mouse_button];
+                *button = _offset_half_trans_count(*button, 1, is_down);
+            }
+
+            return return_;
+        }
+    }
+
+    return DefWindowProcW(hwnd, msg, w_param, l_param);
+}
+
+//Source: https://stackoverflow.com/a/2416613
+static bool _enter_fullscreen(HWND hwnd, int fullscreen_width, int fullscreen_height, int colour_bits, int refresh_rate) 
+{
+    DEVMODE fullscreenSettings = {0};
+    bool isChangeSuccessful = true;
+    RECT windowBoundary = {0};
+
+    EnumDisplaySettingsW(NULL, 0, &fullscreenSettings);
+    fullscreenSettings.dmPelsWidth        = fullscreen_width;
+    fullscreenSettings.dmPelsHeight       = fullscreen_height;
+    fullscreenSettings.dmBitsPerPel       = colour_bits;
+    fullscreenSettings.dmDisplayFrequency = refresh_rate;
+    fullscreenSettings.dmFields           = DM_PELSWIDTH |
+                                            DM_PELSHEIGHT |
+                                            DM_BITSPERPEL |
+                                            DM_DISPLAYFREQUENCY;
+
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, WS_EX_APPWINDOW | WS_EX_TOPMOST);
+    SetWindowLongPtrW(hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, fullscreen_width, fullscreen_height, SWP_SHOWWINDOW);
+    isChangeSuccessful = ChangeDisplaySettings(&fullscreenSettings, CDS_FULLSCREEN) == DISP_CHANGE_SUCCESSFUL;
+    ShowWindow(hwnd, SW_MAXIMIZE);
+
+    return isChangeSuccessful;
+}
+
+//Source: https://stackoverflow.com/a/2416613
+static bool _exit_fullscreen(HWND hwnd, int window_x, int window_y, int windowed_width, int windowed_height, int windowed_padding_x, int windowed_padding_y) 
+{
+    bool isChangeSuccessful;
+
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, WS_EX_LEFT);
+    SetWindowLongPtrW(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+    isChangeSuccessful = ChangeDisplaySettings(NULL, CDS_RESET) == DISP_CHANGE_SUCCESSFUL;
+    SetWindowPos(hwnd, HWND_NOTOPMOST, window_x, window_y, windowed_width + windowed_padding_x, windowed_height + windowed_padding_y, SWP_SHOWWINDOW);
+    ShowWindow(hwnd, SW_RESTORE);
+
+    return isChangeSuccessful;
+}
+
+static bool _is_fullscreen(Window* window)
+{   
+    if(window == NULL)
+        return false;
+    DWORD style = GetWindowLongW(window->handle, GWL_EXSTYLE);
+    if (style & WS_EX_TOPMOST)
+        return true;
     else
-        other_flags &= ~WS_MAXIMIZE;
-
-    SetWindowLongW(window->handle, GWL_STYLE, other_flags);
-    EnableMenuItem(GetSystemMenu(window->handle, FALSE), SC_CLOSE, close_flags);
+        return false;
 }
 
-static bool _window_is_active(Window* window)
+static bool _set_fullscreen(Window* window, bool fullscreen)
 {
-    HWND temp = GetActiveWindow();
-    return temp == window->handle;
+    bool current = _is_fullscreen(window);
+    if(current == fullscreen)
+        return true;
+
+    if (fullscreen) 
+    {
+        HDC window_HDC = GetDC(window->handle);
+        int fullscreen_width  = GetDeviceCaps(window_HDC, DESKTOPHORZRES);
+        int fullscreen_height = GetDeviceCaps(window_HDC, DESKTOPVERTRES);
+        int colour_bits       = GetDeviceCaps(window_HDC, BITSPIXEL);
+        int refresh_rate      = GetDeviceCaps(window_HDC, VREFRESH);
+
+        if(!GetWindowRect(window->handle, &window->prev_window_rect))
+            return false;
+            
+        window->options.visibility = WINDOW_VISIBILITY_FULLSCREEN;
+        return _enter_fullscreen(window->handle, fullscreen_width, fullscreen_height, colour_bits, refresh_rate);
+    }
+    else
+    {
+        RECT prev = window->prev_window_rect;
+        return _exit_fullscreen(window->handle, prev.left, prev.top, prev.right - prev.left, prev.bottom - prev.top, 0, 0);
+    }
+
 }
 
-void platform_window_set_visibility(Window* window, Window_Visibility visibility, bool focused)
+enum {
+    WINDOWED   = WS_OVERLAPPEDWINDOW | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+    NO_BORDER  = WS_POPUP            | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX,
+};
+
+static bool _set_no_border(Window* window, bool enabled) 
 {
+    LONG combined = WINDOWED | NO_BORDER;
+    LONG old_style = (LONG) GetWindowLongPtrW(window->handle, GWL_STYLE);
+    LONG new_style = old_style & ~combined;
+    if(enabled)
+    {
+        new_style |= NO_BORDER;
+        window->options.no_border = true;
+    }
+    else
+    {
+        new_style |= WINDOWED;
+        window->options.no_border = false;
+    }
+
+    bool state = SetWindowLongPtrW(window->handle, GWL_STYLE, new_style);
+    state = state && SetWindowPos(window->handle, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
+    return state;
+}
+
+bool platform_window_set_options(Window* window, Platform_Window_Options options)
+{
+    if(window == NULL || window->handle == NULL)
+        return false;
+
     //first showing should have SW_SHOWNORMAL
     if(window->was_shown == false)
     {
@@ -792,148 +1152,83 @@ void platform_window_set_visibility(Window* window, Window_Visibility visibility
     }
 
     int show = SW_SHOWNORMAL;
-    switch(visibility)
+    switch(options.visibility)
     {
-        case WINDOW_VISIBILITY_FULLSCREEN: show = SW_SHOWMAXIMIZED; break;
-        case WINDOW_VISIBILITY_BORDERLESS_FULLSCREEN: show = SW_SHOWMAXIMIZED; break;
+        case WINDOW_VISIBILITY_MAXIMIZED: show = SW_SHOWMAXIMIZED; break;
         case WINDOW_VISIBILITY_WINDOWED: show = SW_SHOWNORMAL; break;
         case WINDOW_VISIBILITY_MINIMIZED: show = SW_SHOWMINIMIZED; break;
-        default: show = SW_SHOWNORMAL; break;
+        case WINDOW_VISIBILITY_HIDDEN: show = SW_HIDE; break;
     }
-
-    ShowWindow(window->handle, show);
-    if(_window_is_active(window) != focused)
+    
+    bool state = true;
+    if(options.title)
     {
-        if(focused) 
-            ShowWindow(window->handle, SW_SHOW);
-        else
-            ShowWindow(window->handle, SW_SHOWNA);
-    }
-
-    UpdateWindow(window->handle);
-}
-
-Input platform_window_process_messages(Window* window)
-{
-    MSG Msg = {0};
-    Input input = {0};
-    while(PeekMessageW(&Msg, window->handle, 0, 0, PM_REMOVE) > 0)
-    {
-        TranslateMessage(&Msg);
-        //DispatchMessageW(&Msg);
-
-        switch(Msg.message)
-        {
-            case WM_MOUSEMOVE:
-            {
-                input.mouse_app_resolution_x = GET_X_LPARAM(Msg.lParam); 
-                input.mouse_app_resolution_y = GET_Y_LPARAM(Msg.lParam); 
-                //printf("ABS mouse pos %d %d\n", xPosAbsolute, yPosAbsolute);
-                break;
-            }
-            case WM_INPUT: 
-            {
-                //break;
-                UINT dwSize = sizeof(RAWINPUT);
-                uint8_t lpb[sizeof(RAWINPUT)] = {0};
-
-                GetRawInputData((HRAWINPUT)Msg.lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
-
-                RAWINPUT* raw = (RAWINPUT*)lpb;
-
-                if (raw->header.dwType == RIM_TYPEMOUSE) 
-                {
-                    input.mouse_relative_x += raw->data.mouse.lLastX;
-                    input.mouse_relative_y += raw->data.mouse.lLastY;
-                } 
-                break;
-            }
-
-            case WM_CLOSE:
-            case WM_DESTROY:
-                input.should_quit = true;
-            break;
-
-            default:
-                DefWindowProcW(window->handle, Msg.message, Msg.wParam, Msg.lParam);
-            break;
-        }
-    }
-
-    (void) GetKeyboardState(input.keys);
-
-    input.window_position_x = window->rect.left;
-    input.window_position_y = window->rect.top;
-    input.window_size_x = (int64_t) window->rect.right - window->rect.left;
-    input.window_size_y = (int64_t) window->rect.bottom - window->rect.top;
-
-    return input;
-}
-
-static Window* _get_window(HWND hwnd)
-{
-    isize window_index = _find_window(hwnd);
-    assert(window_index != -1 && global_windows != NULL);
-    return &global_windows[window_index];
-}
-
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    switch(msg)
-    {
-        case WM_MOVING:
-        case WM_SIZING: {
-            RECT* rect = (RECT*) lParam; 
-            Window* window = _get_window(hwnd);
-            window->rect = *rect;
-            return 0;
-        }
+        char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
+        _Buffer wide_title = _buffer_init_backed(window_title_buffer, sizeof(window_title_buffer), sizeof(wchar_t));
+        _utf8_to_utf16(options.title, _strlen(options.title), &wide_title);
         
-        //case WM_INPUT: 
-        //{
-        //    UINT dwSize = sizeof(RAWINPUT);
-        //    uint8_t lpb[sizeof(RAWINPUT)] = {0};
-        //
-        //    GetRawInputData((HRAWINPUT)msg, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
-        //
-        //    RAWINPUT* raw = (RAWINPUT*)lpb;
-        //
-        //    if (raw->header.dwType == RIM_TYPEMOUSE) 
-        //    {
-        //        if(!(raw->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE))
-        //        {
-        //            Window* window = get_window(hwnd);
-        //            window->mouse_relative_x += raw->data.mouse.lLastX;
-        //            window->mouse_relative_y += raw->data.mouse.lLastY;
-        //        }
-        //    } 
-        //    break;
-        //}
-        //case WM_CLOSE:
-        //    DestroyWindow(hwnd);
-        //break;
-        //case WM_DESTROY:
-        //    PostQuitMessage(0);
-        //break;
-
-        default:
-            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        state = SetWindowTextW(window->handle, _wstring(wide_title));
+            
+        _buffer_deinit(&wide_title);
     }
+
+    window->options.no_border = options.no_border;
+    window->options.no_border_allow_resize = options.no_border_allow_resize;
+    window->options.no_border_allow_move = options.no_border_allow_move;
+    window->options.visibility = options.visibility;
+
+    state = _set_no_border(window, options.no_border) && state;
+    state = _set_fullscreen(window, options.visibility == WINDOW_VISIBILITY_FULLSCREEN) && state;
+
+    state = ShowWindow(window->handle, show) && state;
+    HWND active_window = GetActiveWindow();
+    bool is_active = active_window == window->handle;
+    if(!is_active != options.no_focus && options.visibility != WINDOW_VISIBILITY_HIDDEN)
+    {
+        if(options.no_focus) 
+            state = ShowWindow(window->handle, SW_SHOWNA) && state;
+        else
+            state = ShowWindow(window->handle, SW_SHOW)  && state;
+    }
+
+    return state;
 }
 
-Window_Popup_Controls platform_window_make_popup(Window_Popup_Style desired_style, const char* message, const char* title)
+Platform_Window_Options platform_window_get_options(Window* window)
+{
+    Platform_Window_Options out = {0};
+    if(window == NULL || window->handle == NULL)
+        return out;
+
+    out = window->options;
+    
+    char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
+    _Buffer wide_title = _buffer_init_backed(window_title_buffer, sizeof(window_title_buffer), sizeof(wchar_t));
+    _buffer_resize(&wide_title, wide_title.capacity-1);
+    int needed = GetWindowTextW(window->handle, _wstring(wide_title), wide_title.size);
+
+    _Buffer title = _buffer_init(sizeof(char));
+    _utf16_to_utf8(_wstring(wide_title), wide_title.size, &title);
+    out.title = title.data;
+
+    _buffer_deinit(&wide_title);
+
+    return out;
+}
+
+Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_Style desired_style, const char* message, const char* title)
 {
     int style = 0;
     int icon = 0;
     switch(desired_style)
     {
-        case POPUP_STYLE_OK:            style = MB_OK; break;
-        case POPUP_STYLE_ERROR:         style = MB_OK; icon = MB_ICONERROR; break;
-        case POPUP_STYLE_WARNING:       style = MB_OK; icon = MB_ICONWARNING; break;
-        case POPUP_STYLE_INFO:          style = MB_OK; icon = MB_ICONINFORMATION; break;
-        case POPUP_STYLE_RETRY_ABORT:   style = MB_ABORTRETRYIGNORE; icon = MB_ICONWARNING; break;
-        case POPUP_STYLE_YES_NO:        style = MB_YESNO; break;
-        case POPUP_STYLE_YES_NO_CANCEL: style = MB_YESNOCANCEL; break;
+        case PLATFORM_POPUP_STYLE_OK:            style = MB_OK; break;
+        case PLATFORM_POPUP_STYLE_ERROR:         style = MB_OK; icon = MB_ICONERROR; break;
+        case PLATFORM_POPUP_STYLE_WARNING:       style = MB_OK; icon = MB_ICONWARNING; break;
+        case PLATFORM_POPUP_STYLE_INFO:          style = MB_OK; icon = MB_ICONINFORMATION; break;
+        case PLATFORM_POPUP_STYLE_RETRY_ABORT:   style = MB_ABORTRETRYIGNORE; icon = MB_ICONWARNING; break;
+        case PLATFORM_POPUP_STYLE_YES_NO:        style = MB_YESNO; break;
+        case PLATFORM_POPUP_STYLE_YES_NO_CANCEL: style = MB_YESNOCANCEL; break;
         default: style = MB_OK; break;
     }
     
@@ -955,15 +1250,15 @@ Window_Popup_Controls platform_window_make_popup(Window_Popup_Style desired_styl
 
     switch(value)
     {
-        case IDABORT: return POPUP_CONTROL_ABORT;
-        case IDCANCEL: return POPUP_CONTROL_CANCEL;
-        case IDCONTINUE: return POPUP_CONTROL_CONTINUE;
-        case IDIGNORE: return POPUP_CONTROL_IGNORE;
-        case IDYES: return POPUP_CONTROL_YES;
-        case IDNO: return POPUP_CONTROL_NO;
-        case IDOK: return POPUP_CONTROL_OK;
-        case IDRETRY: return POPUP_CONTROL_RETRY;
-        case IDTRYAGAIN: return POPUP_CONTROL_RETRY;
-        default: return POPUP_CONTROL_OK;
+        case IDABORT: return PLATFORM_POPUP_CONTROL_ABORT;
+        case IDCANCEL: return PLATFORM_POPUP_CONTROL_CANCEL;
+        case IDCONTINUE: return PLATFORM_POPUP_CONTROL_CONTINUE;
+        case IDIGNORE: return PLATFORM_POPUP_CONTROL_IGNORE;
+        case IDYES: return PLATFORM_POPUP_CONTROL_YES;
+        case IDNO: return PLATFORM_POPUP_CONTROL_NO;
+        case IDOK: return PLATFORM_POPUP_CONTROL_OK;
+        case IDRETRY: return PLATFORM_POPUP_CONTROL_RETRY;
+        case IDTRYAGAIN: return PLATFORM_POPUP_CONTROL_RETRY;
+        default: return PLATFORM_POPUP_CONTROL_OK;
     }
 }

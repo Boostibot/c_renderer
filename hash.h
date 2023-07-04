@@ -1,9 +1,7 @@
-#pragma once
+#ifndef LIB_HASH_TABLE
+#define LIB_HASH_TABLE
 
 #include <stdint.h>
-#include <stddef.h>
-
-typedef int64_t isize;
 
 static
 uint64_t hash64(uint64_t value) 
@@ -34,7 +32,7 @@ uint32_t hash64_to32(uint64_t value)
 }
 
 static
-uint32_t hash32_murmur(const void* key, isize size, uint32_t seed)
+uint32_t hash32_murmur(const void* key, int64_t size, uint32_t seed)
 {
     //source https://github.com/abrandoned/murmur2/blob/master/MurmurHash2.c
     // 'm' and 'r' are mixing constants generated offline.
@@ -83,7 +81,7 @@ uint32_t hash32_murmur(const void* key, isize size, uint32_t seed)
 } 
 
 static
-uint64_t hash64_murmur(const void* key, isize size, uint64_t seed)
+uint64_t hash64_murmur(const void* key, int64_t size, uint64_t seed)
 {
     //source https://github.com/abrandoned/murmur2/blob/master/MurmurHash2.c
     //& big endian support: https://github.com/niklas-ourmachinery/bitsquid-foundation/blob/master/murmur_hash.cpp
@@ -138,13 +136,13 @@ uint64_t hash64_murmur(const void* key, isize size, uint64_t seed)
 } 
 
 static
-uint32_t hash32_fnv_one_at_a_time(const void* key, isize size, uint32_t seed)
+uint32_t hash32_fnv_one_at_a_time(const void* key, int64_t size, uint32_t seed)
 {
     // Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
     uint32_t hash = seed;
     hash ^= 2166136261UL;
     const uint8_t* data = (const uint8_t*)key;
-    for(isize i = 0; i < size; i++)
+    for(int64_t i = 0; i < size; i++)
     {
         hash ^= data[i];
         hash *= 16777619;
@@ -152,57 +150,4 @@ uint32_t hash32_fnv_one_at_a_time(const void* key, isize size, uint32_t seed)
     return hash;
 }
 
-static
-uint32_t hash32_murmur_one_at_a_time(const void* key, isize size, uint32_t seed)
-{
-    // One-byte-at-a-time hash based on Murmur's mix
-    // Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
-    uint32_t hash = seed;
-    const uint8_t* data = (const uint8_t*)key;
-    for(isize i = 0; i < size; i++)
-    {
-        hash ^= data[i];
-        hash *= 0x5bd1e995;
-        hash ^= hash >> 15;
-    }
-    return hash;
-}
-
-static
-uint32_t hash32_jenkins_one_at_a_time(const void* key, isize size, uint32_t seed)
-{
-    uint32_t hash = seed;
-    const uint8_t* data = (const uint8_t*)key;
-    for(isize i = 0; i < size; i++)
-    {
-        hash += data[i];
-        hash += (hash << 10);
-        hash ^= (hash >> 6);
-    }
-    hash += (hash << 3);
-    hash ^= (hash >> 11);
-    hash += (hash << 15);
-    return hash;
-}
-
-static
-uint32_t rotl32(uint32_t value, int32_t by_bits)
-{
-    // C idiom: will be optimized to a single operation
-    return value<<by_bits | value>>(32-by_bits);      
-}
-
-static
-uint32_t hash32_coffin_one_at_a_time(const void* key, isize size, uint32_t seed) 
-{ 
-    // Source: https://stackoverflow.com/a/7666668/5407270
-    uint32_t hash = seed ^ 0x55555555;
-    const uint8_t* data = (const uint8_t*)key;
-    for(isize i = 0; i < size; i++)
-    {
-        hash ^= data[i];
-        hash = rotl32(hash, 5);
-    }
-    return hash;
-}
-
+#endif

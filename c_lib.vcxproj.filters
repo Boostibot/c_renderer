@@ -56,5 +56,23 @@
     <ClInclude Include="math.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="handle_table.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="random.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="_test_random.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="_test_array.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="_test.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="_test_hash_table.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

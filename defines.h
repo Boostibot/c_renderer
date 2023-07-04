@@ -38,7 +38,10 @@ typedef double      f64;
 #define PP_CONCAT2(a, b) a ## b
 #define PP_CONCAT(a, b) PP_CONCAT2(a, b)
 #define STATIC_ASSERT(c)    enum { PP_CONCAT(__STATIC_ASSERT__, __LINE__) = 1 / (int)(c) }
+
 #define ASSERT(c)           assert(c)
+#define ASSERT_CHEAP(c)     assert(c)
+#define ASSERT_EXPENSIVE(c) assert(c)
 
 //Locally enables/disables bounds checks. Can be set on per function basis
 #define DO_BOUNDS_CHECKS true
