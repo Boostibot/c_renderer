@@ -352,7 +352,7 @@ void     random_state_shuffle(Random_State* state, void* elements, int64_t eleme
 	}
 	void     random_shuffle(void* elements, int64_t element_count, int64_t element_size) 
 	{ 
-		return random_state_shuffle(random_state(), elements, element_count, element_size); 
+		random_state_shuffle(random_state(), elements, element_count, element_size); 
 	}
 
 #endif

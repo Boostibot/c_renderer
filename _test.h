@@ -41,10 +41,10 @@ Discrete_Distribution random_discrete_make(const i32 probabilities[], isize prob
 	i32_Array prob_table = {0};
 	array_resize(&prob_table, prob_sum);
 	
-	isize k = 0;
-	for(isize i = 0; i < probabilities_size; i++)
+	i32 k = 0;
+	for(i32 i = 0; i < probabilities_size; i++)
 	{
-		isize end = k + probabilities[i];
+		i32 end = k + probabilities[i];
 		for(; k < end; k++)
 		{
 			CHECK_BOUNDS(k, prob_table.size);

@@ -39,11 +39,12 @@ EXPORT void _array_append(void* array, isize item_size, const void* data, isize 
 EXPORT void _array_unappend(void* array, isize item_size, isize data_count);
 EXPORT void _array_clear(void* array, isize item_size);
 
+//@TODO: make backing less error prone
+
 #define array_set_capacity(darray_ptr, capacity) \
     _array_set_capacity(darray_ptr, sizeof *(darray_ptr)->data, capacity, SOURCE_INFO())
     
 #define array_init(darray_ptr, allocator) \
-    /* or you can simply do My_Type_Array array = {allocator}; */ \
     _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, NULL, 0)
 
 #define array_init_backed(darray_ptr, allocator, backing_array, backing_array_size) \
@@ -85,7 +86,7 @@ EXPORT void _array_clear(void* array, isize item_size);
     (darray_ptr)->data[(darray_ptr)->size - 1] = item_value \
 
 #define array_pop(darray_ptr) \
-    _array_unappend(darray_ptr, sizeof *(darray_ptr)->data, 1)
+    _array_unappend(darray_ptr, sizeof *(darray_ptr)->data, 1) \
     
 #define array_first(darray_ptr) \
     (darray_ptr)->data[0]

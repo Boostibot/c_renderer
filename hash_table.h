@@ -16,20 +16,21 @@ typedef struct Hash_Table32_Entry
     uint32_t value;
 } Hash_Table32_Entry;
 
-typedef struct Hash_Found32
+typedef struct Hash_Table64
 {
-    isize hash_index;
-    uint32_t value;
-} Hash_Found32;
+    Allocator* allocator;                
+    Hash_Table64_Entry* entries;                          
+    int32_t size;                        
+    int32_t slot_count;                   
+} Hash_Table64;
 
-typedef struct Hash_Found64
+typedef struct Hash_Table32
 {
-    isize hash_index;
-    uint64_t value;
-} Hash_Found64;
-
-DEFINE_ARRAY_TYPE(Hash_Table64_Entry, Hash_Table64);
-DEFINE_ARRAY_TYPE(Hash_Table32_Entry, Hash_Table32);
+    Allocator* allocator;                
+    Hash_Table32_Entry* entries;                          
+    int32_t size;                        
+    int32_t slot_count;                   
+} Hash_Table32;
 
 #define _HASH_GRAVESTONE 1
 #define _HASH_EMPTY 0
@@ -40,21 +41,22 @@ void hash_table64_deinit(Hash_Table64* table);
 void hash_table64_copy(Hash_Table64* to_table, Hash_Table64 from_table);
 void hash_table64_clear(Hash_Table64* to_table);
 
-Hash_Found64 hash_table64_find(Hash_Table64 table, uint64_t hash);
-Hash_Found64 hash_table64_find_next(Hash_Table64 table, Hash_Found64 prev);
-void         hash_table64_rehash(Hash_Table64* table, isize to_size);
-Hash_Found64 hash_table64_insert(Hash_Table64* table, uint64_t hash, uint64_t value);
-void         hash_table64_remove(Hash_Table64* table, Hash_Found64 found);
-bool         hash_table64_is_overful(Hash_Table64 table);
+isize hash_table64_find(Hash_Table64 table, uint64_t hash);
+isize hash_table64_find_next(Hash_Table64 table, uint64_t hash, isize prev_found);
+void  hash_table64_rehash(Hash_Table64* table, isize to_size);
+void  hash_table64_reserve(Hash_Table64* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
+isize hash_table64_insert(Hash_Table64* table, uint64_t hash, uint64_t value);
+Hash_Table64_Entry hash_table64_remove(Hash_Table64* table, isize found);
+bool  hash_table64_is_invariant(Hash_Table64 table);
 
-//@TODO: If I dont end up using these just fuse them
-bool            lin_probe_hash64_is_invariant(const Hash_Table64_Entry* entries, isize entries_size);
-uint64_t        lin_probe_hash64_escape(uint64_t hash);
-Hash_Found64    lin_probe_hash64_find(const Hash_Table64_Entry* entries, isize entries_size, uint64_t hash);
-Hash_Found64    lin_probe_hash64_find_next(const Hash_Table64_Entry* entries, isize entries_size, Hash_Found64 prev);
-void            lin_probe_hash64_rehash(const Hash_Table64_Entry* entries, isize entries_size, Hash_Table64_Entry* new_entries, isize new_entries_size);
-Hash_Found64    lin_probe_hash64_insert(Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, uint64_t value);
-void            lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entries_size, Hash_Found64 found);
+//@TODO: If I dont end up using these just fuse them date: 7/4/2023 time to use one month => 8/4/2023 delete
+bool     lin_probe_hash64_is_invariant(const Hash_Table64_Entry* entries, isize entries_size);
+uint64_t lin_probe_hash64_escape(uint64_t hash);
+isize    lin_probe_hash64_find(const Hash_Table64_Entry* entries, isize entries_size, uint64_t hash);
+isize    lin_probe_hash64_find_next(const Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, isize prev_found);
+void     lin_probe_hash64_rehash(Hash_Table64_Entry* new_entries, isize new_entries_size, const Hash_Table64_Entry* entries, isize entries_size);
+isize    lin_probe_hash64_insert(Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, uint64_t value);
+void     lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entries_size, isize found);
 
 #endif
 
@@ -82,63 +84,73 @@ void            lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entri
         return hash;
     }
 
-    Hash_Found64 lin_probe_hash64_find(const Hash_Table64_Entry* entries, isize entries_size, uint64_t hash)
+    isize lin_probe_hash64_find_next(const Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, isize prev_index)
     {
-        ASSERT(lin_probe_hash64_is_invariant(entries, entries_size));
-        Hash_Found64 found = {0};
-        found.hash_index = -1;
-        if(entries_size <= 0)
-            return found;
-
         uint64_t escaped = lin_probe_hash64_escape(hash);
+        ASSERT(lin_probe_hash64_is_invariant(entries, entries_size));
+        if(entries_size <= 0)
+            return -1;
+        
         uint64_t mask = (uint64_t) entries_size - 1;
-        uint64_t i = escaped & mask;
+        CHECK_BOUNDS(prev_index, entries_size);
         isize counter = 0;
-        for(; entries[i].hash != _HASH_EMPTY; i = (i + 1) & mask)
+        for(uint64_t i = prev_index; entries[i].hash != _HASH_EMPTY; i = (i + 1) & mask)
         {
-            ASSERT(counter ++ < entries_size);
+            if(counter >= entries_size)
+                break;
             if(entries[i].hash == escaped)
-            {
-                found.hash_index = i;
-                found.value = entries[i].value;
-                return found;
-            }
+                return i;
+
+            counter += 1;
         }
 
-        return found;
+        return -1;
+    }
+    
+    isize lin_probe_hash64_find(const Hash_Table64_Entry* entries, isize entries_size, uint64_t hash)
+    {
+        uint64_t escaped = lin_probe_hash64_escape(hash);
+        uint64_t mask = (uint64_t) entries_size - 1;
+        uint64_t start_at = escaped & mask;
+        return lin_probe_hash64_find_next(entries, entries_size, escaped, start_at);
     }
 
-    Hash_Found64 lin_probe_hash64_find_next(const Hash_Table64_Entry* entries, isize entries_size, Hash_Found64 prev)
+    void lin_probe_hash64_rehash(Hash_Table64_Entry* new_entries, isize new_entries_size, const Hash_Table64_Entry* entries, isize entries_size)
     {
-        return lin_probe_hash64_find(entries, entries_size, prev.hash_index + 1);
-    }
-
-    void lin_probe_hash64_rehash(const Hash_Table64_Entry* entries, isize entries_size, Hash_Table64_Entry* new_entries, isize new_entries_size)
-    {
-        const isize ENTRY_SIZE = (isize) sizeof(uint64_t);
-
         ASSERT(lin_probe_hash64_is_invariant(entries, entries_size));
         ASSERT(lin_probe_hash64_is_invariant(new_entries, new_entries_size));
+       
+        if(entries_size > 0)
+            ASSERT(new_entries_size != 0);
+        
+        memset(new_entries, 0, new_entries_size * sizeof *new_entries);
 
         uint64_t mask = (uint64_t) new_entries_size - 1;
         for(isize i = 0; i < entries_size; i++)
         {
-            if(entries[i].hash == _HASH_GRAVESTONE || 
-                entries[i].hash == _HASH_EMPTY)
+            Hash_Table64_Entry curr = entries[i];
+            if(curr.hash == _HASH_GRAVESTONE || 
+                curr.hash == _HASH_EMPTY)
                 continue;
             
-            uint64_t k = entries->hash & mask;
-            isize counter = 0;
-            for(; entries[k].hash != _HASH_EMPTY; k = (k + 1) & mask)
-                ASSERT(counter ++ < entries_size && "must not be completely full!");
 
-            new_entries[k] = entries[i];
+            uint64_t k = curr.hash & mask;
+            isize counter = 0;
+            for(; new_entries[k].hash != _HASH_EMPTY; k = (k + 1) & mask)
+            {
+                ASSERT(counter < new_entries_size && "must not be completely full!");
+                ASSERT(counter < entries_size && "its impossible to have more then what we started with");
+                counter += 1;
+            }
+
+            new_entries[k] = curr;
         }
     }   
 
-    Hash_Found64 lin_probe_hash64_insert(Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, uint64_t value) 
+    isize lin_probe_hash64_insert(Hash_Table64_Entry* entries, isize entries_size, uint64_t hash, uint64_t value) 
     {
         ASSERT(lin_probe_hash64_is_invariant(entries, entries_size));
+        ASSERT(entries_size > 0 && "there must be space for insertion");
         uint64_t mask = (uint64_t) entries_size - 1;
     
         uint64_t escaped = lin_probe_hash64_escape(hash);
@@ -149,102 +161,192 @@ void            lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entri
 
         entries[i].hash = escaped;
         entries[i].value = value;
-        Hash_Found64 found = {0};
-        found.hash_index = i;
-        found.value = value;
-        return found;
+        return i;
     }
     
-    void lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entries_size, Hash_Found64 found) 
+    void lin_probe_hash64_remove(Hash_Table64_Entry* entries, isize entries_size, isize found) 
     {
         ASSERT(lin_probe_hash64_is_invariant(entries, entries_size));
-        CHECK_BOUNDS(found.hash_index, entries_size);
+        CHECK_BOUNDS(found, entries_size);
 
-        Hash_Table64_Entry* found_entry = &entries[found.hash_index];
+        Hash_Table64_Entry* found_entry = &entries[found];
 
-        ASSERT(found_entry->value == found.value);
+        //ASSERT(found_entry->value == found.value);
         found_entry->hash = _HASH_GRAVESTONE;
         found_entry->value = 0;
     }
 
+    bool _hash_table64_is_backed(Hash_Table64 table)
+    {
+        bool is_backed = (usize) table.allocator & 1;
+        return is_backed;
+    }
+
+    void _hash_table64_set_backed(Hash_Table64* table, bool to)
+    {
+        if(to)
+            table->allocator = (Allocator*) ((usize) table->allocator | 1);
+        else
+            table->allocator = (Allocator*) ((usize) table->allocator & ~(usize)3);
+    }
+
     void hash_table64_init(Hash_Table64* table, Allocator* allocator)
     {
-        array_init(table, allocator);
+        Hash_Table64 null = {0};
+        *table = null;
+        table->allocator = allocator;
+        _hash_table64_set_backed(table, false);
     }   
 
     void hash_table64_init_backed(Hash_Table64* table, Allocator* allocator, void* backing_array, isize backing_array_size)
     {
-        array_init_backed(table, allocator, backing_array, backing_array_size);
+        isize backing_slot_count = backing_array_size / sizeof table->entries[0];
+
+        isize slot_count = 1;
+        while(slot_count * 2 < backing_slot_count)
+            slot_count *= 2;
+        
+        hash_table64_init(table, allocator);
+        if(slot_count <= backing_slot_count)
+        {
+            _hash_table64_set_backed(table, true);
+            table->slot_count = (int32_t) slot_count;
+            table->entries = (Hash_Table64_Entry*) backing_array;
+        }
     }
 
     void hash_table64_deinit(Hash_Table64* table)
     {
-        array_deinit(table);
+        ASSERT(hash_table64_is_invariant(*table));
+        if(_hash_table64_is_backed(*table) == false && table->entries != NULL)
+            allocator_deallocate(table->allocator, table->entries, table->slot_count * sizeof *table->entries, DEF_ALIGN, SOURCE_INFO());
+
+        Hash_Table64 null = {0};
+        *table = null;
+    }
+
+    static bool _hash_table64_needs_rehash(Hash_Table64* table, isize to_size)
+    {
+        return to_size * 2 >= table->slot_count;
+    }
+
+    static void _hash_table64_init_allocator(Hash_Table64* table)
+    {
+        if(table->allocator == NULL)
+           table->allocator = allocator_get_default();
     }
 
     void hash_table64_copy(Hash_Table64* to_table, Hash_Table64 from_table)
     {
-        array_copy(to_table, from_table);
+        ASSERT(hash_table64_is_invariant(*to_table));
+        ASSERT(hash_table64_is_invariant(from_table));
+
+        if(_hash_table64_needs_rehash(to_table, from_table.size))
+        {   
+            isize rehash_to = 16;
+            while(rehash_to < from_table.size)
+                rehash_to *= 2;
+
+            isize elem_size = sizeof to_table->entries[0];
+            _hash_table64_init_allocator(to_table);
+            to_table->entries = allocator_reallocate(to_table->allocator, rehash_to * elem_size, to_table->entries, to_table->slot_count * elem_size, DEF_ALIGN, SOURCE_INFO());
+            to_table->slot_count = rehash_to;
+        }
+        
+        to_table->size = from_table.size;
+        lin_probe_hash64_rehash(to_table->entries, to_table->slot_count, from_table.entries, from_table.slot_count);
+        
+        ASSERT(hash_table64_is_invariant(*to_table));
+        ASSERT(hash_table64_is_invariant(from_table));
     }
 
     void hash_table64_clear(Hash_Table64* to_table)
     {
-        array_clear(to_table);
-        memset(to_table->data, 0, to_table->capacity*sizeof(*to_table->data));
+        memset(to_table->entries, 0, to_table->slot_count*sizeof(*to_table->entries));
+        to_table->size = 0;
     }
 
-    Hash_Found64 hash_table64_find(Hash_Table64 table, uint64_t hash)
+    bool hash_table64_is_invariant(Hash_Table64 table)
     {
-        return lin_probe_hash64_find(table.data, table.capacity, hash);
+        bool has_entries_inv = true;
+        bool allocator_inv = true;
+
+        //If one then both
+        if(table.slot_count > 0 || table.entries != NULL)
+        {
+            has_entries_inv = table.slot_count > 0 && table.entries != NULL;
+            
+            //If is backed and has_entries than must not be null
+            if(_hash_table64_is_backed(table) == false)
+                allocator_inv = table.allocator != NULL;
+        }
+        bool sizes_inv = table.size >= 0 && table.slot_count >= 0;
+        bool cap_inv = is_power_of_two_zero(table.slot_count);
+        bool final_inv = has_entries_inv && allocator_inv && sizes_inv && cap_inv;
+
+        ASSERT(final_inv);
+        return final_inv;
     }
-    Hash_Found64 hash_table64_find_next(Hash_Table64 table, Hash_Found64 prev)
+    
+    isize hash_table64_find(Hash_Table64 table, uint64_t hash)
     {
-        return lin_probe_hash64_find_next(table.data, table.capacity, prev);
+        return lin_probe_hash64_find(table.entries, table.slot_count, hash);
+    }
+    isize hash_table64_find_next(Hash_Table64 table, uint64_t hash, isize prev_found)
+    {
+        return lin_probe_hash64_find_next(table.entries, table.slot_count, hash, prev_found);
     }
     void hash_table64_rehash(Hash_Table64* table, isize to_size)
     {
-        Hash_Table64 fresh = {0};
-        Hash_Table64 temp = *table;
-
-        fresh.allocator = table->allocator;
-        if(to_size < table->size)
-            to_size = table->size;
-
+        ASSERT(hash_table64_is_invariant(*table));
+        Hash_Table64 rehashed = {0};
+        hash_table64_init(&rehashed, table->allocator);
+        
         isize rehash_to = 16;
         while(rehash_to < to_size)
             rehash_to *= 2;
 
-        array_set_capacity(&fresh, rehash_to);
-        fresh.size = table->size;
-        ASSERT(fresh.capacity == rehash_to);
-        ASSERT(fresh.capacity >= fresh.size);
+        //Cannot shrink beyond needed size
+        if(rehash_to <= table->size)
+            return;
 
-        lin_probe_hash64_rehash(table->data, table->capacity, fresh.data, fresh.capacity);
-        array_deinit(&temp);
-        *table = fresh;
+        isize elem_size = sizeof table->entries[0];
+        _hash_table64_init_allocator(&rehashed);
+        rehashed.entries = allocator_allocate(rehashed.allocator, rehash_to * elem_size, DEF_ALIGN, SOURCE_INFO());
+        rehashed.size = table->size;
+        rehashed.slot_count = (int32_t) rehash_to;
+
+
+        lin_probe_hash64_rehash(rehashed.entries, rehashed.slot_count, table->entries, table->slot_count);
+        hash_table64_deinit(table);
+        *table = rehashed;
+        
+        ASSERT(hash_table64_is_invariant(*table));
     }
-    bool hash_table64_is_overful(Hash_Table64 table)
+
+    void hash_table64_reserve(Hash_Table64* table, isize to_size)
     {
-        if(table.size * 2 >= table.capacity)
-            return true;
-        else
-            return false;
+        if(_hash_table64_needs_rehash(table, to_size))
+            hash_table64_rehash(table, to_size);
     }
 
-    Hash_Found64 hash_table64_insert(Hash_Table64* table, uint64_t hash, uint64_t value)
+    isize hash_table64_insert(Hash_Table64* table, uint64_t hash, uint64_t value)
     {
-        if(hash_table64_is_overful(*table))
-            hash_table64_rehash(table, table->capacity*2);
+        hash_table64_reserve(table, table->size + 1);
 
-        Hash_Found64 out = lin_probe_hash64_insert(table->data, table->capacity, hash, value);
+        isize out = lin_probe_hash64_insert(table->entries, table->slot_count, hash, value);
         table->size += 1;
+        ASSERT(hash_table64_is_invariant(*table));
         return out;
     }
-    void hash_table64_remove(Hash_Table64* table, Hash_Found64 found)
+    Hash_Table64_Entry hash_table64_remove(Hash_Table64* table, isize found)
     {
         ASSERT(table->size > 0);
-        lin_probe_hash64_remove(table->data, table->capacity, found);
+        Hash_Table64_Entry removed = table->entries[found];
+        lin_probe_hash64_remove(table->entries, table->slot_count, found);
         table->size -= 1;
+        ASSERT(hash_table64_is_invariant(*table));
+        return removed;
     }
 
 #endif

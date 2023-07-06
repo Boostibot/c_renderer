@@ -3,8 +3,10 @@
 #include "_test.h"
 #include "array.h"
 
-static void test_array_stress(f64 seconds)
+static void test_array_stress(f64 max_seconds)
 {
+	isize mem_before = allocator_get_stats(allocator_get_default()).bytes_allocated;
+
 	enum Action 
 	{
 		INIT,
@@ -56,13 +58,15 @@ static void test_array_stress(f64 seconds)
 	i64_Array* other_array = &array1;
 	
 	Discrete_Distribution dist = random_discrete_make(probabilities, ACTION_ENUM_COUNT);
-	//Random_State rand = random_state_from_seed(0);
-	//random_set_state(rand);
+	//*random_state() = random_state_from_seed(1);
+	
 
+	i32 max_size = 0;
+	i32 max_capacity = 0;
 	f64 start = clock_s();
 	for(isize i = 0; i < MAX_ITERS; i++)
 	{
-		if(clock_s() - start >= seconds && i >= MIN_ITERS)
+		if(clock_s() - start >= max_seconds && i >= MIN_ITERS)
 			break;
 
 		i32 action = random_discrete(dist);
@@ -94,18 +98,19 @@ static void test_array_stress(f64 seconds)
 			}
 			
 			case SET_CAPACITY: {
-				isize capacity = random_range(&rand, 0, MAX_CAPACITY);
+				isize capacity = random_range(0, MAX_CAPACITY);
 				array_set_capacity(arr, capacity);
 				break;
 			}
 			
 			case PUSH: {
-				i64 offset = random_range(&rand, 0, 64);
+				i64 offset = random_range(0, 64);
 				CHECK_BOUNDS(offset, 64);
+
 				i64 value = (i64) 1 << offset;
 				TEST(value);
-				ASSERT(arr != NULL && arr->data != NULL);
 				array_push(arr, value);
+				ASSERT(arr != NULL && arr->data != NULL);
 				break;
 			}
 			
@@ -125,7 +130,7 @@ static void test_array_stress(f64 seconds)
 				is_reserve = false;
 				isize size_before = arr->size;
 				isize capacity_before = arr->capacity;
-				isize capacity = random_range(&rand, 0, MAX_CAPACITY);
+				isize capacity = random_range(0, MAX_CAPACITY);
 				if(is_reserve)
 					array_reserve(arr, capacity);
 				else
@@ -137,7 +142,7 @@ static void test_array_stress(f64 seconds)
 			}
 
 			case RESIZE: {
-				isize size = random_range(&rand, 0, MAX_CAPACITY);
+				isize size = random_range(0, MAX_CAPACITY);
 				array_resize(arr, size);
 				TEST(arr->size == size);
 				TEST(arr->capacity >= size);
@@ -146,12 +151,12 @@ static void test_array_stress(f64 seconds)
 			
 			case APPEND: {
 				i64 appended[64] = {0};
-				isize append_count = random_range(&rand, 0, 64);
+				isize append_count = random_range(0, 64);
 				
 				CHECK_BOUNDS(append_count, 64)
 				for(isize i = 0; i < append_count; i++)
 				{
-					i64 value = (i64) 1 << random_range(&rand, 0, 64);
+					i64 value = (i64) 1 << random_range(0, 64);
 					appended[i] = value;
 				}
 				
@@ -170,19 +175,27 @@ static void test_array_stress(f64 seconds)
 				break;
 			}
 		}
+		
+		if(max_size < arr->size)
+			max_size = arr->size;
+		if(max_capacity < arr->capacity)
+			max_capacity = arr->capacity;
 
 		for(isize i = 0; i < arr->size; i++)
-			TEST(is_power_of_two_zero(arr->data[i]));
+			TEST(arr->data != NULL && is_power_of_two_zero(arr->data[i]));
 
 		TEST(_array_is_invariant(arr, sizeof *arr->data));
 	}
-
+	
 	random_discrete_deinit(&dist);
 	array_deinit(&array1);
 	array_deinit(&array2);
+
+	isize mem_after = allocator_get_stats(allocator_get_default()).bytes_allocated;
+	TEST(mem_before == mem_after);
 }
 
-void test_array()
+void test_array(f64 max_seconds)
 {
-	test_array_stress(3.0);
+	test_array_stress(max_seconds);
 }
