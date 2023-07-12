@@ -132,6 +132,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="allocator.h" />
+    <ClInclude Include="allocator_debug.h" />
     <ClInclude Include="allocator_malloc.h" />
     <ClInclude Include="array.h" />
     <ClInclude Include="handle_table.h" />

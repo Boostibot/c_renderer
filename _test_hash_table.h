@@ -2,6 +2,7 @@
 
 #include "_test.h"
 #include "hash_table.h"
+#include "allocator_debug.h"
 
 #include <string.h>
 
@@ -18,12 +19,11 @@ isize u64_array_find(u64_Array array, u64 looking_for)
 
 void test_hash_table_stress(f64 max_seconds)
 {
-	max_seconds = 0;
+	//max_seconds = 0;
 	isize mem_before = allocator_get_stats(allocator_get_default()).bytes_allocated;
 
 	typedef enum {
 		INIT,
-		INIT_BACKED,
 		DEINIT,
 		CLEAR,
 		COPY,
@@ -38,7 +38,6 @@ void test_hash_table_stress(f64 max_seconds)
 
 	i32 probabilities[ACTION_ENUM_COUNT] = {0};
 	probabilities[INIT]			= 1;
-	probabilities[INIT_BACKED]  = 1;
 	probabilities[DEINIT]		= 1;
 	probabilities[CLEAR]		= 1;
 	probabilities[COPY]		    = 10;
@@ -49,7 +48,7 @@ void test_hash_table_stress(f64 max_seconds)
 
 	enum {
 		MAX_ITERS = 1000*1000*10,
-		MIN_ITERS = 100, //for debugging
+		MIN_ITERS = 45, //for debugging
 		BACKING = 1000,
 		MAX_CAPACITY = 1000*10,
 
@@ -70,10 +69,17 @@ void test_hash_table_stress(f64 max_seconds)
 	char* backing = backing1;
 	Hash_Table64 table = {0};
 	Hash_Table64 other_table = {0};
-	Malloc_Allocator* mallocer = (Malloc_Allocator*) (void*) allocator_get_default();
-
 	Discrete_Distribution dist = random_discrete_make(probabilities, ACTION_ENUM_COUNT);
 	*random_state() = random_state_from_seed(1);
+
+	Debug_Allocator debug_alloc = debug_allocator_make(allocator_get_default(), debug_allocator_panic_func, NULL, 1000);
+	Allocator_Swap swap = allocator_push_default(&debug_alloc.allocator);
+	
+	debug_allocator_print_dead_allocations(debug_alloc, 99);
+
+	DEFINE_ARRAY_TYPE(Action, History);
+
+	History history = {0};
 
 	i32 max_size = 0;
 	i32 max_capacity = 0;
@@ -81,10 +87,11 @@ void test_hash_table_stress(f64 max_seconds)
 	f64 start = clock_s();
 	for(isize i = 0; i < MAX_ITERS; i++)
 	{
-		Action action = (Action) random_discrete(dist);
-		
 		if(clock_s() - start >= max_seconds && i >= MIN_ITERS)
 			break;
+
+		Action action = (Action) random_discrete(dist);
+		array_push(&history, action);
 
 		switch(action)
 		{
@@ -94,15 +101,6 @@ void test_hash_table_stress(f64 max_seconds)
 				array_clear(&truth_val_array);
 
 				hash_table64_init(&table, allocator_get_default());
-				break;
-			}
-
-			case INIT_BACKED: {
-				hash_table64_deinit(&table);
-				array_clear(&truth_key_array);
-				array_clear(&truth_val_array);
-
-				hash_table64_init_backed(&table, allocator_get_default(), backing, sizeof(backing));
 				break;
 			}
 
@@ -125,6 +123,13 @@ void test_hash_table_stress(f64 max_seconds)
 					// at all)
 					if(u64_array_find(truth_key_array, key) != -1)
 						continue;
+						
+					if(i == 17)
+					{
+						int z = 5;
+						
+						debug_allocator_print_active_allocations(debug_alloc, 99);
+					}
 
 					array_push(&truth_key_array, key);
 					array_push(&truth_val_array, val);
@@ -210,6 +215,10 @@ void test_hash_table_stress(f64 max_seconds)
 			}
 		}
 	
+		if(i == 100)
+		{
+			debug_allocator_print_active_allocations(debug_alloc, 99);
+		}
 		
 		if(max_size < table.size)
 			max_size = table.size;
@@ -245,13 +254,21 @@ void test_hash_table_stress(f64 max_seconds)
 		}
 	}
 
-	random_discrete_deinit(&dist);
 	array_deinit(&truth_key_array);
 	array_deinit(&truth_val_array);
+	array_deinit(&other_truth_key_array);
+	array_deinit(&other_truth_val_array);
+	array_deinit(&history);
+	random_discrete_deinit(&dist);
 	hash_table64_deinit(&table);
+	hash_table64_deinit(&other_table);
+	
+	debug_allocator_print_dead_allocations(debug_alloc, 99);
 
 	isize mem_after = allocator_get_stats(allocator_get_default()).bytes_allocated;
 	TEST(mem_before == mem_after);
+	allocator_pop(swap);
+	debug_allocator_deinit(&debug_alloc);
 }
 
 void test_hash_table(f64 max_seconds)

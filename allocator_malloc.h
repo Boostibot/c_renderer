@@ -20,9 +20,12 @@ EXPORT Malloc_Allocator malloc_allocator_make();
 EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
 EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_);
 
+extern Malloc_Allocator global_malloc_allocator;
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_MALLOC_ALLOCATOR_IMPL)) && !defined(LIB_MALLOC_ALLOCATOR_HAS_IMPL)
 #define LIB_MALLOC_ALLOCATOR_HAS_IMPL
+Malloc_Allocator global_malloc_allocator = {_malloc_allocator_allocate, _malloc_allocator_get_stats, "global_malloc_allocator"};
+
 EXPORT Malloc_Allocator malloc_allocator_make()
 {
     Malloc_Allocator malloc = {0};

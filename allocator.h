@@ -215,7 +215,6 @@ static inline void* align_backward(void* ptr, isize align_to)
 
     //@TODO: make thread local
     THREAD_LOCAL Allocator_Out_Of_Memory_Func out_of_memory_func = default_out_of_memory_handler;
-    Malloc_Allocator global_malloc_allocator = {_malloc_allocator_allocate, _malloc_allocator_get_stats, "global_malloc_allocator"};
     THREAD_LOCAL Allocator* default_allocator = (Allocator*) (void*) &global_malloc_allocator;
     THREAD_LOCAL Allocator* scratch_allocator = (Allocator*) (void*) &global_malloc_allocator;
 

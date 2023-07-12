@@ -11,7 +11,7 @@
 
 int main()
 {
-    test_hash_table(10.0);
+    test_hash_table(2.0);
     printf("ALL TESTS PASSED");
     test_array(10.0);
     return 0;

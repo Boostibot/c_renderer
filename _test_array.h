@@ -61,8 +61,8 @@ static void test_array_stress(f64 max_seconds)
 	//*random_state() = random_state_from_seed(1);
 	
 
-	i32 max_size = 0;
-	i32 max_capacity = 0;
+	isize max_size = 0;
+	isize max_capacity = 0;
 	f64 start = clock_s();
 	for(isize i = 0; i < MAX_ITERS; i++)
 	{

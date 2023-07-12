@@ -74,5 +74,8 @@
     <ClInclude Include="_test_hash_table.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="allocator_debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
