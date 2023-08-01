@@ -1,8 +1,11 @@
 #include "platform.h"
 
-
 #include <assert.h>
 #include <windows.h>
+
+#include <gl\gl.h>          // Header File For The OpenGL32 Library
+#include <gl\glu.h>         // Header File For The GLu32 Library
+
 #include <memoryapi.h>
 #include <processthreadsapi.h>
 #include <winnt.h>
@@ -13,6 +16,7 @@
 #include <direct.h>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
+
 
 enum { WINDOWS_PLATFORM_FILE_TYPE_PIPE = PLATFORM_FILE_TYPE_PIPE };
 #undef PLATFORM_FILE_TYPE_PIPE
@@ -151,6 +155,150 @@ double platform_perf_counter_frequency_d()
     return freq;
 }
 
+
+//typedef struct Platform_Calendar_Time
+//{
+//    int8_t year;        // any
+//    int8_t month;       // [0, 12)
+//    int8_t day_of_week; // [0, 7)
+//    int8_t day;// [0, 31] !note the end bracket!
+//    
+//    int8_t hour;        // [0, 24)
+//    int8_t minute;      // [0, 60)
+//    int8_t second;      // [0, 60)
+//    
+//    int16_t millisecond; // [0, 1000)
+//    int16_t day_of_year; // [0, 356]
+//} Platform_Calendar_Time;
+
+//time -> filetime
+//(ts * 10000000LL) + 116444736000000000LL = t
+//(ts * 10LL) + 116444736000LL = tu = t/1 0000 000
+    
+//filetime -> time
+//ts = (t - 116444736000000000LL) / 10000000;
+//t / 10000000 - 11644473600LL = ts;
+//t / 10 - 11644473600 000 000LL = tu = ts*1 0000 000;
+static int64_t _filetime_to_epoch_time(FILETIME t)  
+{    
+    ULARGE_INTEGER ull;    
+    ull.LowPart = t.dwLowDateTime;    
+    ull.HighPart = t.dwHighDateTime;
+    int64_t tu = ull.QuadPart / 10 - 11644473600000000LL;
+    return tu;
+}
+
+static FILETIME _epoch_time_to_filetime(int64_t tu)  
+{    
+    ULARGE_INTEGER time_value;
+    FILETIME time;
+    time_value.QuadPart = (tu + 11644473600000000LL)*10;
+
+    time.dwLowDateTime = time_value.LowPart;
+    time.dwHighDateTime = time_value.HighPart;
+    return time;
+}
+static time_t _filetime_to_time_t(FILETIME ft)  
+{    
+    ULARGE_INTEGER ull;    
+    ull.LowPart = ft.dwLowDateTime;    
+    ull.HighPart = ft.dwHighDateTime;    
+    return (time_t) (ull.QuadPart / 10000000ULL - 11644473600ULL);  
+}
+
+int64_t platform_universal_epoch_time()
+{
+    FILETIME filetime;
+    GetSystemTimeAsFileTime(&filetime);
+    int64_t epoch_time = _filetime_to_epoch_time(filetime);
+    return epoch_time;
+}
+
+int64_t platform_local_epoch_time()
+{
+    FILETIME filetime;
+    GetSystemTimeAsFileTime(&filetime);
+    FILETIME local_filetime = {0};
+    bool okay = FileTimeToLocalFileTime(&filetime, &local_filetime);
+    assert(okay);
+    int64_t epoch_time = _filetime_to_epoch_time(local_filetime);
+    return epoch_time;
+}
+
+Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_usec)
+{
+    #define EPOCH_YEAR              (int64_t) 1970
+    #define MILLISECOND_MICROSECOND (int64_t) 1000
+    #define SECOND_MICROSECONDS     (int64_t) 1000000
+    #define DAY_SECONDS             (int64_t) 86400
+    #define YEAR_SECONDS            (int64_t) 31556952
+    #define DAY_MICROSECONDS        (DAY_SECONDS * SECOND_MICROSECONDS)
+    #define YEAR_MICROSECONDS       (YEAR_SECONDS * SECOND_MICROSECONDS)
+
+    SYSTEMTIME systime = {0};
+    FILETIME filetime = _epoch_time_to_filetime(epoch_time_usec);
+    bool okay = FileTimeToSystemTime(&filetime, &systime);
+    assert(okay);
+
+    Platform_Calendar_Time time = {0};
+    time.day = systime.wDay;
+    time.day_of_week = systime.wDayOfWeek - 1;
+    time.hour = systime.wHour;
+    time.millisecond = systime.wMilliseconds;
+    time.minute = systime.wMinute;
+    time.month = systime.wMonth;
+    time.second = systime.wSecond;
+    time.year = systime.wYear;
+
+    int64_t years_since_epoch = (int64_t) time.year - EPOCH_YEAR;
+    int64_t microsec_diff = epoch_time_usec - years_since_epoch*YEAR_MICROSECONDS;
+    int64_t microsec_remainder = microsec_diff % YEAR_MICROSECONDS;
+
+    int64_t day_of_year = (microsec_remainder / DAY_MICROSECONDS);
+    //int64_t microsecond = (microsec_remainder % MILLISECOND_MICROSECOND);
+    int64_t microsecond = (microsec_diff % MILLISECOND_MICROSECOND);
+
+    //time.day_of_year = (int16_t) day_of_year;
+    time.microsecond = (int16_t) microsecond;
+
+    //int64_t times = time.day_of_year;
+    assert(0 <= time.month && time.month < 12);
+    assert(0 <= time.day && time.day < 31);
+    assert(0 <= time.hour && time.hour < 24);
+    assert(0 <= time.minute && time.minute < 60);
+    assert(0 <= time.second && time.second < 60);
+    assert(0 <= time.millisecond && time.millisecond < 999);
+    assert(0 <= time.day_of_week && time.day_of_week < 7);
+    //assert(0 <= time.day_of_year && time.day_of_year <= 365);
+    return time;
+}
+
+int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_time)
+{
+    SYSTEMTIME systime = {0};
+    systime.wDay = calendar_time.day;
+    systime.wDayOfWeek = calendar_time.day_of_week + 1;
+    systime.wHour = calendar_time.hour;
+    systime.wMilliseconds = calendar_time.millisecond;
+    systime.wMinute = calendar_time.minute;
+    systime.wMonth = calendar_time.month;
+    systime.wSecond = calendar_time.second;
+    systime.wYear = calendar_time.year;
+
+    FILETIME filetime;
+    bool okay = SystemTimeToFileTime(&systime, &filetime);
+    assert(okay);
+
+    int64_t epoch_time = _filetime_to_epoch_time(filetime);
+    epoch_time += calendar_time.microsecond;
+
+    #ifndef NDEBUG
+    Platform_Calendar_Time roundtrip = platform_epoch_time_to_calendar_time(epoch_time);
+    assert(memcmp(&roundtrip, &calendar_time, sizeof calendar_time) == 0 && "roundtrip must be correct");
+    #endif // !NDEBUG
+
+    return epoch_time;
+}
 
 //=========================================
 // Filesystem
@@ -362,13 +510,6 @@ bool platform_file_copy(const char* copy_to_path, const char* copy_from_path)
     return state;
 }
 
-static time_t _filetime_to_time_t(FILETIME ft)  
-{    
-    ULARGE_INTEGER ull;    
-    ull.LowPart = ft.dwLowDateTime;    
-    ull.HighPart = ft.dwHighDateTime;    
-    return (time_t) (ull.QuadPart / 10000000ULL - 11644473600ULL);  
-}
 
 static bool _is_file_link(const wchar_t* directory_path)
 {
@@ -416,6 +557,12 @@ bool platform_file_info(const char* file_path, Platform_File_Info* info)
     return state;
 }
     
+//@TODO: create a cyclically overriden buffers that will get used for utf8 conversions
+// this ensures that they will not ever have to get freed while periodally freeing them
+//We have lets say 4 allocations slots. We allocate into the first then the second then the third and so on.
+// once we run out of slots we allocate only if we need to grow. If we use a slot some number of times (2x lets say)
+// we reallocate it to ensure that the space shrinks once not needed.
+
 bool platform_directory_create(const char* dir_path)
 {
     int64_t path_size = _strlen(dir_path);
@@ -649,6 +796,8 @@ char* platform_directory_get_current_working_malloc()
 // Window managmenet
 //=========================================
 typedef struct Window {
+    
+    //Window stuff
     HWND handle;
     WNDCLASSEX class_;
     RECT window_rect;  
@@ -657,15 +806,32 @@ typedef struct Window {
     Platform_Window_Visibility visibility;
     RECT prev_window_rect;
     bool was_shown;
+    const char* last_errors;
 
+    //Opengl stuff
+    HDC device_context;
+    int pixel_format;
+    HGLRC rendering_context;
+
+    //input
     Platform_Input input;
 } Window;
 
 LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+typedef struct Platform_Error_Msg
+{
+    bool ok;
+    const char* msg;
+} Platform_Error_Msg;
+
+Platform_Error_Msg _platform_window_opengl_init(Window* window);
+void _platform_window_opengl_deinit(Window* window);
+
+
 Window* platform_window_init(const char* window_title)
 {
-    HINSTANCE hInstance = 0;
+    HINSTANCE hInstance = GetModuleHandleW(NULL);
     const wchar_t WINDOW_CLASS_NAME[] = L"jot_window_class";
     static bool        global_window_class_registered = false;
     static WNDCLASSEX  global_window_class = {0};
@@ -673,14 +839,14 @@ Window* platform_window_init(const char* window_title)
     if(!global_window_class_registered)
     {
         global_window_class.cbSize        = sizeof(WNDCLASSEX);
-        global_window_class.style         = 0;
+        global_window_class.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC; // Redraw On Size, And Own DC For Window.
         global_window_class.lpfnWndProc   = window_proc;
         global_window_class.cbClsExtra    = 0;
         global_window_class.cbWndExtra    = 0;
         global_window_class.hInstance     = hInstance;
         global_window_class.hIcon         = LoadIconW(NULL, IDI_APPLICATION);
         global_window_class.hCursor       = LoadCursorW(NULL, IDC_ARROW);
-        global_window_class.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+        global_window_class.hbrBackground = (HBRUSH)(COLOR_WINDOW+1); //???
         global_window_class.lpszMenuName  = NULL;
         global_window_class.lpszClassName = WINDOW_CLASS_NAME;
         global_window_class.hIconSm       = LoadIconW(NULL, IDI_APPLICATION);
@@ -694,22 +860,24 @@ Window* platform_window_init(const char* window_title)
     if(window == NULL)
         return NULL;
 
-
     char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
     _Buffer wide_title = _buffer_init_backed(window_title_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
     _utf8_to_utf16(window_title, _strlen(window_title), &wide_title);
         
     //wprintf(_wstring(wide_title));
     window->handle = CreateWindowExW(
-        WS_EX_CLIENTEDGE,
-        WINDOW_CLASS_NAME,
-        _wstring(wide_title),
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-        NULL, NULL, hInstance, window);
+        WS_EX_CLIENTEDGE,                                           // style. Should we use: WS_EX_APPWINDOW | WS_EX_WINDOWEDGE???
+        WINDOW_CLASS_NAME,                                          // class
+        _wstring(wide_title),                                       // title
+        WS_OVERLAPPEDWINDOW,                                        // style. Should we use: WS_POPUP???
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, // default rect
+        NULL,                                                       // no parent window
+        NULL,                                                       // no menu
+        hInstance,                                                  // instance
+        window);                                                    // save poinnter to our window structure so we can query it from within the winproc
 
     _buffer_deinit(&wide_title);
-    
+
     RAWINPUTDEVICE raw_input_device = {0};
     raw_input_device.usUsagePage = HID_USAGE_PAGE_GENERIC; 
     raw_input_device.usUsage = HID_USAGE_GENERIC_MOUSE; 
@@ -718,6 +886,15 @@ Window* platform_window_init(const char* window_title)
     RegisterRawInputDevices(&raw_input_device, 1, sizeof(raw_input_device));
 
     window->class_ = global_window_class;
+
+    //====================== Opengl stuff ========================
+    Platform_Error_Msg msg = _platform_window_opengl_init(window);
+    if(msg.ok == false)
+    {
+        platform_window_deinit(window);
+        return NULL;
+    }
+
     return window;
 }
 
@@ -725,6 +902,8 @@ void platform_window_deinit(Window* window)
 {
     if(window->handle != NULL);
         DestroyWindow(window->handle);
+
+    _platform_window_opengl_deinit(window);
     free(window);
 }
 
@@ -1205,7 +1384,7 @@ Platform_Window_Options platform_window_get_options(Window* window)
     char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
     _Buffer wide_title = _buffer_init_backed(window_title_buffer, sizeof(window_title_buffer), sizeof(wchar_t));
     _buffer_resize(&wide_title, wide_title.capacity-1);
-    int needed = GetWindowTextW(window->handle, _wstring(wide_title), wide_title.size);
+    int needed = GetWindowTextW(window->handle, _wstring(wide_title), (int) wide_title.size);
 
     _Buffer title = _buffer_init(sizeof(char));
     _utf16_to_utf8(_wstring(wide_title), wide_title.size, &title);
@@ -1261,4 +1440,262 @@ Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_
         case IDTRYAGAIN: return PLATFORM_POPUP_CONTROL_RETRY;
         default: return PLATFORM_POPUP_CONTROL_OK;
     }
+}
+
+bool _platform_window_error(Window* window, const char* msg)
+{
+    window->last_errors = msg;
+    return false;
+}
+
+
+void            platform_window_activate_opengl(Window* window)
+{
+    bool okay = wglMakeCurrent(window->device_context, window->rendering_context);
+    //assert(okay);
+    //_platform_window_opengl_init(window);
+}
+void            platform_window_swap_buffers(Window* window)
+{
+    SwapBuffers(window->device_context);
+}
+
+//================================ OPENGL ===========================================================
+typedef HGLRC WINAPI wglCreateContextAttribsARB_type(HDC hdc, HGLRC hShareContext, const int *attribList);
+wglCreateContextAttribsARB_type *wglCreateContextAttribsARB = NULL;
+
+typedef BOOL WINAPI wglChoosePixelFormatARB_type(HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats);
+wglChoosePixelFormatARB_type *wglChoosePixelFormatARB = NULL;
+
+bool wglExtensionsInit = false;
+
+// See https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_create_context.txt for all values
+#define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
+#define WGL_CONTEXT_PROFILE_MASK_ARB              0x9126
+
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
+
+
+// See https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_pixel_format.txt for all values
+#define WGL_DRAW_TO_WINDOW_ARB                    0x2001
+#define WGL_ACCELERATION_ARB                      0x2003
+#define WGL_SUPPORT_OPENGL_ARB                    0x2010
+#define WGL_DOUBLE_BUFFER_ARB                     0x2011
+#define WGL_PIXEL_TYPE_ARB                        0x2013
+#define WGL_COLOR_BITS_ARB                        0x2014
+#define WGL_DEPTH_BITS_ARB                        0x2022
+#define WGL_STENCIL_BITS_ARB                      0x2023
+
+#define WGL_FULL_ACCELERATION_ARB                 0x2027
+#define WGL_TYPE_RGBA_ARB                         0x202B
+
+static Platform_Error_Msg _error_msg(char *msg)
+{
+    Platform_Error_Msg error_msg = {false, msg};
+    return error_msg;
+}
+
+static Platform_Error_Msg _error_msg_ok(char *msg)
+{
+    Platform_Error_Msg error_msg = {true, msg};
+    return error_msg;
+}
+
+static Platform_Error_Msg _platform_window_init_opengl_extensions(void)
+{
+    // Before we can load extensions, we need a dummy OpenGL context, created using a dummy window.
+    // We use a dummy window because you can only set the pixel format for a window once. For the
+    // real window, we want to use wglChoosePixelFormatARB (so we can potentially specify options
+    // that aren't available in PIXELFORMATDESCRIPTOR), but we can't load and use that before we
+    // have a context.
+    WNDCLASSA window_class = {0};
+    window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    window_class.lpfnWndProc = DefWindowProcA;
+    window_class.hInstance = GetModuleHandle(0);
+    window_class.lpszClassName = "Dummy_WGL_class";
+
+    if (!RegisterClassA(&window_class)) 
+        return _error_msg("Failed to register dummy OpenGL window.");
+
+    HWND dummy_window = CreateWindowExA(
+        0,
+        window_class.lpszClassName,
+        "Dummy OpenGL Window",
+        0,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        0,
+        0,
+        window_class.hInstance,
+        0);
+
+    if (!dummy_window) {
+        return _error_msg("Failed to create dummy OpenGL window.");
+    }
+
+    HDC dummy_dc = GetDC(dummy_window);
+
+    PIXELFORMATDESCRIPTOR pfd = {0};
+    pfd.nSize = sizeof(pfd);
+    pfd.nVersion = 1;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+    pfd.cColorBits = 32;
+    pfd.cAlphaBits = 8;
+    pfd.iLayerType = PFD_MAIN_PLANE;
+    pfd.cDepthBits = 24;
+    pfd.cStencilBits = 8;
+
+    int pixel_format = ChoosePixelFormat(dummy_dc, &pfd);
+    if (!pixel_format) {
+        return _error_msg("Failed to find a suitable pixel format.");
+    }
+    if (!SetPixelFormat(dummy_dc, pixel_format, &pfd)) {
+        return _error_msg("Failed to set the pixel format.");
+    }
+
+    HGLRC dummy_context = wglCreateContext(dummy_dc);
+    if (!dummy_context) {
+        return _error_msg("Failed to create a dummy OpenGL rendering context.");
+    }
+
+    if (!wglMakeCurrent(dummy_dc, dummy_context)) {
+        return _error_msg("Failed to activate dummy OpenGL rendering context.");
+    }
+
+    //assert(!wglMakeCurrent(dummy_dc, dummy_context) && "should fail the other time!");
+
+    wglCreateContextAttribsARB = (wglCreateContextAttribsARB_type*)wglGetProcAddress(
+        "wglCreateContextAttribsARB");
+    wglChoosePixelFormatARB = (wglChoosePixelFormatARB_type*)wglGetProcAddress(
+        "wglChoosePixelFormatARB");
+
+    wglExtensionsInit = true;
+    wglMakeCurrent(dummy_dc, 0);
+    wglDeleteContext(dummy_context);
+    ReleaseDC(dummy_window, dummy_dc);
+    if(dummy_window != 0);
+        DestroyWindow(dummy_window);
+
+    return _error_msg_ok("OK");
+}
+
+#include <strsafe.h>
+void ErrorExit(LPTSTR lpszFunction) 
+{ 
+    // Retrieve the system error message for the last-error code
+
+    LPVOID lpMsgBuf;
+    LPVOID lpDisplayBuf;
+    DWORD dw = GetLastError(); 
+
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        dw,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPTSTR) &lpMsgBuf,
+        0, NULL );
+
+    // Display the error message and exit the process
+
+    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, 
+        (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR)); 
+    StringCchPrintf((LPTSTR)lpDisplayBuf, 
+        LocalSize(lpDisplayBuf) / sizeof(TCHAR),
+        TEXT("%s failed with error %d: %s"), 
+        lpszFunction, dw, lpMsgBuf); 
+    MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK); 
+
+    LocalFree(lpMsgBuf);
+    LocalFree(lpDisplayBuf);
+    ExitProcess(dw); 
+}
+
+
+static Platform_Error_Msg _platform_window_opengl_init(Window* window)
+{
+    return _error_msg_ok("OK");
+
+    window->device_context = GetDC(window->handle);
+    if(!window->device_context)
+        return _error_msg("Failed GetDC");
+
+    if(wglExtensionsInit == false)
+    {
+        Platform_Error_Msg msg = _platform_window_init_opengl_extensions();
+        if(msg.ok == false)
+            return msg;
+    }
+
+    // Now we can choose a pixel format the modern way, using wglChoosePixelFormatARB.
+    int pixel_format_attribs[] = {
+        WGL_DRAW_TO_WINDOW_ARB,     GL_TRUE,
+        WGL_SUPPORT_OPENGL_ARB,     GL_TRUE,
+        WGL_DOUBLE_BUFFER_ARB,      GL_TRUE,
+        WGL_ACCELERATION_ARB,       WGL_FULL_ACCELERATION_ARB,
+        WGL_PIXEL_TYPE_ARB,         WGL_TYPE_RGBA_ARB,
+        WGL_COLOR_BITS_ARB,         32,
+        WGL_DEPTH_BITS_ARB,         24,
+        WGL_STENCIL_BITS_ARB,       8,
+        0
+    };
+
+    int pixel_format = 0;
+    UINT num_formats = 0;
+    wglChoosePixelFormatARB(window->device_context, pixel_format_attribs, 0, 1, &pixel_format, &num_formats);
+    if (!num_formats) {
+        return _error_msg("Failed to set the OpenGL 3.3 pixel format.");
+    }
+
+    PIXELFORMATDESCRIPTOR pfd = {0};
+    DescribePixelFormat(window->device_context, pixel_format, sizeof(pfd), &pfd);
+    if (!SetPixelFormat(window->device_context, pixel_format, &pfd)) {
+        return _error_msg("Failed to set the OpenGL 3.3 pixel format.");
+    }
+
+    // Specify that we want to create an OpenGL 3.3 core profile context
+    int gl33_attribs[] = {
+        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+        WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+        0,
+    };
+
+    HGLRC gl33_context = wglCreateContextAttribsARB(window->device_context, 0, gl33_attribs);
+    if (!gl33_context) {
+        return _error_msg("Failed to create OpenGL 3.3 context.");
+    }
+    
+    //Platform_Window_Options show = {0};
+    //show.visibility = WINDOW_VISIBILITY_WINDOWED;
+    //platform_window_set_options(window, show);
+    
+
+    window->rendering_context = gl33_context;
+    if (!wglMakeCurrent(window->device_context, gl33_context)) {
+        //ErrorExit(L"wglMakeCurrent");
+        //return _error_msg("Failed to activate OpenGL 3.3 rendering context.");
+    }
+    
+    //defaults
+    glShadeModel(GL_SMOOTH);                            // Enable Smooth Shading
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);               // Black Background
+    glClearDepth(1.0f);                                 // Depth Buffer Setup
+    glEnable(GL_DEPTH_TEST);                            // Enables Depth Testing
+    glDepthFunc(GL_LEQUAL);                             // The Type Of Depth Testing To Do
+    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);  // Really Nice Perspective Calculations
+
+    return _error_msg_ok("OK");
+}
+
+void _platform_window_opengl_deinit(Window* window)
+{
+
+
 }

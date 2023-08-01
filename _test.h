@@ -32,7 +32,7 @@ typedef struct Discrete_Distribution
 	i32 prob_sum;
 } Discrete_Distribution;
 
-Discrete_Distribution random_discrete_make(const i32 probabilities[], isize probabilities_size)
+static Discrete_Distribution random_discrete_make(const i32 probabilities[], isize probabilities_size)
 {
 	i32 prob_sum = 0;
 	for(isize i = 0; i < probabilities_size; i++)
@@ -56,7 +56,7 @@ Discrete_Distribution random_discrete_make(const i32 probabilities[], isize prob
 	return out;
 }
 
-i32 random_discrete(Discrete_Distribution distribution)
+static i32 random_discrete(Discrete_Distribution distribution)
 {
 	i64 random = random_range(0, distribution.prob_sum);
 	CHECK_BOUNDS(random, distribution.prob_table.size);
@@ -64,7 +64,7 @@ i32 random_discrete(Discrete_Distribution distribution)
 	return index;
 }
 
-void random_discrete_deinit(Discrete_Distribution* dist)
+static void random_discrete_deinit(Discrete_Distribution* dist)
 {
 	array_deinit(&dist->prob_table);
 	dist->prob_sum = 0;

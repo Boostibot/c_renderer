@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIB_DEFINES
+#define LIB_DEFINES
+
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
@@ -94,4 +96,6 @@ typedef double      f64;
 
 #ifndef _MSC_VER
     #define __FUNCTION__ __func__
+#endif
+
 #endif

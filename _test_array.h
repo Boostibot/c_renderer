@@ -83,7 +83,7 @@ static void test_array_stress(f64 max_seconds)
 			
 			case INIT_BACKED: {
 				array_deinit(arr);
-				array_init_backed(arr, allocator_get_default(), buffer, BACKING);
+				array_init_backed_custom(arr, allocator_get_default(), buffer, BACKING);
 				break;
 			}
 			
@@ -109,8 +109,8 @@ static void test_array_stress(f64 max_seconds)
 
 				i64 value = (i64) 1 << offset;
 				TEST(value);
-				array_push(arr, value);
 				ASSERT(arr != NULL && arr->data != NULL);
+				array_push(arr, value);
 				break;
 			}
 			

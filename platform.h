@@ -68,6 +68,31 @@ inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64
 // Timings
 //=========================================
 
+typedef struct Platform_Calendar_Time
+{
+    int32_t year;        // any
+    int8_t month;       // [0, 12)
+    int8_t day_of_week; // [0, 7)
+    int8_t day;// [0, 31] !note the end bracket!
+    
+    int8_t hour;        // [0, 24)
+    int8_t minute;      // [0, 60)
+    int8_t second;      // [0, 60)
+    
+    int16_t millisecond; // [0, 1000)
+    int16_t microsecond; // [0, 1000)
+    //int16_t day_of_year; // [0, 365]
+} Platform_Calendar_Time;
+
+//returns the number of micro-seconds since the start of the epoch
+int64_t platform_universal_epoch_time(); 
+//returns the number of micro-seconds since the start of the epoch
+// with respect to local timezones/daylight saving times and other
+int64_t platform_local_epoch_time();     
+
+Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_usec);
+int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_time);
+
 int64_t platform_perf_counter();            //returns the current value of performance counter
 int64_t platform_perf_counter_base();       //returns the value of performence conuter at the first time this function was called which is taken as the startup time
 int64_t platform_perf_counter_frequency();  //returns the frequency of the performance counter
@@ -374,12 +399,16 @@ typedef struct Platform_Window_Options
     const char* title;                      //a new title for the window. If null does nothing. When returned from platform_window_get_options() needs to be freed using platform_heap_reallocate()!
 } Platform_Window_Options;
 
-Window*         platform_window_init(const char* window_title);
-void            platform_window_deinit(Window* window);
-Platform_Input  platform_window_process_messages(Window* window);
+//@NOTE will be removed or not depending on if i ever implement vulkan
+Window*                         platform_window_init(const char* window_title);
+void                            platform_window_deinit(Window* window);
+Platform_Input                  platform_window_process_messages(Window* window);
+void                            platform_window_activate_opengl(Window* window);
+void                            platform_window_swap_buffers(Window* window);
 
 bool                            platform_window_set_options(Window* window, Platform_Window_Options options);
 Platform_Window_Options         platform_window_get_options(Window* window);
+
 Platform_Window_Popup_Controls  platform_window_make_popup(Platform_Window_Popup_Style desired_style, const char* message, const char* title);
 
 // =================== INLINE IMPLEMENTATION ============================

@@ -1,4 +1,8 @@
+#define PROGRAM 2
+#define _CRT_SECURE_NO_WARNINGS
 #define LIB_ALL_IMPL
+#define LIB_MEM_DEBUG
+
 #include "platform.h"
 #include "string.h"
 #include "hash_table.h"
@@ -6,16 +10,10 @@
 #include "_test_array.h"
 #include "_test_hash_table.h"
 
-//@TODO: opengl drawing
-//For now just use ptr_Array with separately allocated structs.
-
+#include "_test_log.h"
 int main()
 {
-    test_hash_table(2.0);
-    printf("ALL TESTS PASSED");
-    test_array(10.0);
-    return 0;
-    test_random();
+    test_log();
 
     Window* window = platform_window_init("My window");
     assert(window != NULL);
@@ -24,6 +22,7 @@ int main()
     //show.no_border = true;
     //show.no_border_allow_move = true;
     platform_window_set_options(window, show);
+    platform_window_activate_opengl(window);
 
     int i = 0;
     Platform_Input input = {0};
@@ -31,7 +30,7 @@ int main()
     {
         Platform_Input new_input = platform_window_process_messages(window);
         
-        //if(new_input.mouse_native_delta_x != 0 || new_input.mouse_native_delta_y != 0)
+        //if(new_input.mouse_native_delta_x != 0 || new_input.mouse_`native_delta_y != 0)
             //printf("REL mouse pos %d %d\n", (int) new_input.mouse_native_delta_x, (int) new_input.mouse_native_delta_y);
             
         //if(new_input.mouse_screen_x != input.mouse_screen_x 
@@ -90,54 +89,11 @@ int main()
             printf("BT4 %s %d\n", down, key & ~PLATFORM_KEY_PRESSED_BIT);
         }
 
+        platform_window_swap_buffers(window);
+        //SwapBuffers(hDC);               // Swap Buffers (Double Buffering)
         input = new_input;
     }
 
     platform_window_deinit(window);
     return 0;    
-}
-
-#include "array.h"
-#include "time.h"
-#include "string.h"
-#include "format.h"
-
-int _main()
-{
-    double start = clock_s();
-
-    String_Builder builder = {0};
-    String str = string_make("Hello.world.here.and.there.and.back");
-
-    builder_append(&builder, str);
-
-    println("string: \"%s\"", builder_cstring(builder));
-
-    String_Array parts = string_split(str, string_make("."));
-    String_Builder formatted = {0};
-    for(isize i = 0; i < parts.size; i++)
-    {
-        String part = parts.data[i];
-        formatln_into(&formatted, "%.*s", part.size, part.data);
-    }
-
-    String_Builder composite = string_join_any(parts.data, parts.size, string_make("//"));
-    print_builder(formatted);
-    println("formatted: \"%s\"", builder_cstring(formatted));
-    println("composite: \"%s\"", builder_cstring(composite));
-    //_array_deinit(&builder, sizeof(char), SOURCE_INFO());
-    array_deinit(&builder);
-    array_deinit(&parts);
-    array_deinit(&composite);
-    array_deinit(&formatted);
-
-    Allocator* alloc = allocator_get_default();
-    Allocator_Stats stats = allocator_get_stats(allocator_get_default());
-
-    double end = clock_s();
-
-    println("diff: %lf", end - start);
-
-    allocator_reallocate(allocator_get_default(), 1000000000000, NULL, 0, 8, SOURCE_INFO());
-    return 0;
 }

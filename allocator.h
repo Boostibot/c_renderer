@@ -1,18 +1,35 @@
-#pragma once
+#ifndef LIB_ALLOCATOR
+#define LIB_ALLOCATOR
+
 #include "defines.h"
 
-//Since memory allocation is such a prevelent problem we try to maximize profiling. 
+// This module introduces a framework for dealing with memory and allocation used by every other system.
+// It makes very little assumptions about the use case making it very portable to other projects.
+//
+// Since memory allocation is such a prevelent problem we try to maximize profiling and locality. 
 // 
 // We do this firstly by introducing a concept of Allocator. Allocators are structs that know how to allocate with the 
 // advantage over malloc that they can be local and distinct for distinct tasks. This makes them faster and safer then malloc
 // because we can localy see when something goes wrong. They can also be composed where allocators get their 
-// memory from allocators above them (their 'parents') this is especially useful for hierarchical resource management. 
+// memory from allocators above them (their 'parents'). This is especially useful for hierarchical resource management. 
+// 
 // By using a hierarchies we can guarantee that all memory will get freed by simply freeing the highest allocator. 
-// This will work even if the lower allocators/systems leak unlike malloc or other global alloctator systems where every 
+// This will work even if the lower allocators/systems leak, unlike malloc or other global alloctator systems where every 
 // level has to be perfect.
 // 
 // Secondly we pass Source_Info to every allocation procedure. This means we on-the-fly swap our current allocator with debug allocator
 // that for example logs all allocations and checks their correctness.
+//
+// We also keep two global allocator pointers. These are called 'default' and 'scratch' allocators. Each system requiring memory
+// should use one of these two allocators for initialization (and then continue using that saved off pointer). 
+// By convention scratch allocator is used for "internal" allocation and default allocator is used for comunicating with the outside world.
+// Given a function that does some useful compuatation and returns an allocated reuslt it typically uses a fast scratch allocator internally
+// and only allocates using the default allocator the returned result.
+//
+// This convention ensures that all allocation is predictable and fast (scratch allocators are most often stack allocators that 
+// are perfectly suited for fast allocation - deallocation pairs). This approach also stacks. In each function we can simply upon entry
+// instal the scratch allocator as the default allocator so that all internal functions will also comunicate to us using the fast scratch 
+// allocator.
 
 struct Allocator;
 struct Allocator_Stats;
@@ -65,9 +82,8 @@ typedef struct Source_Info
 
 typedef struct Allocator_Swap
 {
-    Allocator* previous;
-    Allocator* current;
-    bool is_default;
+    Allocator* previous_default;
+    Allocator* previous_scratch;
 } Allocator_Swap;
 
 #define DEF_ALIGN 8
@@ -91,7 +107,8 @@ EXPORT Allocator* allocator_get_default();
 EXPORT Allocator* allocator_get_scratch();
 
 EXPORT Allocator_Swap allocator_push_default(Allocator* new_default);
-EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_default);
+EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_scratch);
+EXPORT Allocator_Swap allocator_push_both(Allocator* new_allocator);
 EXPORT void allocator_pop(Allocator_Swap popped); 
 
 static inline bool  is_power_of_two(isize num);
@@ -151,9 +168,7 @@ static inline void* align_backward(void* ptr, isize align_to)
         __builtin_alloca_with_align((size_t) size, (size_t) align)
 #endif
 
-
-
-
+#endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ALLOCATOR_IMPL)) && !defined(LIB_ALLOCATOR_HAS_IMPL)
 #define LIB_ALLOCATOR_HAS_IMPL
@@ -230,37 +245,34 @@ static inline void* align_backward(void* ptr, isize align_to)
     EXPORT Allocator_Swap allocator_push_default(Allocator* new_default)
     {
         Allocator_Swap out = {0};
-        out.current = new_default;
-        out.previous = default_allocator;
-        out.is_default = true;
-
+        out.previous_default = default_allocator;
         default_allocator = new_default;
-
         return out;
     }
-    EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_default)
+    EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_scratch)
     {
         Allocator_Swap out = {0};
-        out.current = new_default;
-        out.previous = default_allocator;
-        out.is_default = false;
-
-        scratch_allocator = new_default;
-
+        out.previous_scratch = scratch_allocator;
+        scratch_allocator = new_scratch;
         return out;
     }
+    EXPORT Allocator_Swap allocator_push_both(Allocator* new_allocator)
+    {
+        Allocator_Swap out = {0};
+        out.previous_default = default_allocator;
+        out.previous_scratch = scratch_allocator;
+        default_allocator = new_allocator;
+        scratch_allocator = new_allocator;
+        return out;
+    }
+
     EXPORT void allocator_pop(Allocator_Swap popped)
     {
-        if(popped.is_default)
-        {
-            assert(default_allocator == popped.current);
-            allocator_push_default(popped.previous);
-        }
-        else
-        {
-            assert(scratch_allocator == popped.current);
-            allocator_push_scratch(popped.previous);
-        }
+        if(popped.previous_default != NULL)
+            default_allocator = popped.previous_default;
+
+        if(popped.previous_scratch != NULL)
+            scratch_allocator = popped.previous_scratch;
     }
 
     static void default_out_of_memory_handler(struct Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, struct Source_Info called_from, 

@@ -12,6 +12,9 @@ typedef struct String
 
 DEFINE_ARRAY_TYPE(char, String_Builder);
 DEFINE_ARRAY_TYPE(String, String_Array);
+DEFINE_ARRAY_TYPE(String_Builder, String_Builder_Array);
+
+#define STRING_LIT(cstring) BRACE_INIT(String){cstring, sizeof cstring - 1}
 
 String string_make(const char* cstring); //converts a null terminated cstring into a String
 String string_head(String string, isize to); //keeps only charcters to to ( [0, to) interval )
@@ -22,10 +25,17 @@ String string_portion(String string, isize from, isize size); //returns a string
 bool   string_is_prefixed_with(String string, String prefix); 
 bool   string_is_postfixed_with(String string, String postfix);
 bool   string_is_equal(String a, String b); //Returns true if the contents and sizes of the strings match
+bool   string_is_equal_at(String larger_string, isize from_index, String smaller_string);
 int    string_compare(String a, String b); //Compares sizes and then lexographically the contents. Shorter strings are placed before longer ones.
-isize  string_find_first(String string, String looking_for, isize from); 
+int    string_compare_at(String larger_string, isize from_index, String smaller_string);
+isize  string_find_first(String string, String search_for, isize from); 
 isize  string_find_last_from(String in_str, String search_for, isize from);
-isize  string_find_last(String string, String looking_for); 
+isize  string_find_last(String string, String search_for); 
+
+isize  string_find_first_char(String string, char search_for, isize from); 
+isize  string_find_last_from_char(String in_str, char search_for, isize from);
+isize  string_find_last_char(String string, char search_for); 
+
 
 //Returns a null terminated string contained in a string builder. The string is always null terminate even when the String_Builder is not yet initialized
 const char*     builder_cstring(String_Builder builder); 
@@ -35,6 +45,7 @@ void            builder_append(String_Builder* builder, String string); //Append
 String_Builder  builder_from_string(String string); //Allocates a String_Builder from String. The String_Builder needs to be deinit just line any other ???_Array type!
 String_Builder  builder_from_cstring(const char* cstring); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
 String_Builder  builder_from_string_alloc(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
+
 
 void string_join_into(String_Builder* append_to, const String* strings, isize strings_count, String separator); //Appends all strings in the strings array to append_to
 void string_split_into(String_Array* append_to, String to_split, String split_by); //Splits the to_split string using split_by as a separator and appends the individual split parts into append_to
@@ -155,6 +166,16 @@ String_Array string_split(String to_split, String split_by);
         return string_find_last_from(in_str, search_for, from);
     }
     
+    isize string_find_first_char(String string, char search_for, isize from)
+    {
+        ASSERT(from >= 0);
+        for(isize i = from; i < string.size; i++)
+            if(string.data[i] == search_for)
+                return i;
+
+        return -1;
+    }
+
     bool string_is_prefixed_with(String string, String prefix)
     {
         if(string.size < prefix.size)
@@ -172,15 +193,29 @@ String_Array string_split(String to_split, String split_by);
         String trimmed = string_tail(string, postfix.size);
         return string_is_equal(trimmed, postfix);
     }
-
-    int string_compare(String a, String b)
+    
+    int string_compare_at(String larger_string, isize from_index, String smaller_string)
     {
-        isize diff = a.size - b.size;
+        ASSERT(from_index >= 0);
+        isize rem_size = larger_string.size - from_index;
+        isize diff = rem_size - smaller_string.size;
         if(diff != 0)
             return (int) diff;
 
-        int res = memcmp(a.data, b.data, a.size);
+        int res = memcmp(larger_string.data + from_index, smaller_string.data, rem_size);
         return res;
+    }
+
+    int string_compare(String a, String b)
+    {
+        int res = string_compare_at(a, 0, b);
+        return res;
+    }
+    
+    bool string_is_equal_at(String larger_string, isize from_index, String smaller_string)
+    {
+        bool eq = string_compare_at(larger_string, from_index, smaller_string) == 0;
+        return eq;
     }
 
     bool string_is_equal(String a, String b)

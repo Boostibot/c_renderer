@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIB_MALLOC_ALLOCATOR
+#define LIB_MALLOC_ALLOCATOR
+
 #include "allocator.h"
 #include "platform.h"
 
@@ -21,6 +23,7 @@ EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* 
 EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_);
 
 extern Malloc_Allocator global_malloc_allocator;
+#endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_MALLOC_ALLOCATOR_IMPL)) && !defined(LIB_MALLOC_ALLOCATOR_HAS_IMPL)
 #define LIB_MALLOC_ALLOCATOR_HAS_IMPL
@@ -38,13 +41,7 @@ EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* 
 {
     Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
     isize size_delta = new_size - old_size;
-    if(new_size == 0)
-    {
-        self->deallocation_count += 1;
-        platform_heap_reallocate(0, old_ptr, old_size, align);
-        self->bytes_allocated += size_delta;
-        return NULL;                
-    }
+    self->bytes_allocated += size_delta;
 
     void* out_ptr = NULL;
     if(old_ptr == NULL)
@@ -52,18 +49,23 @@ EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* 
         self->allocation_count += 1;
         out_ptr = platform_heap_reallocate(new_size, NULL, 0, align);
     }
+    else if(new_size == 0)
+    {
+        self->deallocation_count += 1;
+        platform_heap_reallocate(0, old_ptr, old_size, align);
+        return NULL;                
+    }
     else
     {
         self->reallocation_count += 1;
         out_ptr = platform_heap_reallocate(new_size, old_ptr, old_size, align);
     }
-
-    if(out_ptr != NULL)
-    {
-        self->bytes_allocated += size_delta;
-        if(self->max_bytes_allocated < self->bytes_allocated)
-            self->max_bytes_allocated = self->bytes_allocated;
-    }
+    
+    if(out_ptr == NULL)
+        self->bytes_allocated -= size_delta;
+    
+    if(self->max_bytes_allocated < self->bytes_allocated)
+        self->max_bytes_allocated = self->bytes_allocated;
 
     return out_ptr;
 }

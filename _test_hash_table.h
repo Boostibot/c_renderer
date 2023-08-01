@@ -2,11 +2,10 @@
 
 #include "_test.h"
 #include "hash_table.h"
-#include "allocator_debug.h"
 
 #include <string.h>
 
-isize u64_array_find(u64_Array array, u64 looking_for)
+static isize u64_array_find(u64_Array array, u64 looking_for)
 {
 	for(isize i = 0; i < array.size; i++)
 	{
@@ -17,7 +16,7 @@ isize u64_array_find(u64_Array array, u64 looking_for)
 	return -1;
 }
 
-void test_hash_table_stress(f64 max_seconds)
+static void test_hash_table_stress(f64 max_seconds)
 {
 	//max_seconds = 0;
 	isize mem_before = allocator_get_stats(allocator_get_default()).bytes_allocated;
@@ -72,11 +71,6 @@ void test_hash_table_stress(f64 max_seconds)
 	Discrete_Distribution dist = random_discrete_make(probabilities, ACTION_ENUM_COUNT);
 	*random_state() = random_state_from_seed(1);
 
-	Debug_Allocator debug_alloc = debug_allocator_make(allocator_get_default(), debug_allocator_panic_func, NULL, 1000);
-	Allocator_Swap swap = allocator_push_default(&debug_alloc.allocator);
-	
-	debug_allocator_print_dead_allocations(debug_alloc, 99);
-
 	DEFINE_ARRAY_TYPE(Action, History);
 
 	History history = {0};
@@ -123,13 +117,6 @@ void test_hash_table_stress(f64 max_seconds)
 					// at all)
 					if(u64_array_find(truth_key_array, key) != -1)
 						continue;
-						
-					if(i == 17)
-					{
-						int z = 5;
-						
-						debug_allocator_print_active_allocations(debug_alloc, 99);
-					}
 
 					array_push(&truth_key_array, key);
 					array_push(&truth_val_array, val);
@@ -214,16 +201,11 @@ void test_hash_table_stress(f64 max_seconds)
 				break;		
 			}
 		}
-	
-		if(i == 100)
-		{
-			debug_allocator_print_active_allocations(debug_alloc, 99);
-		}
-		
+
 		if(max_size < table.size)
 			max_size = table.size;
-		if(max_capacity < table.slot_count)
-			max_capacity = table.slot_count;
+		if(max_capacity < table.entries_count)
+			max_capacity = table.entries_count;
 
 		//Test integrity of all current keys
 		ASSERT(truth_key_array.size == truth_val_array.size);
@@ -234,7 +216,7 @@ void test_hash_table_stress(f64 max_seconds)
 
 			isize found = hash_table64_find(table, key);
 			TEST(table.entries != NULL);
-			TEST(0 <= found && found < table.slot_count && "The returned index must be valid");
+			TEST(0 <= found && found < table.entries_count && "The returned index must be valid");
 			Hash_Table64_Entry entry = table.entries[found];
 				
 			TEST(entry.hash == key && entry.value == val && "The entry must be inserted properly");
@@ -262,16 +244,12 @@ void test_hash_table_stress(f64 max_seconds)
 	random_discrete_deinit(&dist);
 	hash_table64_deinit(&table);
 	hash_table64_deinit(&other_table);
-	
-	debug_allocator_print_dead_allocations(debug_alloc, 99);
 
 	isize mem_after = allocator_get_stats(allocator_get_default()).bytes_allocated;
 	TEST(mem_before == mem_after);
-	allocator_pop(swap);
-	debug_allocator_deinit(&debug_alloc);
 }
 
-void test_hash_table(f64 max_seconds)
+static void test_hash_table(f64 max_seconds)
 {
 	test_hash_table_stress(max_seconds);
 }

@@ -70,6 +70,10 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LibraryPath>D:\libs;$(LibraryPath)</LibraryPath>
+    <ExternalIncludePath>extrenal/include/;$(ExternalIncludePath)</ExternalIncludePath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -108,6 +112,9 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>OpenGL32.Lib;gdi32.lib;user32.lib;shell32.lib;winmm.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -140,14 +147,17 @@
     <ClInclude Include="format.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_table.h" />
+    <ClInclude Include="log.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="random.h" />
     <ClInclude Include="string.h" />
+    <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />
     <ClInclude Include="_test.h" />
     <ClInclude Include="_test_array.h" />
     <ClInclude Include="_test_hash_table.h" />
+    <ClInclude Include="_test_log.h" />
     <ClInclude Include="_test_random.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -13,6 +13,7 @@
 #define HOUR_SECONDS ((int64_t) 60 * MINUTE_SECONDS)
 #define DAY_SECONDS ((int64_t) 24 * MINUTE_SECONDS)
 #define WEEK_SECONDS ((int64_t) 7 * DAY_SECONDS)
+#define YEAR_SECONDS (int64_t) 31556952
 
 //Returns the time from the startup time in nanoseconds
 static inline int64_t clock_ns()
@@ -20,7 +21,7 @@ static inline int64_t clock_ns()
     int64_t freq = platform_perf_counter_frequency();
     int64_t counter = platform_perf_counter() - platform_perf_counter_base();
 
-    int64_t sec_to_nanosec = 1'000'000'000;
+    int64_t sec_to_nanosec = 1000000000;
     //We assume _perf_counter_base is set to some reasonable thing so this will not overflow
     // (with this we are only able to represent 1e12 secons (A LOT) without overflowing)
     return counter * sec_to_nanosec / freq;

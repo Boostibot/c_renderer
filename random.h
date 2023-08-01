@@ -46,7 +46,6 @@ Random_State random_state_from_clock();
 //Returns pointer to the global state currently used
 Random_State* random_state();
 
-//@TODO: I dont think we need these public
 //generates random bool
 bool     random_state_bool(Random_State* state);	
 //generates random float in range [0, 1)
