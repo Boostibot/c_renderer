@@ -4,13 +4,7 @@
 #include "array.h"
 #include "time.h"
 #include "random.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#ifndef TEST
-	#define TEST(a) while(!(a)) { printf("Test failed! (%s : %d)\n%s\n on line", __FILE__, __LINE__, #a);  abort(); }
-#endif
+#include "log.h"													\
 
 //Maybe move to random or to test
 static void random_bits(Random_State* state, void* into, isize size)

@@ -247,7 +247,7 @@ Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_u
     time.millisecond = systime.wMilliseconds;
     time.minute = systime.wMinute;
     time.month = systime.wMonth;
-    time.second = systime.wSecond;
+    time.second = (int8_t) systime.wSecond;
     time.year = systime.wYear;
 
     int64_t years_since_epoch = (int64_t) time.year - EPOCH_YEAR;
@@ -544,9 +544,9 @@ bool platform_file_info(const char* file_path, Platform_File_Info* info)
     if(!state)
         return false;
             
-    info->created_time = _filetime_to_time_t(native_info.ftCreationTime);
-    info->last_access_time = _filetime_to_time_t(native_info.ftLastAccessTime);
-    info->last_write_time = _filetime_to_time_t(native_info.ftLastWriteTime);
+    info->created_epoch_time = _filetime_to_epoch_time(native_info.ftCreationTime);
+    info->last_access_epoch_time = _filetime_to_epoch_time(native_info.ftLastAccessTime);
+    info->last_write_epoch_time = _filetime_to_epoch_time(native_info.ftLastWriteTime);
     info->size = ((int64_t) native_info.nFileSizeHigh << 32) | ((int64_t) native_info.nFileSizeLow);
         
     if(native_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -683,9 +683,9 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
             assert(built_path.data != 0);
         
             Platform_File_Info info = {0};
-            info.created_time = _filetime_to_time_t(dir_context->visitor.current_entry.ftCreationTime);
-            info.last_access_time = _filetime_to_time_t(dir_context->visitor.current_entry.ftLastAccessTime);
-            info.last_write_time = _filetime_to_time_t(dir_context->visitor.current_entry.ftLastWriteTime);
+            info.created_epoch_time = _filetime_to_epoch_time(dir_context->visitor.current_entry.ftCreationTime);
+            info.last_access_epoch_time = _filetime_to_epoch_time(dir_context->visitor.current_entry.ftLastAccessTime);
+            info.last_write_epoch_time = _filetime_to_epoch_time(dir_context->visitor.current_entry.ftLastWriteTime);
             info.size = ((int64_t) dir_context->visitor.current_entry.nFileSizeHigh << 32) | ((int64_t) dir_context->visitor.current_entry.nFileSizeLow);
         
             info.type = PLATFORM_FILE_TYPE_FILE;
@@ -759,7 +759,6 @@ bool platform_directory_list_contents_malloc(const char* directory_path, Platfor
     return ok;
 }
 
-//Frees previously allocated file list
 void platform_directory_list_contents_free(Platform_Directory_Entry* entries)
 {
     if(entries == NULL)
@@ -795,606 +794,6 @@ char* platform_directory_get_current_working_malloc()
 //=========================================
 // Window managmenet
 //=========================================
-typedef struct Window {
-    
-    //Window stuff
-    HWND handle;
-    WNDCLASSEX class_;
-    RECT window_rect;  
-    RECT client_rect;  
-    Platform_Window_Options options;
-    Platform_Window_Visibility visibility;
-    RECT prev_window_rect;
-    bool was_shown;
-    const char* last_errors;
-
-    //Opengl stuff
-    HDC device_context;
-    int pixel_format;
-    HGLRC rendering_context;
-
-    //input
-    Platform_Input input;
-} Window;
-
-LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-typedef struct Platform_Error_Msg
-{
-    bool ok;
-    const char* msg;
-} Platform_Error_Msg;
-
-Platform_Error_Msg _platform_window_opengl_init(Window* window);
-void _platform_window_opengl_deinit(Window* window);
-
-
-Window* platform_window_init(const char* window_title)
-{
-    HINSTANCE hInstance = GetModuleHandleW(NULL);
-    const wchar_t WINDOW_CLASS_NAME[] = L"jot_window_class";
-    static bool        global_window_class_registered = false;
-    static WNDCLASSEX  global_window_class = {0};
-
-    if(!global_window_class_registered)
-    {
-        global_window_class.cbSize        = sizeof(WNDCLASSEX);
-        global_window_class.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC; // Redraw On Size, And Own DC For Window.
-        global_window_class.lpfnWndProc   = window_proc;
-        global_window_class.cbClsExtra    = 0;
-        global_window_class.cbWndExtra    = 0;
-        global_window_class.hInstance     = hInstance;
-        global_window_class.hIcon         = LoadIconW(NULL, IDI_APPLICATION);
-        global_window_class.hCursor       = LoadCursorW(NULL, IDC_ARROW);
-        global_window_class.hbrBackground = (HBRUSH)(COLOR_WINDOW+1); //???
-        global_window_class.lpszMenuName  = NULL;
-        global_window_class.lpszClassName = WINDOW_CLASS_NAME;
-        global_window_class.hIconSm       = LoadIconW(NULL, IDI_APPLICATION);
-        if(!RegisterClassExW(&global_window_class))
-            return NULL;
-
-        global_window_class_registered = true;
-    }
-
-    Window* window = calloc(2, sizeof(Window));
-    if(window == NULL)
-        return NULL;
-
-    char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer wide_title = _buffer_init_backed(window_title_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
-    _utf8_to_utf16(window_title, _strlen(window_title), &wide_title);
-        
-    //wprintf(_wstring(wide_title));
-    window->handle = CreateWindowExW(
-        WS_EX_CLIENTEDGE,                                           // style. Should we use: WS_EX_APPWINDOW | WS_EX_WINDOWEDGE???
-        WINDOW_CLASS_NAME,                                          // class
-        _wstring(wide_title),                                       // title
-        WS_OVERLAPPEDWINDOW,                                        // style. Should we use: WS_POPUP???
-        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, // default rect
-        NULL,                                                       // no parent window
-        NULL,                                                       // no menu
-        hInstance,                                                  // instance
-        window);                                                    // save poinnter to our window structure so we can query it from within the winproc
-
-    _buffer_deinit(&wide_title);
-
-    RAWINPUTDEVICE raw_input_device = {0};
-    raw_input_device.usUsagePage = HID_USAGE_PAGE_GENERIC; 
-    raw_input_device.usUsage = HID_USAGE_GENERIC_MOUSE; 
-    raw_input_device.dwFlags = RIDEV_INPUTSINK;   
-    raw_input_device.hwndTarget = window->handle;
-    RegisterRawInputDevices(&raw_input_device, 1, sizeof(raw_input_device));
-
-    window->class_ = global_window_class;
-
-    //====================== Opengl stuff ========================
-    Platform_Error_Msg msg = _platform_window_opengl_init(window);
-    if(msg.ok == false)
-    {
-        platform_window_deinit(window);
-        return NULL;
-    }
-
-    return window;
-}
-
-void platform_window_deinit(Window* window)
-{
-    if(window->handle != NULL);
-        DestroyWindow(window->handle);
-
-    _platform_window_opengl_deinit(window);
-    free(window);
-}
-
-Platform_Input platform_window_process_messages(Window* window) {
-    assert(window != NULL); 
-
-    MSG message = {0};
-    while (PeekMessageW(&message, window->handle, 0, 0, PM_REMOVE)) 
-    {
-        TranslateMessage(&message);
-        DispatchMessageW(&message);
-    }
-
-    Platform_Input out = window->input;
-    POINT cursor = {0};
-    (void) GetCursorPos(&cursor);
-
-    out.client_position_x = window->client_rect.left;
-    out.client_position_y = window->client_rect.top;
-    
-    out.client_size_x = window->client_rect.right - window->client_rect.left;
-    out.client_size_y = window->client_rect.bottom - window->client_rect.top;
-
-    assert(out.client_size_x >= 0);
-    assert(out.client_size_y >= 0);
-    
-    out.window_position_x = window->window_rect.left;
-    out.window_position_y = window->window_rect.top;
-    
-    out.window_size_x = window->window_rect.right - window->window_rect.left;
-    out.window_size_y = window->window_rect.bottom - window->window_rect.top;
-
-    assert(out.window_size_x >= 0);
-    assert(out.window_size_y >= 0);
-
-    out.mouse_screen_x = cursor.x;
-    out.mouse_screen_y = cursor.y;
-    
-    Platform_Input null = {0};
-    window->input = null;
-    return out;
-}
-
-static uint8_t _offset_half_trans_count(uint8_t current, int8_t offset, bool is_down)
-{
-    uint8_t down_bit = 1 << 7;
-    uint8_t masked = current & ~down_bit;
-                
-    //Increment the half transition counter but cap it so it doesnt wrap
-    int16_t upcast = masked + offset;
-    if(upcast < 0)
-        upcast = 0;
-
-    if(upcast > down_bit - 1)
-        upcast = down_bit - 1;
-
-    masked = (uint8_t) upcast;
-    //set the down_bit 
-    if(is_down)
-        masked = masked | down_bit;
-    else
-        masked = masked & ~down_bit;
-
-    return masked;
-}
-
-LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param) 
-{
-    if (msg == WM_NCCREATE) 
-    {
-        CREATESTRUCTW* create_struct = (CREATESTRUCTW*) l_param;
-        void* user_data = create_struct->lpCreateParams;
-        // store window instance pointer in window user data
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR) user_data);
-    }
-    Window* window = (Window*) GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    if (!window) 
-        return DefWindowProcW(hwnd, msg, w_param, l_param);
-
-    switch (msg) 
-    {
-        case WM_NCCALCSIZE: 
-        {
-            if (w_param == TRUE && window->options.no_border) {
-                NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*) l_param;
-                RECT* rect = &params->rgrc[0];
-                WINDOWPLACEMENT placement = {0};
-                if (!GetWindowPlacement(hwnd, &placement))
-                    break;
-
-                bool is_maximized = placement.showCmd == SW_MAXIMIZE;
-                HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
-                if (!monitor) 
-                    break;
-
-                MONITORINFO monitor_info = {0};
-                monitor_info.cbSize = sizeof(monitor_info);
-                if (!GetMonitorInfoW(monitor, &monitor_info)) 
-                    break;
-
-                *rect = monitor_info.rcWork;
-                return 0;
-            }
-            break;
-        }
-
-        case WM_NCHITTEST: {
-            // When we have no border or title bar, we need to perform our
-            // own hit testing to allow resizing and moving.
-            if (!window->options.no_border) 
-                break;
-
-            POINT mouse = {0};
-            mouse.x = GET_X_LPARAM(l_param);
-            mouse.y = GET_Y_LPARAM(l_param);
-
-            // identify borders and corners to allow resizing the window.
-            // Note: On Windows 10, windows behave differently and
-            // allow resizing outside the visible window frame.
-            // This implementation does not replicate that behavior.
-            POINT border = {0};
-            border.x = GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
-            border.y = GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
-
-            LRESULT drag = window->options.no_border_allow_move ? HTCAPTION : HTCLIENT;
-            RECT window_rect = {0};
-            if(!GetWindowRect(window->handle, &window_rect))
-                return HTNOWHERE;
-
-            enum region_mask {
-                client = 0,
-                left   = 1,
-                right  = 2,
-                top    = 4,
-                bottom = 8,
-            };
-
-            int result =
-                left    * (mouse.x <  (window_rect.left   + border.x)) |
-                right   * (mouse.x >= (window_rect.right  - border.x)) |
-                top     * (mouse.y <  (window_rect.top    + border.y)) |
-                bottom  * (mouse.y >= (window_rect.bottom - border.y));
-
-            if(result != 0)
-            {
-                int i = 4;
-            }
-            bool allow_resize = window->options.no_border_allow_resize;
-            switch (result) {
-                case left          : return allow_resize ? HTLEFT        : drag;
-                case right         : return allow_resize ? HTRIGHT       : drag;
-                case top           : return allow_resize ? HTTOP         : drag;
-                case bottom        : return allow_resize ? HTBOTTOM      : drag;
-                case top | left    : return allow_resize ? HTTOPLEFT     : drag;
-                case top | right   : return allow_resize ? HTTOPRIGHT    : drag;
-                case bottom | left : return allow_resize ? HTBOTTOMLEFT  : drag;
-                case bottom | right: return allow_resize ? HTBOTTOMRIGHT : drag;
-                case client        : return drag;
-                default            : return HTNOWHERE;
-            }
-        }
-
-        case WM_ERASEBKGND:
-            // Notify the OS that erasing will be handled by the application to prevent flicker.
-            return 1;
-        case WM_CLOSE: {
-            window->input.should_quit = true;
-            return 0;
-        }
-        case WM_DESTROY: {
-            PostQuitMessage(0);
-            return 0;
-        }
-            
-        case WM_SIZE: {
-            RECT window_rect = {0};
-            RECT client_rect = {0};
-
-            //bool ok1 = GetWindowRect(hwnd, &window_rect);
-            bool ok1 = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &window_rect, sizeof window_rect) == S_OK;
-            bool ok2 = GetClientRect(hwnd, &client_rect);
-
-            POINT top_left = {0, 0};
-            bool ok3 = ClientToScreen(hwnd, &top_left);
-            assert(ok1 && ok2 && ok3);
-
-            client_rect.left += top_left.x;
-            client_rect.right += top_left.x;
-            client_rect.top += top_left.y;
-            client_rect.bottom += top_left.y;
-
-            window->window_rect = window_rect;
-            window->client_rect = client_rect;
-        } break;
-
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-        case WM_KEYUP:
-        case WM_SYSKEYUP: 
-        {
-            // Key pressed/released
-            bool is_down = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
-            uint32_t key = (uint32_t)w_param;
-
-            // Check for extended scan code.
-            bool is_extended = (HIWORD(l_param) & KF_EXTENDED) == KF_EXTENDED;
-
-            // Keypress only determines if _any_ alt/ctrl/shift key is pressed. Determine which one if so.
-            if (w_param == VK_MENU) 
-                key = is_extended ? PLATFORM_KEY_RALT : PLATFORM_KEY_LALT;
-            else if (w_param == VK_CONTROL) 
-                key = is_extended ? PLATFORM_KEY_RCONTROL : PLATFORM_KEY_LCONTROL;
-            else if (w_param == VK_SHIFT) 
-            {
-                // Annoyingly, KF_EXTENDED is not set for shift keys.
-                uint32_t left_shift = MapVirtualKeyW(VK_LSHIFT, MAPVK_VK_TO_VSC);
-                uint32_t scancode = ((l_param & (0xFF << 16)) >> 16);
-
-                key = scancode == left_shift ? PLATFORM_KEY_LSHIFT : PLATFORM_KEY_RSHIFT;
-            }
-            
-            assert(key < PLATFORM_KEY_ENUM_COUNT);
-            
-            uint8_t* key_ptr = &window->input.key_half_transitions[key];
-            *key_ptr = _offset_half_trans_count(*key_ptr, 1, is_down);
-
-            // Return 0 to prevent default window behaviour for some keypresses, such as alt.
-            return 0;
-        }
-        
-        case WM_INPUT: 
-        {
-            UINT dwSize = sizeof(RAWINPUT);
-            uint8_t lpb[sizeof(RAWINPUT)] = {0};
-
-            GetRawInputData((HRAWINPUT) l_param, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
-
-            RAWINPUT* raw = (RAWINPUT*)lpb;
-
-            if (raw->header.dwType == RIM_TYPEMOUSE) 
-            {
-                window->input.mouse_native_delta_x += raw->data.mouse.lLastX;
-                window->input.mouse_native_delta_y += raw->data.mouse.lLastY;
-            } 
-            break;
-        }
-
-        case WM_MOUSEWHEEL: {
-            int32_t z_delta = GET_WHEEL_DELTA_WPARAM(w_param);
-            window->input.mouse_wheel_delta += z_delta;
-            break;
-        } 
-
-        case WM_LBUTTONDOWN:
-        case WM_MBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_XBUTTONDOWN:
-        case WM_LBUTTONUP:
-        case WM_MBUTTONUP:
-        case WM_RBUTTONUP: 
-        case WM_XBUTTONUP: {
-            Platform_Mouse_Button mouse_button = PLATFORM_MOUSE_BUTTON_ENUM_COUNT;
-            bool is_down = false;
-            int return_ = 0;
-
-            switch (msg) 
-            {
-                case WM_LBUTTONDOWN: 
-                    is_down = true;
-                case WM_LBUTTONUP:
-                    mouse_button = PLATFORM_MOUSE_BUTTON_LEFT;
-                    break;
-                
-                case WM_MBUTTONDOWN:
-                    is_down = true;
-                case WM_MBUTTONUP:
-                    mouse_button = PLATFORM_MOUSE_BUTTON_MIDDLE;
-                    break;
-                
-                case WM_RBUTTONDOWN:
-                    is_down = true;
-                case WM_RBUTTONUP:
-                    mouse_button = PLATFORM_MOUSE_BUTTON_RIGHT;
-                    break;
-                    
-                case WM_XBUTTONDOWN:
-                    is_down = true;
-                case WM_XBUTTONUP:
-                    if (GET_XBUTTON_WPARAM(w_param) == XBUTTON1)
-                        mouse_button = PLATFORM_MOUSE_BUTTON_4;
-                    else
-                        mouse_button = PLATFORM_MOUSE_BUTTON_5;
-                    return_ = TRUE;
-                    break;
-            }
-
-            if(mouse_button != PLATFORM_MOUSE_BUTTON_ENUM_COUNT)
-            {
-                uint8_t* button = &window->input.mouse_button_half_transitions[mouse_button];
-                *button = _offset_half_trans_count(*button, 1, is_down);
-            }
-
-            return return_;
-        }
-    }
-
-    return DefWindowProcW(hwnd, msg, w_param, l_param);
-}
-
-//Source: https://stackoverflow.com/a/2416613
-static bool _enter_fullscreen(HWND hwnd, int fullscreen_width, int fullscreen_height, int colour_bits, int refresh_rate) 
-{
-    DEVMODE fullscreenSettings = {0};
-    bool isChangeSuccessful = true;
-    RECT windowBoundary = {0};
-
-    EnumDisplaySettingsW(NULL, 0, &fullscreenSettings);
-    fullscreenSettings.dmPelsWidth        = fullscreen_width;
-    fullscreenSettings.dmPelsHeight       = fullscreen_height;
-    fullscreenSettings.dmBitsPerPel       = colour_bits;
-    fullscreenSettings.dmDisplayFrequency = refresh_rate;
-    fullscreenSettings.dmFields           = DM_PELSWIDTH |
-                                            DM_PELSHEIGHT |
-                                            DM_BITSPERPEL |
-                                            DM_DISPLAYFREQUENCY;
-
-    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, WS_EX_APPWINDOW | WS_EX_TOPMOST);
-    SetWindowLongPtrW(hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, fullscreen_width, fullscreen_height, SWP_SHOWWINDOW);
-    isChangeSuccessful = ChangeDisplaySettings(&fullscreenSettings, CDS_FULLSCREEN) == DISP_CHANGE_SUCCESSFUL;
-    ShowWindow(hwnd, SW_MAXIMIZE);
-
-    return isChangeSuccessful;
-}
-
-//Source: https://stackoverflow.com/a/2416613
-static bool _exit_fullscreen(HWND hwnd, int window_x, int window_y, int windowed_width, int windowed_height, int windowed_padding_x, int windowed_padding_y) 
-{
-    bool isChangeSuccessful;
-
-    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, WS_EX_LEFT);
-    SetWindowLongPtrW(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
-    isChangeSuccessful = ChangeDisplaySettings(NULL, CDS_RESET) == DISP_CHANGE_SUCCESSFUL;
-    SetWindowPos(hwnd, HWND_NOTOPMOST, window_x, window_y, windowed_width + windowed_padding_x, windowed_height + windowed_padding_y, SWP_SHOWWINDOW);
-    ShowWindow(hwnd, SW_RESTORE);
-
-    return isChangeSuccessful;
-}
-
-static bool _is_fullscreen(Window* window)
-{   
-    if(window == NULL)
-        return false;
-    DWORD style = GetWindowLongW(window->handle, GWL_EXSTYLE);
-    if (style & WS_EX_TOPMOST)
-        return true;
-    else
-        return false;
-}
-
-static bool _set_fullscreen(Window* window, bool fullscreen)
-{
-    bool current = _is_fullscreen(window);
-    if(current == fullscreen)
-        return true;
-
-    if (fullscreen) 
-    {
-        HDC window_HDC = GetDC(window->handle);
-        int fullscreen_width  = GetDeviceCaps(window_HDC, DESKTOPHORZRES);
-        int fullscreen_height = GetDeviceCaps(window_HDC, DESKTOPVERTRES);
-        int colour_bits       = GetDeviceCaps(window_HDC, BITSPIXEL);
-        int refresh_rate      = GetDeviceCaps(window_HDC, VREFRESH);
-
-        if(!GetWindowRect(window->handle, &window->prev_window_rect))
-            return false;
-            
-        window->options.visibility = WINDOW_VISIBILITY_FULLSCREEN;
-        return _enter_fullscreen(window->handle, fullscreen_width, fullscreen_height, colour_bits, refresh_rate);
-    }
-    else
-    {
-        RECT prev = window->prev_window_rect;
-        return _exit_fullscreen(window->handle, prev.left, prev.top, prev.right - prev.left, prev.bottom - prev.top, 0, 0);
-    }
-
-}
-
-enum {
-    WINDOWED   = WS_OVERLAPPEDWINDOW | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
-    NO_BORDER  = WS_POPUP            | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX,
-};
-
-static bool _set_no_border(Window* window, bool enabled) 
-{
-    LONG combined = WINDOWED | NO_BORDER;
-    LONG old_style = (LONG) GetWindowLongPtrW(window->handle, GWL_STYLE);
-    LONG new_style = old_style & ~combined;
-    if(enabled)
-    {
-        new_style |= NO_BORDER;
-        window->options.no_border = true;
-    }
-    else
-    {
-        new_style |= WINDOWED;
-        window->options.no_border = false;
-    }
-
-    bool state = SetWindowLongPtrW(window->handle, GWL_STYLE, new_style);
-    state = state && SetWindowPos(window->handle, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
-    return state;
-}
-
-bool platform_window_set_options(Window* window, Platform_Window_Options options)
-{
-    if(window == NULL || window->handle == NULL)
-        return false;
-
-    //first showing should have SW_SHOWNORMAL
-    if(window->was_shown == false)
-    {
-        ShowWindow(window->handle, SW_SHOWNORMAL);
-        window->was_shown = true;
-    }
-
-    int show = SW_SHOWNORMAL;
-    switch(options.visibility)
-    {
-        case WINDOW_VISIBILITY_MAXIMIZED: show = SW_SHOWMAXIMIZED; break;
-        case WINDOW_VISIBILITY_WINDOWED: show = SW_SHOWNORMAL; break;
-        case WINDOW_VISIBILITY_MINIMIZED: show = SW_SHOWMINIMIZED; break;
-        case WINDOW_VISIBILITY_HIDDEN: show = SW_HIDE; break;
-    }
-    
-    bool state = true;
-    if(options.title)
-    {
-        char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-        _Buffer wide_title = _buffer_init_backed(window_title_buffer, sizeof(window_title_buffer), sizeof(wchar_t));
-        _utf8_to_utf16(options.title, _strlen(options.title), &wide_title);
-        
-        state = SetWindowTextW(window->handle, _wstring(wide_title));
-            
-        _buffer_deinit(&wide_title);
-    }
-
-    window->options.no_border = options.no_border;
-    window->options.no_border_allow_resize = options.no_border_allow_resize;
-    window->options.no_border_allow_move = options.no_border_allow_move;
-    window->options.visibility = options.visibility;
-
-    state = _set_no_border(window, options.no_border) && state;
-    state = _set_fullscreen(window, options.visibility == WINDOW_VISIBILITY_FULLSCREEN) && state;
-
-    state = ShowWindow(window->handle, show) && state;
-    HWND active_window = GetActiveWindow();
-    bool is_active = active_window == window->handle;
-    if(!is_active != options.no_focus && options.visibility != WINDOW_VISIBILITY_HIDDEN)
-    {
-        if(options.no_focus) 
-            state = ShowWindow(window->handle, SW_SHOWNA) && state;
-        else
-            state = ShowWindow(window->handle, SW_SHOW)  && state;
-    }
-
-    return state;
-}
-
-Platform_Window_Options platform_window_get_options(Window* window)
-{
-    Platform_Window_Options out = {0};
-    if(window == NULL || window->handle == NULL)
-        return out;
-
-    out = window->options;
-    
-    char window_title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer wide_title = _buffer_init_backed(window_title_buffer, sizeof(window_title_buffer), sizeof(wchar_t));
-    _buffer_resize(&wide_title, wide_title.capacity-1);
-    int needed = GetWindowTextW(window->handle, _wstring(wide_title), (int) wide_title.size);
-
-    _Buffer title = _buffer_init(sizeof(char));
-    _utf16_to_utf8(_wstring(wide_title), wide_title.size, &title);
-    out.title = title.data;
-
-    _buffer_deinit(&wide_title);
-
-    return out;
-}
-
 Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_Style desired_style, const char* message, const char* title)
 {
     int style = 0;
@@ -1442,260 +841,195 @@ Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_
     }
 }
 
-bool _platform_window_error(Window* window, const char* msg)
+
+//Implementation
+#include <stdint.h>
+#include <stdbool.h>
+#include <windows.h>
+#include <Psapi.h>
+
+#pragma comment(lib, "psapi.lib")
+#pragma comment(lib, "dbghelp.lib")
+
+// Some versions of imagehlp.dll lack the proper packing directives themselves
+// so we need to do it.
+#pragma pack( push, before_imagehlp, 8 )
+#include <imagehlp.h>
+#pragma pack( pop, before_imagehlp )
+
+int64_t platform_debug_capture_stack(void** stack, int64_t stack_size, int64_t skip_count)
 {
-    window->last_errors = msg;
-    return false;
+    int64_t captured = CaptureStackBackTrace((DWORD) skip_count + 1, stack_size, stack, NULL);
+    return captured;
 }
 
+#define MAX_MODULES 128 
+#define MAX_NAME_LEN 4096
 
-void            platform_window_activate_opengl(Window* window)
+static bool   stack_trace_init = false;
+static HANDLE stack_trace_process;
+static DWORD  stack_trace_error = 0;
+
+static void _platform_stack_trace_init(const char* search_path)
 {
-    bool okay = wglMakeCurrent(window->device_context, window->rendering_context);
-    //assert(okay);
-    //_platform_window_opengl_init(window);
-}
-void            platform_window_swap_buffers(Window* window)
-{
-    SwapBuffers(window->device_context);
-}
+    if(stack_trace_init)
+        return;
 
-//================================ OPENGL ===========================================================
-typedef HGLRC WINAPI wglCreateContextAttribsARB_type(HDC hdc, HGLRC hShareContext, const int *attribList);
-wglCreateContextAttribsARB_type *wglCreateContextAttribsARB = NULL;
+    stack_trace_process = GetCurrentProcess();
+    HANDLE thread = GetCurrentThread();
 
-typedef BOOL WINAPI wglChoosePixelFormatARB_type(HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats);
-wglChoosePixelFormatARB_type *wglChoosePixelFormatARB = NULL;
-
-bool wglExtensionsInit = false;
-
-// See https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_create_context.txt for all values
-#define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
-#define WGL_CONTEXT_PROFILE_MASK_ARB              0x9126
-
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
-
-
-// See https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_pixel_format.txt for all values
-#define WGL_DRAW_TO_WINDOW_ARB                    0x2001
-#define WGL_ACCELERATION_ARB                      0x2003
-#define WGL_SUPPORT_OPENGL_ARB                    0x2010
-#define WGL_DOUBLE_BUFFER_ARB                     0x2011
-#define WGL_PIXEL_TYPE_ARB                        0x2013
-#define WGL_COLOR_BITS_ARB                        0x2014
-#define WGL_DEPTH_BITS_ARB                        0x2022
-#define WGL_STENCIL_BITS_ARB                      0x2023
-
-#define WGL_FULL_ACCELERATION_ARB                 0x2027
-#define WGL_TYPE_RGBA_ARB                         0x202B
-
-static Platform_Error_Msg _error_msg(char *msg)
-{
-    Platform_Error_Msg error_msg = {false, msg};
-    return error_msg;
-}
-
-static Platform_Error_Msg _error_msg_ok(char *msg)
-{
-    Platform_Error_Msg error_msg = {true, msg};
-    return error_msg;
-}
-
-static Platform_Error_Msg _platform_window_init_opengl_extensions(void)
-{
-    // Before we can load extensions, we need a dummy OpenGL context, created using a dummy window.
-    // We use a dummy window because you can only set the pixel format for a window once. For the
-    // real window, we want to use wglChoosePixelFormatARB (so we can potentially specify options
-    // that aren't available in PIXELFORMATDESCRIPTOR), but we can't load and use that before we
-    // have a context.
-    WNDCLASSA window_class = {0};
-    window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    window_class.lpfnWndProc = DefWindowProcA;
-    window_class.hInstance = GetModuleHandle(0);
-    window_class.lpszClassName = "Dummy_WGL_class";
-
-    if (!RegisterClassA(&window_class)) 
-        return _error_msg("Failed to register dummy OpenGL window.");
-
-    HWND dummy_window = CreateWindowExA(
-        0,
-        window_class.lpszClassName,
-        "Dummy OpenGL Window",
-        0,
-        CW_USEDEFAULT,
-        CW_USEDEFAULT,
-        CW_USEDEFAULT,
-        CW_USEDEFAULT,
-        0,
-        0,
-        window_class.hInstance,
-        0);
-
-    if (!dummy_window) {
-        return _error_msg("Failed to create dummy OpenGL window.");
-    }
-
-    HDC dummy_dc = GetDC(dummy_window);
-
-    PIXELFORMATDESCRIPTOR pfd = {0};
-    pfd.nSize = sizeof(pfd);
-    pfd.nVersion = 1;
-    pfd.iPixelType = PFD_TYPE_RGBA;
-    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-    pfd.cColorBits = 32;
-    pfd.cAlphaBits = 8;
-    pfd.iLayerType = PFD_MAIN_PLANE;
-    pfd.cDepthBits = 24;
-    pfd.cStencilBits = 8;
-
-    int pixel_format = ChoosePixelFormat(dummy_dc, &pfd);
-    if (!pixel_format) {
-        return _error_msg("Failed to find a suitable pixel format.");
-    }
-    if (!SetPixelFormat(dummy_dc, pixel_format, &pfd)) {
-        return _error_msg("Failed to set the pixel format.");
-    }
-
-    HGLRC dummy_context = wglCreateContext(dummy_dc);
-    if (!dummy_context) {
-        return _error_msg("Failed to create a dummy OpenGL rendering context.");
-    }
-
-    if (!wglMakeCurrent(dummy_dc, dummy_context)) {
-        return _error_msg("Failed to activate dummy OpenGL rendering context.");
-    }
-
-    //assert(!wglMakeCurrent(dummy_dc, dummy_context) && "should fail the other time!");
-
-    wglCreateContextAttribsARB = (wglCreateContextAttribsARB_type*)wglGetProcAddress(
-        "wglCreateContextAttribsARB");
-    wglChoosePixelFormatARB = (wglChoosePixelFormatARB_type*)wglGetProcAddress(
-        "wglChoosePixelFormatARB");
-
-    wglExtensionsInit = true;
-    wglMakeCurrent(dummy_dc, 0);
-    wglDeleteContext(dummy_context);
-    ReleaseDC(dummy_window, dummy_dc);
-    if(dummy_window != 0);
-        DestroyWindow(dummy_window);
-
-    return _error_msg_ok("OK");
-}
-
-#include <strsafe.h>
-void ErrorExit(LPTSTR lpszFunction) 
-{ 
-    // Retrieve the system error message for the last-error code
-
-    LPVOID lpMsgBuf;
-    LPVOID lpDisplayBuf;
-    DWORD dw = GetLastError(); 
-
-    FormatMessage(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        dw,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (LPTSTR) &lpMsgBuf,
-        0, NULL );
-
-    // Display the error message and exit the process
-
-    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, 
-        (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR)); 
-    StringCchPrintf((LPTSTR)lpDisplayBuf, 
-        LocalSize(lpDisplayBuf) / sizeof(TCHAR),
-        TEXT("%s failed with error %d: %s"), 
-        lpszFunction, dw, lpMsgBuf); 
-    MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK); 
-
-    LocalFree(lpMsgBuf);
-    LocalFree(lpDisplayBuf);
-    ExitProcess(dw); 
-}
-
-
-static Platform_Error_Msg _platform_window_opengl_init(Window* window)
-{
-    return _error_msg_ok("OK");
-
-    window->device_context = GetDC(window->handle);
-    if(!window->device_context)
-        return _error_msg("Failed GetDC");
-
-    if(wglExtensionsInit == false)
+    if (!SymInitialize(stack_trace_process, search_path, false)) 
     {
-        Platform_Error_Msg msg = _platform_window_init_opengl_extensions();
-        if(msg.ok == false)
-            return msg;
+        assert(false);
+        stack_trace_error = GetLastError();
+        return;
     }
 
-    // Now we can choose a pixel format the modern way, using wglChoosePixelFormatARB.
-    int pixel_format_attribs[] = {
-        WGL_DRAW_TO_WINDOW_ARB,     GL_TRUE,
-        WGL_SUPPORT_OPENGL_ARB,     GL_TRUE,
-        WGL_DOUBLE_BUFFER_ARB,      GL_TRUE,
-        WGL_ACCELERATION_ARB,       WGL_FULL_ACCELERATION_ARB,
-        WGL_PIXEL_TYPE_ARB,         WGL_TYPE_RGBA_ARB,
-        WGL_COLOR_BITS_ARB,         32,
-        WGL_DEPTH_BITS_ARB,         24,
-        WGL_STENCIL_BITS_ARB,       8,
-        0
-    };
-
-    int pixel_format = 0;
-    UINT num_formats = 0;
-    wglChoosePixelFormatARB(window->device_context, pixel_format_attribs, 0, 1, &pixel_format, &num_formats);
-    if (!num_formats) {
-        return _error_msg("Failed to set the OpenGL 3.3 pixel format.");
-    }
-
-    PIXELFORMATDESCRIPTOR pfd = {0};
-    DescribePixelFormat(window->device_context, pixel_format, sizeof(pfd), &pfd);
-    if (!SetPixelFormat(window->device_context, pixel_format, &pfd)) {
-        return _error_msg("Failed to set the OpenGL 3.3 pixel format.");
-    }
-
-    // Specify that we want to create an OpenGL 3.3 core profile context
-    int gl33_attribs[] = {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
-        WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-        0,
-    };
-
-    HGLRC gl33_context = wglCreateContextAttribsARB(window->device_context, 0, gl33_attribs);
-    if (!gl33_context) {
-        return _error_msg("Failed to create OpenGL 3.3 context.");
-    }
+    DWORD symOptions = SymGetOptions();
+    symOptions |= SYMOPT_LOAD_LINES | SYMOPT_UNDNAME;
+    SymSetOptions(symOptions);
     
-    //Platform_Window_Options show = {0};
-    //show.visibility = WINDOW_VISIBILITY_WINDOWED;
-    //platform_window_set_options(window, show);
+    DWORD module_handles_size_needed = 0;
+    HMODULE module_handles[MAX_MODULES] = {0};
+    TCHAR module_filename[MAX_NAME_LEN] = {0};
+    TCHAR module_name[MAX_NAME_LEN] = {0};
+    EnumProcessModules(stack_trace_process, module_handles, sizeof(module_handles), &module_handles_size_needed);
     
-
-    window->rendering_context = gl33_context;
-    if (!wglMakeCurrent(window->device_context, gl33_context)) {
-        //ErrorExit(L"wglMakeCurrent");
-        //return _error_msg("Failed to activate OpenGL 3.3 rendering context.");
+    DWORD module_count = module_handles_size_needed/sizeof(HMODULE);
+    for(int64_t i = 0; i < module_count; i++)
+    {
+        HMODULE module_handle = module_handles[i];
+        MODULEINFO module_info = {0};
+        GetModuleInformation(stack_trace_process, module_handle, &module_info, sizeof(module_info));
+        GetModuleFileNameEx(stack_trace_process, module_handle, module_filename, sizeof(module_filename));
+        GetModuleBaseName(stack_trace_process, module_handle, module_name, sizeof(module_name));
+        
+        bool load_state = SymLoadModuleExW(stack_trace_process, 0, module_filename, module_name, (DWORD64)module_info.lpBaseOfDll, (DWORD) module_info.SizeOfImage, 0, 0);
+        if(load_state == false)
+        {
+            assert(false);
+            stack_trace_error = GetLastError();
+        }
     }
-    
-    //defaults
-    glShadeModel(GL_SMOOTH);                            // Enable Smooth Shading
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);               // Black Background
-    glClearDepth(1.0f);                                 // Depth Buffer Setup
-    glEnable(GL_DEPTH_TEST);                            // Enables Depth Testing
-    glDepthFunc(GL_LEQUAL);                             // The Type Of Depth Testing To Do
-    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);  // Really Nice Perspective Calculations
 
-    return _error_msg_ok("OK");
+    stack_trace_init = true;
 }
 
-void _platform_window_opengl_deinit(Window* window)
+static void _platform_stack_trace_deinit()
 {
+    SymCleanup(stack_trace_process);
+}
 
+void platform_debug_translate_stack(Platform_Stack_Trace_Entry* tanslated, const void** stack, int64_t stack_size)
+{
+    _platform_stack_trace_init("");
+    char symbol_info_data[sizeof(SYMBOL_INFO) + MAX_NAME_LEN + 1] = {0};
 
+    DWORD offset_from_symbol = 0;
+    IMAGEHLP_LINE64 line = {0};
+    line.SizeOfStruct = sizeof line;
+
+    Platform_Stack_Trace_Entry null_entry = {0};
+    for(int64_t i = 0; i < stack_size; i++)
+    {
+        Platform_Stack_Trace_Entry* entry = tanslated + i;
+        DWORD64 address = (DWORD64) stack[i];
+        *entry = null_entry;
+
+        if (address == 0)
+            continue;
+
+        memset(symbol_info_data, '\0', sizeof symbol_info_data);
+
+        SYMBOL_INFO* symbol_info = (SYMBOL_INFO*) symbol_info_data;
+        symbol_info->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol_info->MaxNameLen = MAX_NAME_LEN;
+        DWORD64 displacement = 0;
+        SymFromAddr(stack_trace_process, address, &displacement, symbol_info);
+            
+        if (symbol_info->Name[0] != '\0')
+        {
+            int64_t actual_size = UnDecorateSymbolName(symbol_info->Name, entry->function, sizeof entry->function, UNDNAME_COMPLETE);
+        }
+           
+        IMAGEHLP_MODULE module_info = {0};
+        module_info.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+        bool module_info_state = SymGetModuleInfo64(stack_trace_process, address, &module_info);
+        if(module_info_state)
+        {
+            int64_t copy_size = sizeof module_info.ImageName;
+            if(copy_size > sizeof entry->module - 1)
+                copy_size = sizeof entry->module - 1;
+
+            memmove(entry->module, module_info.ImageName, copy_size);
+        }
+            
+        if (SymGetLineFromAddr64(stack_trace_process, address, &offset_from_symbol, &line)) 
+        {
+            entry->line = line.LineNumber;
+            
+            int64_t copy_size = strlen(line.FileName);
+            if(copy_size > sizeof entry->file - 1)
+                copy_size = sizeof entry->file - 1;
+
+            memmove(entry->file, line.FileName, copy_size);
+        }
+    }
+}
+
+static int64_t _platform_stack_trace_walk(CONTEXT context, HANDLE process, HANDLE thread, DWORD image_type, void** frames, int64_t frame_count, int64_t skip_count)
+{
+    STACKFRAME64 frame = {0};
+    #ifdef _M_IX86
+        DWORD native_image = IMAGE_FILE_MACHINE_I386;
+        frame.AddrPC.Offset    = context.Eip;
+        frame.AddrPC.Mode      = AddrModeFlat;
+        frame.AddrFrame.Offset = context.Ebp;
+        frame.AddrFrame.Mode   = AddrModeFlat;
+        frame.AddrStack.Offset = context.Esp;
+        frame.AddrStack.Mode   = AddrModeFlat;
+    #elif _M_X64
+        DWORD native_image = IMAGE_FILE_MACHINE_AMD64;
+        frame.AddrPC.Offset    = context.Rip;
+        frame.AddrPC.Mode      = AddrModeFlat;
+        frame.AddrFrame.Offset = context.Rsp;
+        frame.AddrFrame.Mode   = AddrModeFlat;
+        frame.AddrStack.Offset = context.Rsp;
+        frame.AddrStack.Mode   = AddrModeFlat;
+    #elif _M_IA64
+        DWORD native_image = IMAGE_FILE_MACHINE_IA64;
+        frame.AddrPC.Offset    = context.StIIP;
+        frame.AddrPC.Mode      = AddrModeFlat;
+        frame.AddrFrame.Offset = context.IntSp;
+        frame.AddrFrame.Mode   = AddrModeFlat;
+        frame.AddrBStore.Offset= context.RsBSP;
+        frame.AddrBStore.Mode  = AddrModeFlat;
+        frame.AddrStack.Offset = context.IntSp;
+        frame.AddrStack.Mode   = AddrModeFlat;
+    #else
+        #error "Unsupported platform"
+    #endif
+
+    if(image_type == 0)
+        image_type = native_image; 
+    
+    //HANDLE thread = GetCurrentThread();
+    int64_t i = 0;
+    for(; i < frame_count; i++)
+    {
+        bool ok = StackWalk64(native_image, stack_trace_process, thread, &frame, &context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
+        if (ok == false)
+            break;
+
+        if(skip_count > 0)
+        {
+            skip_count--;
+            i --;
+            continue;
+        }
+
+        frames[i] = (void*) frame.AddrPC.Offset;
+    }
+    
+    return i;
 }

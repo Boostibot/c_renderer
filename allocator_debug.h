@@ -48,7 +48,6 @@
 
 
 #include "allocator.h"
-#include "allocator_malloc.h"
 #include "array.h"
 #include "hash_table.h"
 #include "hash.h"
@@ -191,9 +190,8 @@ typedef enum Debug_Allocator_Panic_Reason
 #define LIB_DEBUG_ALLOCATOR_HAS_IMPL
 
 #define DEBUG_ALLOCATOR_MAGIC_NUM8  (u8)  0x55
-#define SOURCE_INFO_FORMAT "( %s : %lld )"
-#define SOURCE_INFO_PRINT(source_info) (source_info).file != NULL ? (source_info).file : "", (source_info).line
 
+#define _CRT_SECURE_NO_WARNINGS
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -301,7 +299,7 @@ EXPORT void debug_allocator_panic_func(Debug_Allocator* allocator, Debug_Allocat
 
     if(allocator->do_printing)
     {
-        LOG_FATAL("MEMORY", "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FORMAT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
+        LOG_FATAL("MEMORY", "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
         debug_allocator_print_alive_allocations(*allocator, 0);
     }
     abort();
@@ -512,7 +510,7 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
     for(isize i = 0; i < alive.size; i++)
     {
         Debug_Allocation curr = alive.data[i];
-        LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld" SOURCE_INFO_FORMAT "\n",
+        LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld" SOURCE_INFO_FMT "\n",
             (lld) i, (lld) curr.size, curr.ptr, (lld) curr.align, SOURCE_INFO_PRINT(curr.allocation_source));
     }
 
@@ -531,7 +529,7 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
     for(isize i = 0; i < dead.size; i++)
     {
         Debug_Allocation curr = dead.data[i];
-        
+
         LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld",
             (lld) i, (lld) curr.size, curr.ptr, curr.align);
 
@@ -541,12 +539,15 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
 
         if(files_match)
         {
-            printf("(%s : %3lld -> %3lld)\n",
+            LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld (%s : %3lld -> %3lld)\n",
+                (lld) i, (lld) curr.size, curr.ptr, curr.align,
                 to_source.file, (lld) from_source.line, (lld) to_source.line);
         }
         else
         {
-            printf("\n         [%-3lld] " SOURCE_INFO_FORMAT " -> " SOURCE_INFO_FORMAT"\n",
+            LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld\n",
+                "[%-3lld] " SOURCE_INFO_FMT " -> " SOURCE_INFO_FMT"\n",
+                (lld) i, (lld) curr.size, curr.ptr, curr.align,
                 i, SOURCE_INFO_PRINT(from_source), SOURCE_INFO_PRINT(to_source));
         }
     }
@@ -711,7 +712,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     if(self->do_printing)
     {
         typedef long long int lld;
-        LOG_INFO("MEMORY", "size %6lld -> %-6lld ptr: 0x%p -> 0x%p align: %lld " SOURCE_INFO_FORMAT "\n",
+        LOG_INFO("MEMORY", "size %6lld -> %-6lld ptr: 0x%p -> 0x%p align: %lld " SOURCE_INFO_FMT "\n",
             (lld) old_size, (lld) new_size, old_ptr, new_ptr, (lld) align, SOURCE_INFO_PRINT(called_from));
     }
 

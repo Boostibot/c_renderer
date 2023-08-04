@@ -2,6 +2,7 @@
 #define LIB_ALLOCATOR
 
 #include "defines.h"
+#include "assert.h"
 
 // This module introduces a framework for dealing with memory and allocation used by every other system.
 // It makes very little assumptions about the use case making it very portable to other projects.
@@ -31,14 +32,12 @@
 // instal the scratch allocator as the default allocator so that all internal functions will also comunicate to us using the fast scratch 
 // allocator.
 
-struct Allocator;
-struct Allocator_Stats;
-struct Source_Info;
+typedef struct Allocator        Allocator;
+typedef struct Allocator_Stats  Allocator_Stats;
+typedef struct Source_Info      Source_Info;
 
-typedef void* (*Allocator_Allocate_Func)(struct Allocator* self, isize new_size, void* old_ptr, isize old_size, isize align, struct Source_Info called_from);
-typedef struct Allocator_Stats (*Allocator_Get_Stats_Func)(struct Allocator* self);
-typedef void (*Allocator_Out_Of_Memory_Func)(struct Allocator* self, isize new_size, void* old_ptr, isize old_size, isize align, struct Source_Info called_from, 
-                const char* format_string, ...);
+typedef void* (*Allocator_Allocate_Func)(Allocator* self, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
+typedef Allocator_Stats (*Allocator_Get_Stats_Func)(Allocator* self);
 
 typedef struct Allocator
 {
@@ -89,9 +88,6 @@ typedef struct Allocator_Swap
 #define DEF_ALIGN 8
 #define SOURCE_INFO() BRACE_INIT(Source_Info){__LINE__, __FILE__, __FUNCTION__}
 
-EXPORT Allocator_Out_Of_Memory_Func allocator_get_out_of_memory();
-EXPORT void allocator_set_out_of_memory(Allocator_Out_Of_Memory_Func new_handler);
-
 //Attempts to call the realloc funtion of the from_allocator. Can return nullptr indicating failiure
 EXPORT void* allocator_try_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
 //Calls the realloc function of from_allocator. If fails calls the currently installed Allocator_Out_Of_Memory_Func (panics). This should be used most of the time
@@ -103,6 +99,14 @@ EXPORT void allocator_deallocate(Allocator* from_allocator, void* old_ptr,isize 
 //Retrieves stats from the allocator. The stats can be only partially filled.
 EXPORT Allocator_Stats allocator_get_stats(Allocator* self);
 
+//Gets called when function requiring to always succeed fails an allocation - most often from allocator_reallocate
+//Unless LIB_ALLOCATOR_NAKED is defined is left unimplemented.
+//If user wannts some more dynamic system potentially enabling local handlers 
+// they can implement it themselves
+EXPORT void allocator_out_of_memory_func(
+    Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
+    Source_Info called_from, const char* format_string, ...);
+
 EXPORT Allocator* allocator_get_default();
 EXPORT Allocator* allocator_get_scratch();
 
@@ -111,54 +115,38 @@ EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_scratch);
 EXPORT Allocator_Swap allocator_push_both(Allocator* new_allocator);
 EXPORT void allocator_pop(Allocator_Swap popped); 
 
-static inline bool  is_power_of_two(isize num);
-static inline bool  is_power_of_two_zero(isize num);
-static inline void* align_forward(void* ptr, isize align_to);
-static inline void* align_backward(void* ptr, isize align_to);
-static inline void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void) bytes; return NULL;}
+EXPORT bool  is_power_of_two(isize num);
+EXPORT bool  is_power_of_two_zero(isize num);
+EXPORT void* align_forward(void* ptr, isize align_to);
+EXPORT void* align_backward(void* ptr, isize align_to);
+EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void) bytes; return NULL;}
 
-#define PAGE_BYTES ((int64_t) 4096)
-#define KIBI_BYTE ((int64_t) 1 << 10)
-#define MEBI_BYTE ((int64_t) 1 << 20)
-#define GIBI_BYTE ((int64_t) 1 << 30)
-#define TEBI_BYTE ((int64_t) 1 << 40)
+#define CACHE_LINE  ((int64_t) 64)
+#define PAGE_BYTES  ((int64_t) 4096)
+#define KIBI_BYTE   ((int64_t) 1 << 10)
+#define MEBI_BYTE   ((int64_t) 1 << 20)
+#define GIBI_BYTE   ((int64_t) 1 << 30)
+#define TEBI_BYTE   ((int64_t) 1 << 40)
 
-static inline bool is_power_of_two_zero(isize num) 
+typedef struct Malloc_Allocator
 {
-    usize n = (usize) num;
-    return ((n & (n-1)) == 0);
-}
+    Allocator allocator;
+    const char* name;
 
-static inline bool is_power_of_two(isize num) 
-{
-    return (num>0 && is_power_of_two_zero(num));
-}
+    isize bytes_allocated;
+    isize max_bytes_allocated;
 
-static inline void* align_forward(void* ptr, isize align_to)
-{
-    assert(is_power_of_two(align_to));
+    isize allocation_count;
+    isize deallocation_count;
+    isize reallocation_count;
+} Malloc_Allocator;
 
-    //this is a little criptic but according to the iternet should be the fastest way of doing this
-    // my benchmarks support this. 
-    //(its about 50% faster than using div_round_up would be - even if we supply log2 alignment and bitshifts)
-    usize mask = (usize) (align_to - 1);
-    isize ptr_num = (isize) ptr;
-    ptr_num += (-ptr_num) & mask;
+EXPORT Malloc_Allocator malloc_allocator_make();
 
-    return (void*) ptr_num;
-}
+EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
+EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_);
 
-static inline void* align_backward(void* ptr, isize align_to)
-{
-    assert(is_power_of_two(align_to));
-
-    usize ualign = (usize) align_to;
-    usize mask = ~(ualign - 1);
-    usize ptr_num = (usize) ptr;
-    ptr_num = ptr_num & mask;
-
-    return (void*) ptr_num;
-}
+extern Malloc_Allocator global_malloc_allocator;
 
 #ifdef _MSC_VER
     #define stack_allocate(size, align) \
@@ -173,13 +161,7 @@ static inline void* align_backward(void* ptr, isize align_to)
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ALLOCATOR_IMPL)) && !defined(LIB_ALLOCATOR_HAS_IMPL)
 #define LIB_ALLOCATOR_HAS_IMPL
 
-    #include <string.h>
-    #include "array.h"
-    #include "allocator_malloc.h"
-
-    #include <stdlib.h>
-    #include <stdarg.h>
-    #include <stdio.h>
+    #include "platform.h"
 
     static Allocator* _mask_allocator_bits(Allocator* self)
     {
@@ -201,10 +183,7 @@ static inline void* align_backward(void* ptr, isize align_to)
     {
         void* obtained = allocator_try_reallocate(from_allocator, new_size, old_ptr, old_size, align, called_from);
         if(obtained == NULL && new_size != 0)
-        {
-            Allocator_Out_Of_Memory_Func out_of_memory = allocator_get_out_of_memory();
-            out_of_memory(from_allocator, new_size, old_ptr, old_size, align, called_from, "");
-        }
+            allocator_out_of_memory_func(from_allocator, new_size, old_ptr, old_size, align, called_from, "");
 
         return obtained;
     }
@@ -226,91 +205,64 @@ static inline void* align_backward(void* ptr, isize align_to)
         return masked->get_stats(masked);
     }
 
-    static void default_out_of_memory_handler(struct Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, struct Source_Info called_from, const char*format_string, ...);
-
-    //@TODO: make thread local
-    THREAD_LOCAL Allocator_Out_Of_Memory_Func out_of_memory_func = default_out_of_memory_handler;
-    THREAD_LOCAL Allocator* default_allocator = (Allocator*) (void*) &global_malloc_allocator;
-    THREAD_LOCAL Allocator* scratch_allocator = (Allocator*) (void*) &global_malloc_allocator;
+    static THREAD_LOCAL Allocator* _default_allocator = &global_malloc_allocator.allocator;
+    static THREAD_LOCAL Allocator* _scratch_allocator = &global_malloc_allocator.allocator;
 
     EXPORT Allocator* allocator_get_default()
     {
-        return default_allocator;
+        return _default_allocator;
     }
     EXPORT Allocator* allocator_get_scratch()
     {
-        return scratch_allocator;
+        return _scratch_allocator;
     }
 
     EXPORT Allocator_Swap allocator_push_default(Allocator* new_default)
     {
         Allocator_Swap out = {0};
-        out.previous_default = default_allocator;
-        default_allocator = new_default;
+        out.previous_default = _default_allocator;
+        _default_allocator = new_default;
         return out;
     }
     EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_scratch)
     {
         Allocator_Swap out = {0};
-        out.previous_scratch = scratch_allocator;
-        scratch_allocator = new_scratch;
+        out.previous_scratch = _scratch_allocator;
+        _scratch_allocator = new_scratch;
         return out;
     }
     EXPORT Allocator_Swap allocator_push_both(Allocator* new_allocator)
     {
         Allocator_Swap out = {0};
-        out.previous_default = default_allocator;
-        out.previous_scratch = scratch_allocator;
-        default_allocator = new_allocator;
-        scratch_allocator = new_allocator;
+        out.previous_default = _default_allocator;
+        out.previous_scratch = _scratch_allocator;
+        _default_allocator = new_allocator;
+        _scratch_allocator = new_allocator;
         return out;
     }
 
     EXPORT void allocator_pop(Allocator_Swap popped)
     {
         if(popped.previous_default != NULL)
-            default_allocator = popped.previous_default;
+            _default_allocator = popped.previous_default;
 
         if(popped.previous_scratch != NULL)
-            scratch_allocator = popped.previous_scratch;
+            _scratch_allocator = popped.previous_scratch;
     }
 
-    static void default_out_of_memory_handler(struct Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, struct Source_Info called_from, 
-                    const char* format_string, ...)
+    #ifdef LIB_ALLOCATOR_NAKED
+    #define _CRT_SECURE_NO_WARNINGS
+    #include <stdlib.h>
+    #include <stdarg.h>
+    #include <stdio.h>
+    EXPORT void allocator_out_of_memory_func(
+        struct Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
+        void* context, Source_Info called_from, 
+        const char* format_string, ...)
     {
-        typedef long long int lli;
-        Allocator_Stats stats = {0};
-        if(allocator != NULL && allocator->get_stats != NULL)
-            stats = allocator_get_stats(allocator);
-        
-        if(stats.type_name == NULL)
-            stats.type_name = "<no type name>";
-
-        if(stats.name == NULL)
-            stats.name = "<no name>";
-
-        fprintf(stderr, 
-            "Allocator %s %s ran out of memory\n"
-            "new_size:    %lld B\n"
-            "old_size:    %lld B\n"
-            "called from: \"%s\" %s() (%lld)\n",
-            stats.type_name, stats.name, 
-            (lli) new_size, (lli) old_size, 
-            called_from.file, called_from.function, (lli) called_from.line
-        );
-
-        fprintf(stderr, 
-            "Allocator_Stats:{\n"
-            "  bytes_allocated: %lld\n"
-            "  max_bytes_allocated: %lld\n"
-            "  allocation_count: %lld\n"
-            "  deallocation_count: %lld\n"
-            "  reallocation_count: %lld\n"
-            "}", 
-            (lli) stats.bytes_allocated, (lli) stats.max_bytes_allocated, 
-            (lli) stats.allocation_count, (lli) stats.deallocation_count, (lli) stats.reallocation_count
-        );
     
+        fprintf(stderr, "Allocator run out of memory! with message:" );
+        
         va_list args;
         va_start(args, format_string);
         vfprintf(stderr, format_string, args);
@@ -318,14 +270,102 @@ static inline void* align_backward(void* ptr, isize align_to)
 
         abort();
     }
-
-    EXPORT Allocator_Out_Of_Memory_Func allocator_get_out_of_memory()
+    #endif // !
+    
+    EXPORT bool is_power_of_two_zero(isize num) 
     {
-        return out_of_memory_func;
+        usize n = (usize) num;
+        return ((n & (n-1)) == 0);
     }
 
-    EXPORT void allocator_set_out_of_memory(Allocator_Out_Of_Memory_Func new_handler)
+    EXPORT bool is_power_of_two(isize num) 
     {
-        out_of_memory_func = new_handler;
+        return (num>0 && is_power_of_two_zero(num));
+    }
+
+    EXPORT void* align_forward(void* ptr, isize align_to)
+    {
+        assert(is_power_of_two(align_to));
+
+        //this is a little criptic but according to the iternet should be the fastest way of doing this
+        // my benchmarks support this. 
+        //(its about 50% faster than using div_round_up would be - even if we supply log2 alignment and bitshifts)
+        usize mask = (usize) (align_to - 1);
+        isize ptr_num = (isize) ptr;
+        ptr_num += (-ptr_num) & mask;
+
+        return (void*) ptr_num;
+    }
+
+    EXPORT void* align_backward(void* ptr, isize align_to)
+    {
+        assert(is_power_of_two(align_to));
+
+        usize ualign = (usize) align_to;
+        usize mask = ~(ualign - 1);
+        usize ptr_num = (usize) ptr;
+        ptr_num = ptr_num & mask;
+
+        return (void*) ptr_num;
+    }
+
+    Malloc_Allocator global_malloc_allocator = {_malloc_allocator_allocate, _malloc_allocator_get_stats, "global_malloc_allocator"};
+
+    EXPORT Malloc_Allocator malloc_allocator_make()
+    {
+        Malloc_Allocator malloc = {0};
+        malloc.allocator.allocate = _malloc_allocator_allocate;
+        malloc.allocator.get_stats = _malloc_allocator_get_stats;
+        return malloc;
+    }
+
+    EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
+    {
+        Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
+        isize size_delta = new_size - old_size;
+        self->bytes_allocated += size_delta;
+
+        void* out_ptr = NULL;
+        if(old_ptr == NULL)
+        {
+            self->allocation_count += 1;
+            out_ptr = platform_heap_reallocate(new_size, NULL, 0, align);
+        }
+        else if(new_size == 0)
+        {
+            self->deallocation_count += 1;
+            platform_heap_reallocate(0, old_ptr, old_size, align);
+            return NULL;                
+        }
+        else
+        {
+            self->reallocation_count += 1;
+            out_ptr = platform_heap_reallocate(new_size, old_ptr, old_size, align);
+        }
+    
+        if(out_ptr == NULL)
+            self->bytes_allocated -= size_delta;
+    
+        if(self->max_bytes_allocated < self->bytes_allocated)
+            self->max_bytes_allocated = self->bytes_allocated;
+
+        return out_ptr;
+    }
+
+    EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_)
+    {
+        Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
+        Allocator_Stats out = {0};
+        out.type_name = "Malloc_Allocator";
+        out.name = self->name;
+        out.parent = NULL;
+        out.is_top_level = true;
+        out.max_bytes_allocated = self->max_bytes_allocated;
+        out.bytes_allocated = self->bytes_allocated;
+        out.allocation_count = self->allocation_count;
+        out.deallocation_count = self->deallocation_count;
+        out.reallocation_count = self->reallocation_count;
+
+        return out;
     }
 #endif

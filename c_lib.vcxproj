@@ -140,8 +140,8 @@
   <ItemGroup>
     <ClInclude Include="allocator.h" />
     <ClInclude Include="allocator_debug.h" />
-    <ClInclude Include="allocator_malloc.h" />
     <ClInclude Include="array.h" />
+    <ClInclude Include="assert.h" />
     <ClInclude Include="handle_table.h" />
     <ClInclude Include="defines.h" />
     <ClInclude Include="format.h" />
@@ -152,7 +152,6 @@
     <ClInclude Include="platform.h" />
     <ClInclude Include="random.h" />
     <ClInclude Include="string.h" />
-    <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />
     <ClInclude Include="_test.h" />
     <ClInclude Include="_test_array.h" />

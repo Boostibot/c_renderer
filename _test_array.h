@@ -108,9 +108,10 @@ static void test_array_stress(f64 max_seconds)
 				CHECK_BOUNDS(offset, 64);
 
 				i64 value = (i64) 1 << offset;
-				TEST(value);
-				ASSERT(arr != NULL && arr->data != NULL);
+				ASSERT(arr != NULL);
 				array_push(arr, value);
+				TEST(value);
+				TEST(arr->data != NULL);
 				break;
 			}
 			
@@ -195,7 +196,7 @@ static void test_array_stress(f64 max_seconds)
 	TEST(mem_before == mem_after);
 }
 
-void test_array(f64 max_seconds)
+static void test_array(f64 max_seconds)
 {
 	test_array_stress(max_seconds);
 }

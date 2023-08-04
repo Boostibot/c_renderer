@@ -45,6 +45,8 @@ void            builder_append(String_Builder* builder, String string); //Append
 String_Builder  builder_from_string(String string); //Allocates a String_Builder from String. The String_Builder needs to be deinit just line any other ???_Array type!
 String_Builder  builder_from_cstring(const char* cstring); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
 String_Builder  builder_from_string_alloc(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
+//int             builder_compare(String_Builder a, String_Builder b);
+//int             builder_is_equal(String_Builder a, String_Builder b);
 
 
 void string_join_into(String_Builder* append_to, const String* strings, isize strings_count, String separator); //Appends all strings in the strings array to append_to

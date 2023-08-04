@@ -1,9 +1,5 @@
 #pragma once
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-
+#include "_test.h"
 #include "random.h"
 
 #define RANDOM_TEST_ITERS		(1000*1000*200)
@@ -11,10 +7,6 @@
 #define RANDOM_HIST_SIZE		(10)
 #define RANDOM_TEST_RANGE_FROM  (-513)
 #define RANDOM_TEST_RANGE_TO	(487)
-
-#ifndef TEST
-	#define TEST(a) while(!(a)) { printf("Test failed! (%s : %d)\n%s\n on line", __FILE__, __LINE__, #a);  abort(); }
-#endif
 
 static void test_swap_any()
 {

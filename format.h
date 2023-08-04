@@ -12,12 +12,18 @@ EXPORT void format_into_sized(String_Builder* append_to, String format, ...);
 
 #define STR_FMT "%.*s"
 #define STR_PRINT(string) (string).size, (string).data
+
+#define SOURCE_INFO_FMT "( %s : %lld )"
+#define SOURCE_INFO_PRINT(source_info) (source_info).file != NULL ? (source_info).file : "", (source_info).line
+
 #endif // !LIB_FORMAT
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_IMPL)) && !defined(LIB_FORMAT_HAS_IMPL)
 #define LIB_FORMAT_HAS_IMPL
 
+    #define _CRT_SECURE_NO_WARNINGS
     #include <stdio.h>
+
     EXPORT void vformat_into(String_Builder* append_to, const char* format, va_list args)
     {
         //an attempt to estimate the needed size so we dont need to call vsnprintf twice
