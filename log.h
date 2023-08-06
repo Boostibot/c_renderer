@@ -49,8 +49,17 @@
 //                             :Some more info
 //                             :10-20
 
+#include "time.h"
 #include "string.h"
 #include <stdarg.h>
+
+#define DO_LOG          true
+#define DO_LOG_INFO     true
+#define DO_LOG_WARN     true
+#define DO_LOG_ERROR    true
+#define DO_LOG_FATAL    true
+#define DO_LOG_DEBUG    true
+#define DO_LOG_TRACE    true
 
 #define LOG_TYPE_INFO    (u8) 0
 #define LOG_TYPE_WARN    (u8) 1
@@ -60,16 +69,17 @@
 #define LOG_TYPE_TRACE   (u8) 5
 //... others can be defined ...
 
-#define LOG(chanel, log_type, format, ...) log_message(string_make(chanel), log_type, format, __VA_ARGS__)
-#define LOG_GROUP_PUSH()                   log_group_push()
-#define LOG_GROUP_POP()                    log_group_pop()
+#define _LOG(chanel, log_type, format, ...) log_message(string_make(chanel), log_type, format, __VA_ARGS__)
+#define LOG(chanel, log_type, format, ...) PP_IF_ELSE(DO_LOG, log_message(string_make(chanel), log_type, format, __VA_ARGS__), 0)
+#define LOG_GROUP_PUSH()                   PP_IF_ELSE(DO_LOG, log_group_push(), 0)
+#define LOG_GROUP_POP()                    PP_IF_ELSE(DO_LOG, log_group_pop(), 0)
 
-#define LOG_INFO(chanel, format, ...) LOG(chanel, LOG_TYPE_INFO, format, __VA_ARGS__)
-#define LOG_WARN(chanel, format, ...) LOG(chanel, LOG_TYPE_WARN, format, __VA_ARGS__)
-#define LOG_ERROR(chanel, format, ...) LOG(chanel, LOG_TYPE_ERROR, format, __VA_ARGS__)
-#define LOG_FATAL(chanel, format, ...) LOG(chanel, LOG_TYPE_FATAL, format, __VA_ARGS__)
-#define LOG_DEBUG(chanel, format, ...) LOG(chanel, LOG_TYPE_DEBUG, format, __VA_ARGS__)
-#define LOG_TRACE(chanel, format, ...) LOG(chanel, LOG_TYPE_TRACE, format, __VA_ARGS__)
+#define LOG_INFO(chanel, format, ...)   PP_IF_ELSE(DO_LOG_INFO, LOG(chanel, LOG_TYPE_INFO, format, __VA_ARGS__), 0)
+#define LOG_WARN(chanel, format, ...)   PP_IF_ELSE(DO_LOG_WARN, LOG(chanel, LOG_TYPE_WARN, format, __VA_ARGS__), 0)
+#define LOG_ERROR(chanel, format, ...)  PP_IF_ELSE(DO_LOG_ERROR, LOG(chanel, LOG_TYPE_ERROR, format, __VA_ARGS__), 0)
+#define LOG_FATAL(chanel, format, ...)  PP_IF_ELSE(DO_LOG_FATAL, LOG(chanel, LOG_TYPE_FATAL, format, __VA_ARGS__), 0)
+#define LOG_DEBUG(chanel, format, ...)  PP_IF_ELSE(DO_LOG_DEBUG, LOG(chanel, LOG_TYPE_DEBUG, format, __VA_ARGS__), 0)
+#define LOG_TRACE(chanel, format, ...)  PP_IF_ELSE(DO_LOG_TRACE, LOG(chanel, LOG_TYPE_TRACE, format, __VA_ARGS__), 0)
 
 typedef struct Log_Chanel_Entry Log_Chanel_Entry;
 typedef struct Log_System_Options Log_System_Options;
@@ -93,8 +103,7 @@ EXPORT void log_system_options_changed();
 
 EXPORT void log_system_get_chanels(String_Array* chanels);
 
-//@TODO: add log allocators
-EXPORT void log_system_init(); //explicitly initializes log
+EXPORT void log_system_init(Allocator* default_allocator, Allocator* scratch_allocator); //explicitly initializes log
 EXPORT void log_system_deinit();
 
 typedef struct Log_System_Options {
@@ -159,7 +168,6 @@ EXPORT String_Builder         log_encode(Log_Chanel_Entry_Array array);
 #include "hash.h"
 
 #define _LOG_SYSTEM_EXTENSION STRING_LIT("txt")
-#define _LOG_SYSTEM_CONSOLE_PRINT(cstring) printf(cstring)
 #define _LOG_FILE_SLOTS 2
 #define _LOG_DEF_BUFFER_FLUSH_SIZE 0
 #define _LOG_DEF_FUSH_EVERY_S 0.02
@@ -190,6 +198,8 @@ DEFINE_ARRAY_TYPE(Log_Chanel_State, Log_Chanel_State_Array);
 
 typedef struct 
 {
+    Allocator* default_allocator;
+    Allocator* scratch_allocator;
     Log_System_Options system_options;
     u64 creation_epoch_time;
     i32 group_depth;
@@ -225,7 +235,7 @@ EXPORT void vlog_process_message(Log_Chanel_Entry* save_into, String chanel, u8 
     save_into->group_depth = log_group_depth();
     
     vformat_into(&save_into->message, format, args);
-    save_into->chanel = builder_from_string(chanel);
+    builder_append(&save_into->chanel, chanel);
 
     //assert(false && "add chanel handling here!");
 }
@@ -233,11 +243,11 @@ EXPORT void vlog_process_message(Log_Chanel_Entry* save_into, String chanel, u8 
 INTERNAL void _log_system_create_log_name(String_Builder* into, u64 epoch_time, String chanel, String extension)
 {
     Platform_Calendar_Time calendar = platform_epoch_time_to_calendar_time(epoch_time);
-    format_into(into, "log_"STR_FMT"_%04d-%02d-%02d_%02d-%02d-%02d_%03d." STR_FMT, 
-        STR_PRINT(chanel),
+    const char* space = chanel.size > 0 ? "_" : "";
+    format_into(into, "log_"STR_FMT"%s%04d-%02d-%02d_%02d-%02d-%02d." STR_FMT, 
+        STR_PRINT(chanel), space,
         (int) calendar.year, (int) calendar.month, (int) calendar.day, 
-        (int) calendar.hour, (int) calendar.minute, (int) calendar.second,
-        (int) calendar.millisecond, 
+        (int) calendar.hour, (int) calendar.minute, (int) calendar.second, 
         STR_PRINT(extension));
 }
 
@@ -251,16 +261,35 @@ EXPORT void string_builder_array_deinit(String_Builder_Array* array)
 
 INTERNAL void _log_chanel_state_init(Log_Chanel_State* chanel_state, String chanel_name);
 
-EXPORT void log_system_init()
+EXPORT void log_system_init(Allocator* default_allocator, Allocator* scratch_allocator)
 {
     if(global_log_state.is_init == false)
     {
-        u64 now = platform_local_epoch_time();
+        Log_System_Options options = {0};
+        i64 now_universal1 = platform_universal_epoch_time();
+        i64 now_local = platform_local_epoch_time();
+        i64 now_universal2 = platform_universal_epoch_time();
+
+        i64 now_universal = (now_universal1 + now_universal2) / 2;
+        i64 delta = now_local - now_universal;
+
+        i64 startup_universal = platform_startup_epoch_time();
+        i64 startup_local = startup_universal + delta;
+
         global_log_state.is_init = true;
+        global_log_state.default_allocator = default_allocator;
+        global_log_state.scratch_allocator = scratch_allocator;
         global_log_state.last_index = -1;
-        global_log_state.creation_epoch_time = now;
+        global_log_state.creation_epoch_time = startup_local;
         global_log_state.central_chanel_index = global_log_state.chanels.size;
         global_log_state.open_files_max = _LOG_FILE_SLOTS;
+        array_init(&global_log_state.open_files, global_log_state.default_allocator);
+        array_init(&global_log_state.open_file_names, global_log_state.default_allocator);
+        array_init(&global_log_state.chanels, global_log_state.default_allocator);
+        array_init(&options.file_directory_path, global_log_state.default_allocator);
+        array_init(&options.file_filename, global_log_state.default_allocator);
+        hash_table64_init(&global_log_state.chanel_hash, global_log_state.default_allocator);
+
         array_resize(&global_log_state.open_files, global_log_state.open_files_max);
         array_resize(&global_log_state.open_file_names, global_log_state.open_files_max);
 
@@ -268,13 +297,13 @@ EXPORT void log_system_init()
         _log_chanel_state_init(&state, STRING_LIT(""));
         array_push(&global_log_state.chanels, state);
         
-        Log_System_Options options = {0};
         options.buffer_size = _LOG_DEF_BUFFER_FLUSH_SIZE;
         options.flush_every_s = _LOG_DEF_FUSH_EVERY_S;
         options.console_takes_log_types = 0xFFFFFFFF;
         options.file_takes_log_types = 0xFFFFFFFF;
         
-        options.file_directory_path = builder_from_cstring("logs/");
+        builder_append(&options.file_directory_path, STRING_LIT("logs/"));
+
         array_copy(&options.file_filename, state.file_name);
         global_log_state.system_options = options;
     }
@@ -292,7 +321,6 @@ EXPORT void log_system_deinit()
     }
 
     Log_System_Options* options = &global_log_state.system_options;
-    
 
     //file_directory_path
     array_deinit(&global_log_state.chanels);
@@ -315,28 +343,27 @@ EXPORT void log_system_deinit()
 
     Log_System_Module_State null = {0};
     global_log_state = null;
-    //ASSERT(false && "@TODO properly");
 }
 
 EXPORT void log_group_push()
 {
-    log_system_init();
+    if(global_log_state.is_init == false)
+        return;
     global_log_state.group_depth += 1;
 }
 EXPORT void log_group_pop()
 {
-    log_system_init();
+    if(global_log_state.is_init == false)
+        return;
     global_log_state.group_depth -= 1;
 }
 EXPORT i32  log_group_depth()
 {
-    log_system_init();
     return global_log_state.group_depth;
 }
 
 EXPORT Log_System_Options* log_system_options()
 {
-    log_system_init();
     return &global_log_state.system_options;
 }
 
@@ -400,14 +427,17 @@ INTERNAL void _log_chanel_state_init(Log_Chanel_State* chanel_state, String chan
     {
         chanel_state->is_init = true;
 
+        array_init(&chanel_state->buffer, global_log_state.default_allocator);
+        array_init(&chanel_state->description, global_log_state.default_allocator);
+        array_init(&chanel_state->file_name, global_log_state.default_allocator);
+        array_init(&chanel_state->name, global_log_state.default_allocator);
+
         chanel_state->buffer_flush_size = global_log_state.system_options.buffer_size;
         chanel_state->flush_every_s = global_log_state.system_options.flush_every_s;
         chanel_state->creation_epoch_time = platform_local_epoch_time();
-        array_clear(&chanel_state->name);
-        array_clear(&chanel_state->file_name);
 
         builder_append(&chanel_state->name, chanel_name);
-        _log_system_create_log_name(&chanel_state->file_name, chanel_state->creation_epoch_time, chanel_name, _LOG_SYSTEM_EXTENSION);
+        _log_system_create_log_name(&chanel_state->file_name, global_log_state.creation_epoch_time, chanel_name, _LOG_SYSTEM_EXTENSION);
         _log_chanel_set_gives_to(chanel_state);
 
         array_grow(&chanel_state->buffer, chanel_state->buffer_flush_size);
@@ -480,7 +510,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
 
         String_Builder local_path = {0};
         String dir_path = builder_string(global_log_state.system_options.file_directory_path);
-        array_init_backed(&local_path, allocator_get_scratch(), 128);
+        array_init_backed(&local_path, global_log_state.scratch_allocator, 256);
         builder_append(&local_path, dir_path);
         builder_append(&local_path, STRING_LIT("/"));
         builder_append(&local_path, chanel_file);
@@ -488,18 +518,22 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
         platform_directory_create(dir_path.data);
         file = fopen(local_path.data, "ab");
 
-        ASSERT(file != NULL);
+        assert(file != NULL);
         bool ok = setvbuf(file, NULL, _IONBF, 0) == 0;
-        ASSERT(ok && "disabeling of buffering must work!");
+        assert(ok && "disabeling of buffering must work!");
 
         global_log_state.open_files.data[file_index] = file;
-        array_assign(&global_log_state.open_file_names.data[file_index], chanel_file.data, chanel_file.size);
+        String_Builder* open_file_name = &global_log_state.open_file_names.data[file_index];
+        //if wasnt init inits it to allocator
+        if(open_file_name->allocator == NULL)
+            array_init(open_file_name, global_log_state.default_allocator);
+        array_assign(open_file_name, chanel_file.data, chanel_file.size);
         array_deinit(&local_path);
     }
 
     isize written = fwrite(chanel_state->buffer.data, 1, chanel_state->buffer.size, global_log_state.open_files.data[file_index]);
     fflush(global_log_state.open_files.data[file_index]); //just to be sure
-    ASSERT(written == chanel_state->buffer.size && "no posix partial write BS");
+    assert(written == chanel_state->buffer.size && "no posix partial write BS");
     array_clear(&chanel_state->buffer);
 }
 
@@ -534,9 +568,24 @@ INTERNAL void _log_print_to_chanel(Log_Chanel_State* chanel_state, String messag
 
 EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
 {
-    String_Builder header_string = {0};
-    array_init_backed(&header_string, allocator_get_scratch(), 128);
+    if(global_log_state.is_init == false)
+        return;
+
+    isize size_before = append_to->size;
+    String group_separator = string_make(".   ");
+    String message_string = builder_string(entry.message);
     
+    //Skip all trailing newlines
+    isize message_size = message_string.size;
+    for(; message_size > 0; message_size --)
+    {
+        if(message_string.data[message_size - 1] != '\n')
+            break;
+    }
+
+    assert(message_size <= message_string.size);
+    array_grow(append_to, size_before + message_size + 50);
+
     const char* log_type_str = NULL;
     switch(entry.log_type)
     {
@@ -551,32 +600,17 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
     Platform_Calendar_Time c = platform_epoch_time_to_calendar_time(entry.epoch_time);
     if(log_type_str != NULL)
     {
-        format_into(&header_string, "[%02d:%02d:%02d %03d %-5s] {%-5s} ", 
+        format_into(append_to, "[%02d:%02d:%02d %03d %-5s] {%-5s} ", 
             (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, log_type_str, builder_cstring(entry.chanel));
     }
     else
     {
-        format_into(&header_string, "[%02d:%02d:%02d %03d %-5d] {%-5s} ", 
+        format_into(append_to, "[%02d:%02d:%02d %03d %-5d] {%-5s} ", 
             (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, (int) entry.log_type, builder_cstring(entry.chanel));
     }
     
-    ASSERT(header_string.size != 0);
-
-    String group_separator = string_make(".  ");
-    String message_string = builder_string(entry.message);
-    
-    //Skip all trailing newlines
-    isize message_size = message_string.size;
-    for(; message_size > 0; message_size --)
-    {
-        if(message_string.data[message_size - 1] != '\n')
-            break;
-    }
-
-    ASSERT(message_size <= message_string.size);
-
-    isize size_before = append_to->size;
-    array_grow(append_to, size_before + message_string.size + 10);
+    isize size_after_header = append_to->size;
+    isize header_size = size_after_header - size_before;
 
     isize curr_line_pos = 0;
     bool run = true;
@@ -592,22 +626,17 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
             run = false;
         }
         
-        ASSERT(curr_line_pos < message_size);
-        ASSERT(next_line_pos <= message_size);
+        assert(curr_line_pos < message_size);
+        assert(next_line_pos <= message_size);
 
         String curr_line = string_range(message_string, curr_line_pos, next_line_pos);
 
-        //if is first line insert header
-        if(curr_line_pos == 0)
-        {
-            builder_append(append_to, builder_string(header_string));
-        }
         //else insert header-sized ammount of spaces
-        else
+        if(curr_line_pos != 0)
         {
             isize before_padding = append_to->size;
-            array_resize(append_to, before_padding + header_string.size);
-            memset(append_to->data + before_padding, ' ', header_string.size);
+            array_resize(append_to, before_padding + header_size);
+            memset(append_to->data + before_padding, ' ', header_size);
         }
 
         //insert n times group separator
@@ -615,26 +644,27 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
             builder_append(append_to, group_separator);
         
         //array_push(append_to, ':');
-        builder_append(append_to, STRING_LIT(": "));
+        builder_append(append_to, STRING_LIT(":"));
         builder_append(append_to, curr_line);
         array_push(append_to, '\n');
 
         curr_line_pos = next_line_pos + 1;
     }
-
-    array_deinit(&header_string);
 }
 
 EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
 {
-    ASSERT(log_type < 64);
-    log_system_init();
+    if(global_log_state.is_init == false)
+        return;
+
+    assert(log_type < 64);
+    //log_system_init();
     
-    Allocator* scratch_alloc = allocator_get_scratch();
+    Allocator* scratch_alloc = global_log_state.scratch_allocator;
     String_Builder message = {0};
     Log_Chanel_Entry chanel_entry = {0};
     array_init_backed(&message, scratch_alloc, 1024);
-    array_init_backed(&chanel_entry.message, scratch_alloc, 128);
+    array_init_backed(&chanel_entry.message, scratch_alloc, 256);
     array_init_backed(&chanel_entry.chanel, scratch_alloc, 32);
 
     va_list args;
@@ -660,7 +690,7 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
        //&& chanel_state->gives_to_console
         )
     {
-        _LOG_SYSTEM_CONSOLE_PRINT(message.data);
+        fwrite(message.data, 1, message.size, stdout);
     }
     
     if(opts->file_use_filter == false 
@@ -669,7 +699,7 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
         )
     {
         Log_Chanel_State* central_state = &state->chanels.data[state->central_chanel_index];
-        ASSERT(central_state->is_init == true);
+        assert(central_state->is_init == true);
         //_log_chanel_state_init(central_state, STRING_LIT(""));
         _log_print_to_chanel(central_state, builder_string(message));
     }
@@ -679,7 +709,8 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     array_deinit(&chanel_entry.chanel);
 }
 
-EXPORT void assertion_reporter_default_func(const char* expression, const char* message, const char* file, int line)
+//@TODO: move into main
+EXPORT void assertion_report(const char* expression, const char* message, const char* file, int line)
 {
     Source_Info info = {0};
     info.file = file;
@@ -691,7 +722,8 @@ EXPORT void assertion_reporter_default_func(const char* expression, const char* 
     log_flush_all();
 }
 
-EXPORT void allocator_out_of_memory_func(
+//@TODO: move into main
+EXPORT void allocator_out_of_memory(
     Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
     Source_Info called_from, 
     const char* format_string, ...)
@@ -740,7 +772,8 @@ EXPORT void allocator_out_of_memory_func(
     );
 
     log_flush_all();
-    abort();
+    platform_trap(); 
+    platform_abort();
 }
 
 #endif

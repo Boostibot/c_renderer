@@ -8,6 +8,9 @@
 // Virtual memory
 //=========================================
 
+void platform_init();
+void platform_deinit();
+
 typedef enum Platform_Virtual_Allocation
 {
     PLATFORM_VIRTUAL_ALLOC_RESERVE, //Reserves adress space so that no other allocation can be made there
@@ -69,10 +72,10 @@ inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64
 
 typedef struct Platform_Calendar_Time
 {
-    int32_t year;        // any
+    int32_t year;       // any
     int8_t month;       // [0, 12)
-    int8_t day_of_week; // [0, 7)
-    int8_t day;// [0, 31] !note the end bracket!
+    int8_t day_of_week; // [0, 7) where 0 is sunday
+    int8_t day;         // [0, 31] !note the end bracket!
     
     int8_t hour;        // [0, 24)
     int8_t minute;      // [0, 60)
@@ -88,12 +91,14 @@ int64_t platform_universal_epoch_time();
 //returns the number of micro-seconds since the start of the epoch
 // with respect to local timezones/daylight saving times and other
 int64_t platform_local_epoch_time();     
+//returns the number of micro-seconds between the epoch and the call to platform_init
+int64_t platform_startup_epoch_time(); 
 
 Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_usec);
 int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_time);
 
 int64_t platform_perf_counter();            //returns the current value of performance counter
-int64_t platform_perf_counter_base();       //returns the value of performence conuter at the first time this function was called which is taken as the startup time
+int64_t platform_perf_counter_startup();    //returns the value of performence conuter at the first time this function was called which is taken as the startup time
 int64_t platform_perf_counter_frequency();  //returns the frequency of the performance counter
 double  platform_perf_counter_frequency_d(); //returns the frequency of the performance counter as double (saves expensive integer to float cast)
 
@@ -195,32 +200,70 @@ typedef struct {
     int64_t line;       //0 if not supported;
 } Platform_Stack_Trace_Entry;
 
+//Stops the debugger at the call site
+#define platform_trap() 
+void platform_abort();
+void platform_terminate();
+
 //Captures the current stack frame pointers. 
 //Saves up to stack_size pointres into the stack array and returns the number of
 //stack frames captures. If the returned number is exactly stack_size a bigger buffer
 //MIGHT be reuqired.
 //Skips first skip_count stack pointers. Even with skip_count = 0 this function should not be
 //included within the stack
-int64_t platform_debug_capture_stack(void** stack, int64_t stack_size, int64_t skip_count);
+int64_t platform_capture_call_stack(void** stack, int64_t stack_size, int64_t skip_count);
 
 //Translates captured stack into helpful entries. Operates on short fixed width strings to guarantee this function
 //will never fail yet translate all needed stack frames. This function should never allocate anything.
-void platform_debug_translate_stack(Platform_Stack_Trace_Entry* tanslated, const void** stack, int64_t stack_size);
+void platform_translate_call_stack(Platform_Stack_Trace_Entry* tanslated, const void** stack, int64_t stack_size);
+
+typedef enum Platform_Sandox_Error Platform_Sandox_Error;
 
 //Launches the sandboxed_func inside a sendbox protecting the outside environment 
 //from any exceptions that might occur inside sandboxed func this includes hardware
-//exceptions.
-void platform_debug_sandbox(
+//exceptions. 
+//If an exception occurs calls error_func (if not NULL) with the error_code signaling the exception.
+//after error_func returns gracefully exits and returns the same error_code as passed into error_func.
+//On no error returns 0
+Platform_Sandox_Error platform_exception_sandbox(
     void (*sandboxed_func)(void* context),   
     void* sandbox_context,
-    void (*error_func)(void* context, int64_t error_code),   
+    void (*error_func)(void* context, Platform_Sandox_Error error_code),   
     void* error_context
 );
 
+typedef enum {
+    PLATFORM_EXCEPTION_NONE = 0,
+    PLATFORM_EXCEPTION_ACCESS_VIOLATION,
+    PLATFORM_EXCEPTION_DATATYPE_MISALIGNMENT,
+    PLATFORM_EXCEPTION_FLOAT_DENORMAL_OPERAND,
+    PLATFORM_EXCEPTION_FLOAT_DIVIDE_BY_ZERO,
+    PLATFORM_EXCEPTION_FLOAT_INEXACT_RESULT,
+    PLATFORM_EXCEPTION_FLOAT_INVALID_OPERATION,
+    PLATFORM_EXCEPTION_FLOAT_OVERFLOW,
+    PLATFORM_EXCEPTION_FLOAT_UNDERFLOW,
+    PLATFORM_EXCEPTION_FLOAT_OTHER,
+    PLATFORM_EXCEPTION_PAGE_ERROR,
+    PLATFORM_EXCEPTION_INT_DIVIDE_BY_ZERO,
+    PLATFORM_EXCEPTION_INT_OVERFLOW,
+    PLATFORM_EXCEPTION_ILLEGAL_INSTRUCTION,
+    PLATFORM_EXCEPTION_PRIVILAGED_INSTRUCTION,
+    PLATFORM_EXCEPTION_BREAKPOINT,
+    PLATFORM_EXCEPTION_BREAKPOINT_SINGLE_STEP,
+    PLATFORM_EXCEPTION_STACK_OVERFLOW, //cannot be caught inside error_func because of obvious reasons
+    PLATFORM_EXCEPTION_ABORT,
+    PLATFORM_EXCEPTION_TERMINATE = 0x0001000,
+    PLATFORM_EXCEPTION_OTHER = 0x0001001,
+} Platform_Sandox_Error; 
 
 // =================== INLINE IMPLEMENTATION ============================
 #if defined(_MSC_VER)
+    #define _CRT_SECURE_NO_WARNINGS
+    #include <stdio.h>
     #include <intrin.h>
+    #undef platform_trap
+    #define platform_trap() __debugbreak() 
+
     inline static void platform_compiler_memory_fence() 
     {
         _ReadWriteBarrier();

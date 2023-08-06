@@ -19,7 +19,7 @@
 static inline int64_t clock_ns()
 {
     int64_t freq = platform_perf_counter_frequency();
-    int64_t counter = platform_perf_counter() - platform_perf_counter_base();
+    int64_t counter = platform_perf_counter() - platform_perf_counter_startup();
 
     int64_t sec_to_nanosec = 1000000000;
     //We assume _perf_counter_base is set to some reasonable thing so this will not overflow
@@ -31,7 +31,7 @@ static inline int64_t clock_ns()
 static inline double clock_s()
 {
     double freq = platform_perf_counter_frequency_d();
-    double counter = (double) (platform_perf_counter() - platform_perf_counter_base());
+    double counter = (double) (platform_perf_counter() - platform_perf_counter_startup());
     return counter / freq;
 }
 

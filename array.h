@@ -84,6 +84,9 @@ EXPORT void _array_clear(void* array, isize item_size);
 #define array_init(darray_ptr, allocator) \
     _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, NULL, 0)
 
+#define array_init(darray_ptr, allocator) \
+    _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, NULL, 0)
+
 #ifndef LIB_MEM_DEBUG
 #define array_init_backed(darray_ptr, allocator, backed_elements_count) \
     char PP_CONCAT(_backing_buffer_, __LINE__)[backed_elements_count * sizeof *(darray_ptr)->data]; \
@@ -186,6 +189,9 @@ EXPORT void _array_set_backed(void* array, isize item_size, bool to)
         base->allocator = (Allocator*) ((usize) base->allocator & ~(usize)3);
 }
 
+//@TODO: make separate for normal and backed
+//@TODO: make it so specifying the allocator is necessary
+//@TODO: make allocator call more compact
 EXPORT void _array_init(void* array, isize item_size, Allocator* allocator, void* backing, int64_t backing_size)
 {
     u8_Array null = {0};

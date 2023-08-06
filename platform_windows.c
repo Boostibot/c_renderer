@@ -126,7 +126,7 @@ int64_t platform_perf_counter()
     return ticks.QuadPart;
 }
 
-int64_t platform_perf_counter_base()
+int64_t platform_perf_counter_startup()
 {
     static int64_t base = 0;
     if(base == 0)
@@ -214,6 +214,16 @@ int64_t platform_universal_epoch_time()
     return epoch_time;
 }
 
+int64_t _platform_startup_time = 0;
+
+int64_t platform_startup_epoch_time()
+{
+    if(_platform_startup_time == 0)
+        _platform_startup_time = platform_universal_epoch_time();
+
+    return _platform_startup_time;
+}
+
 int64_t platform_local_epoch_time()
 {
     FILETIME filetime;
@@ -240,13 +250,16 @@ Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_u
     bool okay = FileTimeToSystemTime(&filetime, &systime);
     assert(okay);
 
+
+    #define MODULO(x, N) ((x) % (N) + (N)) % N
+
     Platform_Calendar_Time time = {0};
     time.day = systime.wDay;
-    time.day_of_week = systime.wDayOfWeek - 1;
+    time.day_of_week = systime.wDayOfWeek;
     time.hour = systime.wHour;
     time.millisecond = systime.wMilliseconds;
     time.minute = systime.wMinute;
-    time.month = systime.wMonth;
+    time.month = systime.wMonth - 1;
     time.second = (int8_t) systime.wSecond;
     time.year = systime.wYear;
 
@@ -267,7 +280,7 @@ Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_u
     assert(0 <= time.hour && time.hour < 24);
     assert(0 <= time.minute && time.minute < 60);
     assert(0 <= time.second && time.second < 60);
-    assert(0 <= time.millisecond && time.millisecond < 999);
+    assert(0 <= time.millisecond && time.millisecond < 1000);
     assert(0 <= time.day_of_week && time.day_of_week < 7);
     //assert(0 <= time.day_of_year && time.day_of_year <= 365);
     return time;
@@ -277,7 +290,7 @@ int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_tim
 {
     SYSTEMTIME systime = {0};
     systime.wDay = calendar_time.day;
-    systime.wDayOfWeek = calendar_time.day_of_week + 1;
+    systime.wDayOfWeek = calendar_time.day_of_week;
     systime.wHour = calendar_time.hour;
     systime.wMilliseconds = calendar_time.millisecond;
     systime.wMinute = calendar_time.minute;
@@ -857,7 +870,7 @@ Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_
 #include <imagehlp.h>
 #pragma pack( pop, before_imagehlp )
 
-int64_t platform_debug_capture_stack(void** stack, int64_t stack_size, int64_t skip_count)
+int64_t platform_capture_call_stack(void** stack, int64_t stack_size, int64_t skip_count)
 {
     int64_t captured = CaptureStackBackTrace((DWORD) skip_count + 1, stack_size, stack, NULL);
     return captured;
@@ -901,8 +914,8 @@ static void _platform_stack_trace_init(const char* search_path)
         HMODULE module_handle = module_handles[i];
         MODULEINFO module_info = {0};
         GetModuleInformation(stack_trace_process, module_handle, &module_info, sizeof(module_info));
-        GetModuleFileNameEx(stack_trace_process, module_handle, module_filename, sizeof(module_filename));
-        GetModuleBaseName(stack_trace_process, module_handle, module_name, sizeof(module_name));
+        GetModuleFileNameExW(stack_trace_process, module_handle, module_filename, sizeof(module_filename));
+        GetModuleBaseNameW(stack_trace_process, module_handle, module_name, sizeof(module_name));
         
         bool load_state = SymLoadModuleExW(stack_trace_process, 0, module_filename, module_name, (DWORD64)module_info.lpBaseOfDll, (DWORD) module_info.SizeOfImage, 0, 0);
         if(load_state == false)
@@ -920,7 +933,7 @@ static void _platform_stack_trace_deinit()
     SymCleanup(stack_trace_process);
 }
 
-void platform_debug_translate_stack(Platform_Stack_Trace_Entry* tanslated, const void** stack, int64_t stack_size)
+void platform_translate_call_stack(Platform_Stack_Trace_Entry* tanslated, const void** stack, int64_t stack_size)
 {
     _platform_stack_trace_init("");
     char symbol_info_data[sizeof(SYMBOL_INFO) + MAX_NAME_LEN + 1] = {0};
@@ -1032,4 +1045,150 @@ static int64_t _platform_stack_trace_walk(CONTEXT context, HANDLE process, HANDL
     }
     
     return i;
+}
+
+typedef void (*Sandbox_Error_Func)(void* context, int64_t error_code);
+
+__declspec(thread) Sandbox_Error_Func sandbox_error_func;
+__declspec(thread) void* sandbox_error_context;
+__declspec(thread) Platform_Sandox_Error sanbox_error_code;
+__declspec(thread) bool sandbox_is_signal_handler_set = false;
+
+void platform_abort()
+{
+    RaiseException(PLATFORM_EXCEPTION_ABORT, 0, 0, NULL);
+}
+
+void platform_terminate()
+{
+    RaiseException(PLATFORM_EXCEPTION_TERMINATE, 0, 0, NULL);
+}
+
+LONG WINAPI _sanbox_exception_filter(EXCEPTION_POINTERS * ExceptionInfo)
+{
+    Platform_Sandox_Error error = PLATFORM_EXCEPTION_NONE;
+    switch(ExceptionInfo->ExceptionRecord->ExceptionCode)
+    {
+        case EXCEPTION_ACCESS_VIOLATION:
+            error = PLATFORM_EXCEPTION_ACCESS_VIOLATION;
+            break;
+        case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+            error = PLATFORM_EXCEPTION_ACCESS_VIOLATION;
+            break;
+        case EXCEPTION_BREAKPOINT:
+            error = PLATFORM_EXCEPTION_BREAKPOINT;
+            break;
+        case EXCEPTION_DATATYPE_MISALIGNMENT:
+            error = PLATFORM_EXCEPTION_DATATYPE_MISALIGNMENT;
+            break;
+        case EXCEPTION_FLT_DENORMAL_OPERAND:
+            error = PLATFORM_EXCEPTION_FLOAT_DENORMAL_OPERAND;
+            break;
+        case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+            error = PLATFORM_EXCEPTION_FLOAT_DIVIDE_BY_ZERO;
+            break;
+        case EXCEPTION_FLT_INEXACT_RESULT:
+            error = PLATFORM_EXCEPTION_FLOAT_INEXACT_RESULT;
+            break;
+        case EXCEPTION_FLT_INVALID_OPERATION:
+            error = PLATFORM_EXCEPTION_FLOAT_INVALID_OPERATION;
+            break;
+        case EXCEPTION_FLT_OVERFLOW:
+            error = PLATFORM_EXCEPTION_FLOAT_OVERFLOW;
+            break;
+        case EXCEPTION_FLT_STACK_CHECK:
+            error = PLATFORM_EXCEPTION_STACK_OVERFLOW;
+            break;
+        case EXCEPTION_FLT_UNDERFLOW:
+            error = PLATFORM_EXCEPTION_FLOAT_UNDERFLOW;
+            break;
+        case EXCEPTION_ILLEGAL_INSTRUCTION:
+            error = PLATFORM_EXCEPTION_ILLEGAL_INSTRUCTION;
+            break;
+        case EXCEPTION_IN_PAGE_ERROR:
+            error = PLATFORM_EXCEPTION_PAGE_ERROR;
+            break;
+        case EXCEPTION_INT_DIVIDE_BY_ZERO:
+            error = PLATFORM_EXCEPTION_INT_DIVIDE_BY_ZERO;
+            break;
+        case EXCEPTION_INT_OVERFLOW:
+            error = PLATFORM_EXCEPTION_INT_OVERFLOW;
+            break;
+        case EXCEPTION_INVALID_DISPOSITION:
+            error = PLATFORM_EXCEPTION_OTHER;
+            break;
+        case EXCEPTION_NONCONTINUABLE_EXCEPTION:
+            error = PLATFORM_EXCEPTION_OTHER;
+            break;
+        case EXCEPTION_PRIV_INSTRUCTION:
+            error = PLATFORM_EXCEPTION_PRIVILAGED_INSTRUCTION;
+            break;
+        case EXCEPTION_SINGLE_STEP:
+            error = PLATFORM_EXCEPTION_BREAKPOINT_SINGLE_STEP;
+            break;
+        case EXCEPTION_STACK_OVERFLOW:
+            error = PLATFORM_EXCEPTION_STACK_OVERFLOW;
+            break;
+        case PLATFORM_EXCEPTION_ABORT:
+            error = PLATFORM_EXCEPTION_ABORT;
+            break;
+        case PLATFORM_EXCEPTION_TERMINATE:
+            error = PLATFORM_EXCEPTION_TERMINATE;
+            break;
+        default:
+            error = PLATFORM_EXCEPTION_OTHER;
+            break;
+    }
+
+    sanbox_error_code = error;
+    if(sandbox_error_func != NULL && error != PLATFORM_EXCEPTION_STACK_OVERFLOW)
+        sandbox_error_func(sandbox_error_context, sanbox_error_code);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+Platform_Sandox_Error platform_exception_sandbox(
+    void (*sandboxed_func)(void* context),   
+    void* sandbox_context,
+    void (*error_func)(void* context, Platform_Sandox_Error error_code),   
+    void* error_context
+)
+{
+    if(sandbox_is_signal_handler_set == false)
+    {
+        sandbox_is_signal_handler_set = true;
+        SetUnhandledExceptionFilter(_sanbox_exception_filter);
+        AddVectoredExceptionHandler(1, _sanbox_exception_filter);
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOALIGNMENTFAULTEXCEPT | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    }
+        
+    Sandbox_Error_Func prev_func = sandbox_error_func;
+    void* prev_context = sandbox_error_context;
+    
+    sandbox_error_func = error_func;
+    sandbox_error_context = error_context;
+    __try 
+    { 
+        sandboxed_func(sandbox_context);
+    } 
+    __except(1)
+    { 
+        sandbox_error_func = prev_func;
+        sandbox_error_context = prev_context;
+        return sanbox_error_code;
+    }
+
+    sandbox_error_func = prev_func;
+    sandbox_error_context = prev_context;
+    return 0;
+}
+
+
+void platform_init()
+{
+    platform_perf_counter();
+    platform_startup_epoch_time();
+}
+void platform_deinit()
+{
+    
 }

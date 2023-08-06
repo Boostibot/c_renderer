@@ -79,11 +79,11 @@ typedef struct Source_Info
     const char* function;
 } Source_Info;
 
-typedef struct Allocator_Swap
+typedef struct Allocator_Backup
 {
     Allocator* previous_default;
     Allocator* previous_scratch;
-} Allocator_Swap;
+} Allocator_Backup;
 
 #define DEF_ALIGN 8
 #define SOURCE_INFO() BRACE_INIT(Source_Info){__LINE__, __FILE__, __FUNCTION__}
@@ -103,17 +103,17 @@ EXPORT Allocator_Stats allocator_get_stats(Allocator* self);
 //Unless LIB_ALLOCATOR_NAKED is defined is left unimplemented.
 //If user wannts some more dynamic system potentially enabling local handlers 
 // they can implement it themselves
-EXPORT void allocator_out_of_memory_func(
+EXPORT void allocator_out_of_memory(
     Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
     Source_Info called_from, const char* format_string, ...);
 
 EXPORT Allocator* allocator_get_default();
 EXPORT Allocator* allocator_get_scratch();
 
-EXPORT Allocator_Swap allocator_push_default(Allocator* new_default);
-EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_scratch);
-EXPORT Allocator_Swap allocator_push_both(Allocator* new_allocator);
-EXPORT void allocator_pop(Allocator_Swap popped); 
+EXPORT Allocator_Backup allocator_set_default(Allocator* new_default);
+EXPORT Allocator_Backup allocator_set_scratch(Allocator* new_scratch);
+EXPORT Allocator_Backup allocator_set_both(Allocator* new_default, Allocator* new_scratch);
+EXPORT Allocator_Backup allocator_restore(Allocator_Backup backup); 
 
 EXPORT bool  is_power_of_two(isize num);
 EXPORT bool  is_power_of_two_zero(isize num);
@@ -183,7 +183,7 @@ extern Malloc_Allocator global_malloc_allocator;
     {
         void* obtained = allocator_try_reallocate(from_allocator, new_size, old_ptr, old_size, align, called_from);
         if(obtained == NULL && new_size != 0)
-            allocator_out_of_memory_func(from_allocator, new_size, old_ptr, old_size, align, called_from, "");
+            allocator_out_of_memory(from_allocator, new_size, old_ptr, old_size, align, called_from, "");
 
         return obtained;
     }
@@ -217,37 +217,42 @@ extern Malloc_Allocator global_malloc_allocator;
         return _scratch_allocator;
     }
 
-    EXPORT Allocator_Swap allocator_push_default(Allocator* new_default)
+    EXPORT Allocator_Backup allocator_set_default(Allocator* new_default)
     {
-        Allocator_Swap out = {0};
+        Allocator_Backup out = {0};
         out.previous_default = _default_allocator;
         _default_allocator = new_default;
         return out;
     }
-    EXPORT Allocator_Swap allocator_push_scratch(Allocator* new_scratch)
+    EXPORT Allocator_Backup allocator_set_scratch(Allocator* new_scratch)
     {
-        Allocator_Swap out = {0};
+        Allocator_Backup out = {0};
         out.previous_scratch = _scratch_allocator;
         _scratch_allocator = new_scratch;
         return out;
     }
-    EXPORT Allocator_Swap allocator_push_both(Allocator* new_allocator)
+    EXPORT Allocator_Backup allocator_set_both(Allocator* new_default, Allocator* new_scratch)
     {
-        Allocator_Swap out = {0};
+        Allocator_Backup out = {0};
         out.previous_default = _default_allocator;
         out.previous_scratch = _scratch_allocator;
-        _default_allocator = new_allocator;
-        _scratch_allocator = new_allocator;
+        _default_allocator = new_default;
+        _scratch_allocator = new_scratch;
         return out;
     }
 
-    EXPORT void allocator_pop(Allocator_Swap popped)
+    EXPORT Allocator_Backup allocator_restore(Allocator_Backup backup)
     {
-        if(popped.previous_default != NULL)
-            _default_allocator = popped.previous_default;
+        Allocator_Backup out = {0};
+        out.previous_default = _default_allocator;
+        out.previous_scratch = _scratch_allocator;
+        if(backup.previous_default != NULL)
+            _default_allocator = backup.previous_default;
 
-        if(popped.previous_scratch != NULL)
-            _scratch_allocator = popped.previous_scratch;
+        if(backup.previous_scratch != NULL)
+            _scratch_allocator = backup.previous_scratch;
+
+        return out;
     }
 
     #ifdef LIB_ALLOCATOR_NAKED
@@ -255,7 +260,7 @@ extern Malloc_Allocator global_malloc_allocator;
     #include <stdlib.h>
     #include <stdarg.h>
     #include <stdio.h>
-    EXPORT void allocator_out_of_memory_func(
+    EXPORT void allocator_out_of_memory(
         struct Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
         void* context, Source_Info called_from, 
         const char* format_string, ...)

@@ -42,8 +42,8 @@ EXPORT void format_into_sized(String_Builder* append_to, String format, ...);
             isize count = vsnprintf(append_to->data + base_size, (size_t) (append_to->size - base_size), format, args);
         }
     
-        if(count != 0)
-            ASSERT(append_to->data[base_size + count - 1] != '\0');
+        //if(count != 0)
+            //ASSERT(append_to->data[base_size + count - 1] != '\0');
 
         array_resize(append_to, base_size + count);
         return;
