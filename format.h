@@ -10,12 +10,17 @@ EXPORT void vformat_into_sized(String_Builder* append_to, String format, va_list
 EXPORT void format_into(String_Builder* append_to, const char* format, ...);
 EXPORT void format_into_sized(String_Builder* append_to, String format, ...);
 
+#define CSTRING_ESCAPE(s) (s) == NULL ? "" : (s)
 #define STR_FMT "%.*s"
 #define STR_PRINT(string) (string).size, (string).data
 
 #define SOURCE_INFO_FMT "( %s : %lld )"
-#define SOURCE_INFO_PRINT(source_info) (source_info).file != NULL ? (source_info).file : "", (source_info).line
+#define SOURCE_INFO_PRINT(source_info) cstring_escape((source_info).file), (source_info).line
 
+#define STACK_TRACE_FMT "%-30s " SOURCE_INFO_FMT
+#define STACK_TRACE_PRINT(trace) cstring_escape((trace).function), SOURCE_INFO_PRINT(trace)
+
+typedef long long int lld;
 #endif // !LIB_FORMAT
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_IMPL)) && !defined(LIB_FORMAT_HAS_IMPL)

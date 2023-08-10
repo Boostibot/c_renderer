@@ -4,50 +4,54 @@
 #include "platform.h"
 #include <stdlib.h>
 
-//Locally enables/disables some checks use true/false.
-//if we want to disable checks for a code block we undef it before the block
-// and redefine it after the block
-#define DO_ASSERTS       true /* enables assertions */
-#define DO_ASSERTS_SLOW  true /* enables slow assertions for example checking if arrays are sorted */
-#define DO_BOUNDS_CHECKS true /* checks bounds prior to lookup */
+//Locally enables/disables asserts. If we wish to disable for part of
+// code we simply undefine them then redefine them after.
+#define DO_ASSERTS       /* enables assertions */
+#define DO_ASSERTS_SLOW  /* enables slow assertions - expensive assertions or once that change the time complexity of an algorhitm */
+#define DO_BOUNDS_CHECKS /* checks bounds prior to lookup */
 
-//Just like assert but gets called even in release. If x evaluates to false panics
-#define TEST(x)                TEST_MSG(x, "");
-#define ASSERT(x)              ASSERT_MSG(x, "");
-#define ASSERT_SLOW(x)         ASSERT_SLOW_MSG(x, "");
-#define CHECK_BOUNDS(i, upper) CHECK_BOUNDS_EX(i, 0, upper);
+//If x evaluates to false executes assertion_report(). 
+#define TEST(x)                TEST_MSG(x, "")              /* executes always (even in release) */
+#define ASSERT(x)              ASSERT_MSG(x, "")            /* is enabled by DO_ASSERTS */
+#define ASSERT_SLOW(x)         ASSERT_SLOW_MSG(x, "")       /* is enabled by DO_ASSERTS_SLOW */
+#define CHECK_BOUNDS(i, upper) CHECK_BOUNDS_EX(i, 0, upper) /* if i is not within [0, upper) panics. is enabled by DO_BOUNDS_CHECKS*/
 
-#define TEST_MSG(x, msg)                 while(!(x)) {assertion_report(#x, msg, __FILE__, __LINE__); platform_trap(); platform_abort();}
-#define ASSERT_MSG(x, msg)               PP_IF_ELSE(DO_ASSERTS,       TEST_MSG(x, msg), 0)
-#define ASSERT_SLOW_MSG(x, msg)          PP_IF_ELSE(DO_ASSERTS_SLOW,  TEST_MSG(x, msg), 0)
-#define CHECK_BOUNDS_EX(i, lower, upper) PP_IF_ELSE(DO_BOUNDS_CHECKS, TEST_MSG((lower) <= (i) && (i) <= (upper), "Bounds check failed!"), 0)
+#define TEST_MSG(x, msg)                    while(!(x)) {platform_trap(); assertion_report(#x, msg, __FILE__, __LINE__); platform_abort();}
+#define ASSERT_MSG(x, msg)                  PP_IF(DO_ASSERTS,       TEST_MSG)(x, msg)
+#define ASSERT_SLOW_MSG(x, msg)             PP_IF(DO_ASSERTS_SLOW,  TEST_MSG)(x, msg)
+#define CHECK_BOUNDS_EX(i, lower, upper)    PP_IF(DO_ASSERTS,       TEST_MSG)((lower) <= (i) && (i) <= (upper), "Bounds check failed!")
+
+//Doesnt do anything (failed branch) but still properly expands x and msg so it can be type checked.
+//Dissabled asserts expand to this.
+#define NO_ASSERT_MSG(x, msg)               while(0) {x; const char* _msg = (msg);}
+#define NO_CHECK_BOUNDS_EX(i, lower, upper) while(0) {(lower) <= (i) && (i) <= (upper); }
+
+//If dissabled expand to this
+#define _IF_NOT_DO_ASSERTS(ignore)         NO_ASSERT_MSG
+#define _IF_NOT_ASSERT_SLOW_MSG(ignore)    NO_ASSERT_MSG
+#define _IF_NOT_CHECK_BOUNDS_EX(ignore)    NO_CHECK_BOUNDS_EX
 
 //If fails does not compile. 
-//c must be a valid compile time exception. 
-//Is useful for validating
+//x must be a valid compile time exception. 
+//Is useful for validating if compile time settings are correct
 #define STATIC_ASSERT(x) typedef char static_assertion_##MSG[(x) ? 1 : -1]
 
 //Gets called when assertion fails. 
 //Does not have to terminate process since that is done at call site 
 // (for easier debugging) by the assert macro itself.
-//Is implemented inside log.h
+//It is left unimplemented
 void assertion_report(const char* expression, const char* message, const char* file, int line);
 
-
-//============ IMPLEMENTATION =============================
-//For C
+//Pre-Processor (PP) utils
 #define PP_CONCAT2(a, b) a ## b
 #define PP_CONCAT(a, b) PP_CONCAT2(a, b)
 #define PP_ID(x) x
 
-#define _PP_IF_1(if_true, if_false)     if_true
-#define _PP_IF_true(if_true, if_false)  if_true
-#define _PP_IF_0(if_true, if_false)     if_false
-#define _PP_IF_(if_true, if_false)      if_false
-#define _PP_IF_false(if_true, if_false) if_false
-
-//Expands x only if cond is true/1
-//when cond is false/0 or empty does nothing
-#define PP_IF_ELSE(cond, if_true, if_false)  PP_CONCAT(_PP_IF_, cond)(if_true, if_false)
+//if CONDITION_DEFINE is defined: expands to x, 
+//else: expands to _IF_NOT_##CONDITION_DEFINE(x). See above how to use this.
+//The reason for its use is that simply all other things I have tried either didnt
+// work or failed to compose for obscure reasons
+#define PP_IF(CONDITION_DEFINE, x)         PP_CONCAT(_IF_NOT_, CONDITION_DEFINE)(x)
+#define _IF_NOT_(x) x
 
 #endif

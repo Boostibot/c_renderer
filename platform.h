@@ -232,6 +232,7 @@ Platform_Sandox_Error platform_exception_sandbox(
     void* error_context
 );
 
+
 typedef enum {
     PLATFORM_EXCEPTION_NONE = 0,
     PLATFORM_EXCEPTION_ACCESS_VIOLATION,

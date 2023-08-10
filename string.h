@@ -36,6 +36,9 @@ isize  string_find_first_char(String string, char search_for, isize from);
 isize  string_find_last_from_char(String in_str, char search_for, isize from);
 isize  string_find_last_char(String string, char search_for); 
 
+//if the string is valid -> returns it
+//if the string is NULL  -> returns ""
+const char* cstring_escape(const char* string);
 
 //Returns a null terminated string contained in a string builder. The string is always null terminate even when the String_Builder is not yet initialized
 const char*     builder_cstring(String_Builder builder); 
@@ -226,12 +229,17 @@ String_Array string_split(String to_split, String split_by);
         return eq;
     }
 
-    const char* builder_cstring(String_Builder builder)
+    const char* cstring_escape(const char* string)
     {
-        if(builder.data == NULL)
+        if(string == NULL)
             return "";
         else
-            return builder.data;
+            return string;
+    }
+
+    const char* builder_cstring(String_Builder builder)
+    {
+        return cstring_escape(builder.data);
     }
 
     String builder_string(String_Builder builder)

@@ -34,32 +34,37 @@
 //
 //Since we only logged {ANIM} both contain the same content:
 // 
-//[00:00:00 000  INFO] { ANIM} :iterating all entitites
-//[00:00:00 000  INFO] { ANIM} .  :entity id:0 found
+//[00:00:00 000 INFO ] {ANIM } :iterating all entitites
+//[00:00:00 000 INFO ] {ANIM } .  :entity id:0 found
 //                             .  :Hello from entity
-//[00:00:00 000  INFO] { ANIM} .  :entity id:1 found
+//[00:00:00 000 INFO ] {ANIM } .  :entity id:1 found
 //                             .  :Hello from entity
-//[00:00:00 000  INFO] { ANIM} .  :entity id:2 found
+//[00:00:00 000 INFO ] {ANIM } .  :entity id:2 found
 //                             .  :Hello from entity
-//[00:00:00 000  INFO] { ANIM} .  :entity id:3 found
+//[00:00:00 000 INFO ] {ANIM } .  :entity id:3 found
 //                             .  :Hello from entity
-//[00:00:00 000  INFO] { ANIM} .  :entity id:4 found
+//[00:00:00 000 INFO ] {ANIM } .  :entity id:4 found
 //                             .  :Hello from entity
-//[00:00:00 000 FATAL] { ANIM} :Fatal error encountered!
+//[00:00:00 000 FATAL] {ANIM } :Fatal error encountered!
 //                             :Some more info
 //                             :10-20
 
+#define _CRT_SECURE_NO_WARNINGS
 #include "time.h"
 #include "string.h"
 #include <stdarg.h>
+#include <stdio.h>
 
-#define DO_LOG          true
-#define DO_LOG_INFO     true
-#define DO_LOG_WARN     true
-#define DO_LOG_ERROR    true
-#define DO_LOG_FATAL    true
-#define DO_LOG_DEBUG    true
-#define DO_LOG_TRACE    true
+//Localy enable log types and log as a whole.
+//To disable log #undefine the appropriate define
+
+#define DO_LOG          /* Disables all log types */   
+#define DO_LOG_INFO 
+#define DO_LOG_WARN 
+#define DO_LOG_ERROR
+#define DO_LOG_FATAL
+#define DO_LOG_DEBUG
+#define DO_LOG_TRACE
 
 #define LOG_TYPE_INFO    (u8) 0
 #define LOG_TYPE_WARN    (u8) 1
@@ -69,21 +74,38 @@
 #define LOG_TYPE_TRACE   (u8) 5
 //... others can be defined ...
 
-#define _LOG(chanel, log_type, format, ...) log_message(string_make(chanel), log_type, format, __VA_ARGS__)
-#define LOG(chanel, log_type, format, ...) PP_IF_ELSE(DO_LOG, log_message(string_make(chanel), log_type, format, __VA_ARGS__), 0)
-#define LOG_GROUP_PUSH()                   PP_IF_ELSE(DO_LOG, log_group_push(), 0)
-#define LOG_GROUP_POP()                    PP_IF_ELSE(DO_LOG, log_group_pop(), 0)
+//Logs a message. Does not get dissabled.
+#define LOG_ALWAYS(chanel, log_type, format, ...) log_message(string_make(chanel), log_type, format, __VA_ARGS__)
+//does not do anything (failed condition) but type checks the arguments
+#define LOG_NEVER(chanel, log_type, format, ...)   while(0) { LOG_ALWAYS(chanel, log_type, format, __VA_ARGS__); }
 
-#define LOG_INFO(chanel, format, ...)   PP_IF_ELSE(DO_LOG_INFO, LOG(chanel, LOG_TYPE_INFO, format, __VA_ARGS__), 0)
-#define LOG_WARN(chanel, format, ...)   PP_IF_ELSE(DO_LOG_WARN, LOG(chanel, LOG_TYPE_WARN, format, __VA_ARGS__), 0)
-#define LOG_ERROR(chanel, format, ...)  PP_IF_ELSE(DO_LOG_ERROR, LOG(chanel, LOG_TYPE_ERROR, format, __VA_ARGS__), 0)
-#define LOG_FATAL(chanel, format, ...)  PP_IF_ELSE(DO_LOG_FATAL, LOG(chanel, LOG_TYPE_FATAL, format, __VA_ARGS__), 0)
-#define LOG_DEBUG(chanel, format, ...)  PP_IF_ELSE(DO_LOG_DEBUG, LOG(chanel, LOG_TYPE_DEBUG, format, __VA_ARGS__), 0)
-#define LOG_TRACE(chanel, format, ...)  PP_IF_ELSE(DO_LOG_TRACE, LOG(chanel, LOG_TYPE_TRACE, format, __VA_ARGS__), 0)
+//Default logging facility. Logs a message into the provided chanel cstring with log_type type (info, warn, error...)
+#define LOG(chanel, log_type, format, ...)      PP_IF(DO_LOG, LOG_ALWAYS)(chanel, log_type, format, __VA_ARGS__)
+
+//Logs a message type into the provided chanel cstring.
+#define LOG_INFO(chanel, format, ...)           PP_IF(DO_LOG_INFO, LOG)(chanel, LOG_TYPE_INFO, format, __VA_ARGS__)
+#define LOG_WARN(chanel, format, ...)           PP_IF(DO_LOG_WARN, LOG)(chanel, LOG_TYPE_WARN, format, __VA_ARGS__)
+#define LOG_ERROR(chanel, format, ...)          PP_IF(DO_LOG_ERROR, LOG)(chanel, LOG_TYPE_ERROR, format, __VA_ARGS__)
+#define LOG_FATAL(chanel, format, ...)          PP_IF(DO_LOG_FATAL, LOG)(chanel, LOG_TYPE_FATAL, format, __VA_ARGS__)
+#define LOG_DEBUG(chanel, format, ...)          PP_IF(DO_LOG_DEBUG, LOG)(chanel, LOG_TYPE_DEBUG, format, __VA_ARGS__)
+#define LOG_TRACE(chanel, format, ...)          PP_IF(DO_LOG_TRACE, LOG)(chanel, LOG_TYPE_TRACE, format, __VA_ARGS__)
+
+//Gets expanded when the particular type is dissabled.
+#define _IF_NOT_DO_LOG(ignore)              LOG_NEVER
+#define _IF_NOT_DO_LOG_INFO(ignore)         LOG_NEVER
+#define _IF_NOT_DO_LOG_WARN(ignore)         LOG_NEVER
+#define _IF_NOT_DO_LOG_ERROR(ignore)        LOG_NEVER
+#define _IF_NOT_DO_LOG_FATAL(ignore)        LOG_NEVER
+#define _IF_NOT_DO_LOG_DEBUG(ignore)        LOG_NEVER
+#define _IF_NOT_DO_LOG_TRACE(ignore)        LOG_NEVER
+
 
 typedef struct Log_Chanel_Entry Log_Chanel_Entry;
 typedef struct Log_System_Options Log_System_Options;
 typedef struct Log_Chanel_Options Log_Chanel_Options;
+
+typedef Platform_Stack_Trace_Entry Stack_Trace_Entry;
+DEFINE_ARRAY_TYPE(Stack_Trace_Entry, Stack_Trace);
 
 EXPORT void log_message(String chanel, u8 log_type, const char* format, ...);
 EXPORT void log_group_push();  
@@ -91,6 +113,8 @@ EXPORT void log_group_pop();
 EXPORT i32  log_group_depth();
 EXPORT void log_flush_all();
 EXPORT void log_flush(String chanel);
+EXPORT void log_captured_callstack(String chanel, const void** callstack, isize callstack_size);
+EXPORT void log_callstack(String chanel, isize depth, isize skip);
 
 EXPORT Log_Chanel_Options* log_chanel_options(String chanel); //@TODO
 EXPORT void log_chanel_options_changed();
@@ -157,8 +181,6 @@ EXPORT String_Builder         log_encode(Log_Chanel_Entry_Array array);
 #if (defined(LIB_ALL_IMPL) || defined(LIB_LOG_IMPL)) && !defined(LIB_LOG_HAS_IMPL)
 #define LIB_LOG_HAS_IMPL
 
-#define _CRT_SECURE_NO_WARNINGS
-#include <stdio.h>
 #include <math.h>
 #include <string.h> //should move to exposed "string.h"!
 
@@ -368,6 +390,7 @@ EXPORT Log_System_Options* log_system_options()
 }
 
 INTERNAL void _log_chanel_set_gives_to(Log_Chanel_State* chanel_state);
+INTERNAL isize _log_find_init_chanel(String chanel);
 
 EXPORT void log_system_options_changed()
 {
@@ -685,18 +708,19 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     bool console_bit_set = !!(opts->console_takes_log_types & log_type_bit);
     bool file_bit_set = !!(opts->file_takes_log_types & log_type_bit);
 
-    if(opts->console_use_filter == false 
-       && console_bit_set       
-       //&& chanel_state->gives_to_console
-        )
+    bool console_filtered = true;
+    bool file_filtered = true;
+    if(opts->console_use_filter)
+        console_filtered = chanel_state->gives_to_console;
+    if(opts->file_use_filter)
+        file_filtered = chanel_state->gives_to_central_file;
+
+    if(console_filtered && console_bit_set)
     {
         fwrite(message.data, 1, message.size, stdout);
     }
     
-    if(opts->file_use_filter == false 
-        && file_bit_set 
-        //&& chanel_state->gives_to_central_file
-        )
+    if(file_filtered && file_bit_set)
     {
         Log_Chanel_State* central_state = &state->chanels.data[state->central_chanel_index];
         assert(central_state->is_init == true);
@@ -709,7 +733,71 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     array_deinit(&chanel_entry.chanel);
 }
 
-//@TODO: move into main
+
+//@TODO: BELOW move into main
+EXPORT void log_callstack(String chanel, isize depth, isize skip)
+{
+    if(global_log_state.is_init == false)
+        return;
+
+    enum { DEF_SIZE = 64 };
+
+    ptr_Array stack = {0};
+    array_init_backed(&stack, global_log_state.scratch_allocator, DEF_SIZE);
+    
+    isize captured_depth = 0;
+    if(depth >= 0)
+    {
+        array_resize(&stack, depth);
+        captured_depth = platform_capture_call_stack(stack.data, stack.size, skip + 1);
+    }
+    else
+    {
+        depth = DEF_SIZE;
+        while(true)
+        {
+            array_resize(&stack, depth);
+            captured_depth = platform_capture_call_stack(stack.data, stack.size, skip + 1);
+            if(captured_depth < depth)
+                break;
+
+            depth *= 2;
+        }
+    }
+
+    void** callstack = stack.data;
+    captured_depth;
+    chanel;
+
+    log_captured_callstack(chanel, callstack, captured_depth);
+
+    array_deinit(&stack);
+}
+
+EXPORT void log_captured_callstack(String chanel, const void** callstack, isize callstack_size)
+{
+    if(global_log_state.is_init == false)
+        return;
+
+    Stack_Trace trace = {0};
+    array_init_backed(&trace, global_log_state.scratch_allocator, 16);
+    array_resize(&trace, callstack_size);
+    platform_translate_call_stack(trace.data, callstack, callstack_size);
+
+    for(isize i = 0; i < callstack_size; i++)
+    {
+        Stack_Trace_Entry* entry = &trace.data[i];
+        if(strcmp(entry->function, "invoke_main") == 0)
+            break;
+
+        log_message(chanel, LOG_TYPE_TRACE, STACK_TRACE_FMT, STACK_TRACE_PRINT(*entry));
+        if(strcmp(entry->function, "main") == 0)
+            break;
+    }
+
+    array_deinit(&trace);
+}
+
 EXPORT void assertion_report(const char* expression, const char* message, const char* file, int line)
 {
     Source_Info info = {0};
@@ -718,7 +806,10 @@ EXPORT void assertion_report(const char* expression, const char* message, const 
         LOG_FATAL("TEST", "TEST(%s) TEST/ASSERTION failed! " SOURCE_INFO_FMT, expression, SOURCE_INFO_PRINT(info));
     if(message != NULL && strlen(message) != 0)
         LOG_FATAL("TEST", "with message:\n%s", message);
-
+        
+    log_group_push();
+    log_callstack(STRING_LIT("TEST"), -1, 1);
+    log_group_pop();
     log_flush_all();
 }
 
@@ -728,7 +819,6 @@ EXPORT void allocator_out_of_memory(
     Source_Info called_from, 
     const char* format_string, ...)
 {
-    typedef long long int lli;
     Allocator_Stats stats = {0};
     if(allocator != NULL && allocator->get_stats != NULL)
         stats = allocator_get_stats(allocator);
@@ -754,22 +844,24 @@ EXPORT void allocator_out_of_memory(
         "called from: " SOURCE_INFO_FMT "\n"
         "user message:\n%s",
         stats.type_name, stats.name, 
-        (lli) new_size, (lli) old_size, 
+        (lld) new_size, (lld) old_size, 
         SOURCE_INFO_PRINT(called_from),
         builder_cstring(user_message)
     );
+    
+    LOG_FATAL("MEMORY", "Allocator_Stats:");
+    log_group_push();
+        LOG_FATAL("MEMORY", "bytes_allocated: (%lld)", (lld) stats.bytes_allocated);
+        LOG_FATAL("MEMORY", "max_bytes_allocated: (%lld)", (lld) stats.max_bytes_allocated);
+        LOG_FATAL("MEMORY", "allocation_count: (%lld)", (lld) stats.allocation_count);
+        LOG_FATAL("MEMORY", "deallocation_count: (%lld)", (lld) stats.deallocation_count);
+        LOG_FATAL("MEMORY", "reallocation_count: (%lld)", (lld) stats.reallocation_count);
+    log_group_pop();
 
-    LOG_FATAL("MEMORY", 
-        "Allocator_Stats{\n"
-        "  bytes_allocated: %lld\n"
-        "  max_bytes_allocated: %lld\n"
-        "  allocation_count: %lld\n"
-        "  deallocation_count: %lld\n"
-        "  reallocation_count: %lld\n"
-        "}", 
-        (lli) stats.bytes_allocated, (lli) stats.max_bytes_allocated, 
-        (lli) stats.allocation_count, (lli) stats.deallocation_count, (lli) stats.reallocation_count
-    );
+    
+    log_group_push();
+        log_callstack(STRING_LIT("MEMORY"), -1, 1);
+    log_group_pop();
 
     log_flush_all();
     platform_trap(); 

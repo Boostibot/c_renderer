@@ -61,12 +61,7 @@ typedef enum Debug_Allocator_Panic_Reason Debug_Allocator_Panic_Reason;
 
 DEFINE_ARRAY_TYPE(Debug_Allocation, Debug_Allocation_Array);
   
-typedef Platform_Stack_Trace_Entry Stack_Trace_Entry;
-DEFINE_ARRAY_TYPE(Stack_Trace_Entry, Stack_Trace);
 
-#define CSTRING_ESCAPE(s) (s) == NULL ? "" : (s)
-#define STACK_TRACE_FMT "%-25s " SOURCE_INFO_FMT
-#define STACK_TRACE_PRINT(trace) CSTRING_ESCAPE((trace).function), SOURCE_INFO_PRINT(trace)
 
 typedef void (*Debug_Allocator_Panic)(Debug_Allocator* allocator, Debug_Allocator_Panic_Reason reason, Debug_Allocation allocation, isize penetration, Source_Info called_from, void* context);
 
@@ -651,21 +646,6 @@ EXPORT void debug_allocator_deinit_allocation_array(Debug_Allocation_Array* allo
     array_deinit(allocations);
 }
 
-INTERNAL void _debug_allocator_print_callstack(Stack_Trace* trace, isize size)
-{
-    ASSERT(size <= trace->size);
-    for(isize i = 0; i < size; i++)
-    {
-        Stack_Trace_Entry* entry = &trace->data[i];
-        if(strcmp(entry->function, "invoke_main") == 0)
-            break;
-        LOG_TRACE("MEMORY", STACK_TRACE_FMT, STACK_TRACE_PRINT(*entry));
-                
-        if(strcmp(entry->function, "main") == 0)
-            break;
-    }
-}
-
 EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator allocator, isize print_max)
 {
     _debug_allocator_is_invariant(&allocator);
@@ -674,13 +654,8 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
     if(print_max > 0)
         ASSERT(alive.size <= print_max);
 
-    typedef long long int lld;
-    LOG_INFO("MEMORY", "Printing ALIVE allocations (%lld) below:\n", (lld)alive.size);
+    LOG_INFO("MEMORY", "printing ALIVE allocations (%lld) below:\n", (lld)alive.size);
     log_group_push();
-
-    Stack_Trace trace = {0};
-    array_init_backed(&trace, allocator.parent, 16);
-    array_resize(&trace, allocator.captured_callstack_size);
 
     for(isize i = 0; i < alive.size; i++)
     {
@@ -688,19 +663,14 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
         LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld" SOURCE_INFO_FMT "\n",
             (lld) i, (lld) curr.size, curr.ptr, (lld) curr.align, SOURCE_INFO_PRINT(curr.allocation_source));
      
-        //STATIC_ASSERT(false && "Test live and dead allocations");
-        //STATIC_ASSERT(false && "Test memory use!");
-
         if(allocator.captured_callstack_size > 0)
         {
-            platform_translate_call_stack(trace.data, curr.allocation_trace.data, curr.allocation_trace.size);
             log_group_push();
-            _debug_allocator_print_callstack(&trace, curr.allocation_trace.size);
+            log_captured_callstack(STRING_LIT("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
             log_group_pop();
         }
     }
 
-    array_deinit(&trace);
     log_group_pop();
     debug_allocator_deinit_allocation_array(&alive);
 }
@@ -715,8 +685,7 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
     if(print_max > 0)
         ASSERT(dead.size <= print_max);
 
-    typedef long long int lld;
-    LOG_INFO("MEMORY", "Printing DEAD allocations (%lld) below:\n", (lld)dead.size);
+    LOG_INFO("MEMORY", "printing DEAD allocations (%lld) below:\n", (lld)dead.size);
     
     for(isize i = 0; i < dead.size; i++)
     {
@@ -744,16 +713,14 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
         if(allocator.captured_callstack_size > 0)
         {
             log_group_push();
-                LOG_TRACE("MEMORY", "allocation callstack:");
-                platform_translate_call_stack(trace.data, curr.allocation_trace.data, curr.allocation_trace.size);
+                LOG_TRACE("MEMORY", "allocation callstack (%lld):", (lld) curr.allocation_trace.size);
                 log_group_push();
-                _debug_allocator_print_callstack(&trace, curr.allocation_trace.size);
+                log_captured_callstack(STRING_LIT("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
                 log_group_pop();
 
-                LOG_TRACE("MEMORY", "deallocation callstack:");
-                platform_translate_call_stack(trace.data, curr.deallocation_trace.data, curr.deallocation_trace.size);
+                LOG_TRACE("MEMORY", "deallocation callstack (%lld):", (lld) curr.deallocation_trace.size);
                 log_group_push();
-                _debug_allocator_print_callstack(&trace, curr.deallocation_trace.size);
+                log_captured_callstack(STRING_LIT("MEMORY"), curr.deallocation_trace.data, curr.deallocation_trace.size);
                 log_group_pop();
             log_group_pop();
         }
@@ -915,7 +882,6 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     
     if(self->do_printing)
     {
-        typedef long long int lld;
         LOG_INFO("MEMORY", "size %6lld -> %-6lld ptr: 0x%p -> 0x%p align: %lld " SOURCE_INFO_FMT "\n",
             (lld) old_size, (lld) new_size, old_ptr, new_ptr, (lld) align, SOURCE_INFO_PRINT(called_from));
     }

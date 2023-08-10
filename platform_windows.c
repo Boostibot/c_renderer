@@ -250,18 +250,15 @@ Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_u
     bool okay = FileTimeToSystemTime(&filetime, &systime);
     assert(okay);
 
-
-    #define MODULO(x, N) ((x) % (N) + (N)) % N
-
     Platform_Calendar_Time time = {0};
-    time.day = systime.wDay;
-    time.day_of_week = systime.wDayOfWeek;
-    time.hour = systime.wHour;
-    time.millisecond = systime.wMilliseconds;
-    time.minute = systime.wMinute;
-    time.month = systime.wMonth - 1;
+    time.day = (int8_t) systime.wDay;
+    time.day_of_week = (int8_t) systime.wDayOfWeek;
+    time.hour = (int8_t) systime.wHour;
+    time.millisecond = (int16_t) systime.wMilliseconds;
+    time.minute = (int8_t) systime.wMinute;
+    time.month = (int8_t) systime.wMonth - 1;
     time.second = (int8_t) systime.wSecond;
-    time.year = systime.wYear;
+    time.year = (int32_t) systime.wYear;
 
     int64_t years_since_epoch = (int64_t) time.year - EPOCH_YEAR;
     int64_t microsec_diff = epoch_time_usec - years_since_epoch*YEAR_MICROSECONDS;
@@ -872,7 +869,10 @@ Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_
 
 int64_t platform_capture_call_stack(void** stack, int64_t stack_size, int64_t skip_count)
 {
-    int64_t captured = CaptureStackBackTrace((DWORD) skip_count + 1, stack_size, stack, NULL);
+    if(stack_size == 0)
+        return 0;
+
+    int64_t captured = CaptureStackBackTrace((DWORD) skip_count + 1, (DWORD) stack_size, stack, NULL);
     return captured;
 }
 
@@ -935,6 +935,9 @@ static void _platform_stack_trace_deinit()
 
 void platform_translate_call_stack(Platform_Stack_Trace_Entry* tanslated, const void** stack, int64_t stack_size)
 {
+    if(stack_size == 0)
+        return;
+
     _platform_stack_trace_init("");
     char symbol_info_data[sizeof(SYMBOL_INFO) + MAX_NAME_LEN + 1] = {0};
 
