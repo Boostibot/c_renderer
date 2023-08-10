@@ -99,9 +99,9 @@ void     random_state_shuffle(Random_State* state, void* elements, int64_t eleme
 		#error "add a custom implementation for this compiler!"
 	#endif
 
-	_RAND_THREAD_LOCAL Random_State _random_state = {0};
-	_RAND_THREAD_LOCAL uint64_t _random_clock_state = 0;
-	_RAND_THREAD_LOCAL bool _random_clock_state_init = false;
+	static _RAND_THREAD_LOCAL Random_State _random_state = {0};
+	static _RAND_THREAD_LOCAL uint64_t _random_clock_state = 0;
+	static _RAND_THREAD_LOCAL bool _random_clock_state_init = false;
 	
 	uint64_t random_splitmix(uint64_t* state) 
 	{

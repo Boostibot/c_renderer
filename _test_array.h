@@ -3,7 +3,7 @@
 #include "_test.h"
 #include "array.h"
 
-static void test_array_stress(f64 max_seconds)
+INTERNAL void test_array_stress(f64 max_seconds)
 {
 	isize mem_before = allocator_get_stats(allocator_get_default()).bytes_allocated;
 
@@ -196,7 +196,7 @@ static void test_array_stress(f64 max_seconds)
 	TEST(mem_before == mem_after);
 }
 
-static void test_array(f64 max_seconds)
+INTERNAL void test_array(f64 max_seconds)
 {
 	test_array_stress(max_seconds);
 }

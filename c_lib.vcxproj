@@ -148,7 +148,7 @@
     <ClInclude Include="defines.h" />
     <ClInclude Include="format.h" />
     <ClInclude Include="hash.h" />
-    <ClInclude Include="hash_table.h" />
+    <ClInclude Include="hash_index.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />

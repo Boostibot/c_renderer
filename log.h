@@ -49,7 +49,6 @@
 //                             :Some more info
 //                             :10-20
 
-#define _CRT_SECURE_NO_WARNINGS
 #include "time.h"
 #include "string.h"
 #include <stdarg.h>
@@ -186,7 +185,7 @@ EXPORT String_Builder         log_encode(Log_Chanel_Entry_Array array);
 
 #include "format.h"
 #include "platform.h"
-#include "hash_table.h"
+#include "hash_index.h"
 #include "hash.h"
 
 #define _LOG_SYSTEM_EXTENSION STRING_LIT("txt")
@@ -232,14 +231,14 @@ typedef struct
     isize open_files_max;
     isize central_chanel_index;
 
-    Hash_Table64 chanel_hash;
+    Hash_Index chanel_hash;
     Log_Chanel_State_Array chanels;
 
     u64 last_hash;
     isize last_index;
 } Log_System_Module_State;
 
-static Log_System_Module_State global_log_state = {0};
+INTERNAL Log_System_Module_State global_log_state = {0};
 
 EXPORT void log_process_message(Log_Chanel_Entry* save_into, String chanel, u8 log_type, const char* format, ...)
 {
@@ -310,7 +309,7 @@ EXPORT void log_system_init(Allocator* default_allocator, Allocator* scratch_all
         array_init(&global_log_state.chanels, global_log_state.default_allocator);
         array_init(&options.file_directory_path, global_log_state.default_allocator);
         array_init(&options.file_filename, global_log_state.default_allocator);
-        hash_table64_init(&global_log_state.chanel_hash, global_log_state.default_allocator);
+        hash_index_init(&global_log_state.chanel_hash, global_log_state.default_allocator);
 
         array_resize(&global_log_state.open_files, global_log_state.open_files_max);
         array_resize(&global_log_state.open_file_names, global_log_state.open_files_max);
@@ -361,7 +360,7 @@ EXPORT void log_system_deinit()
     }
 
     array_deinit(&global_log_state.open_files);
-    hash_table64_deinit(&global_log_state.chanel_hash);
+    hash_index_deinit(&global_log_state.chanel_hash);
 
     Log_System_Module_State null = {0};
     global_log_state = null;
@@ -407,7 +406,7 @@ EXPORT void log_system_get_chanels(String_Array* chanels)
     for(isize i = 0; i < global_log_state.chanels.size; i++)
     {
         Log_Chanel_State* state = &global_log_state.chanels.data[i];
-        String chanel = builder_string(state->name);
+        String chanel = string_from_builder(state->name);
         array_push(chanels, chanel); 
     }
 }
@@ -417,14 +416,14 @@ INTERNAL void _log_chanel_set_gives_to(Log_Chanel_State* chanel_state)
     String_Builder_Array* console_takes = &global_log_state.system_options.console_channel_filter;
     String_Builder_Array* file_takes = &global_log_state.system_options.file_chanel_filter;
 
-    String chanel = builder_string(chanel_state->name);
+    String chanel = string_from_builder(chanel_state->name);
 
     chanel_state->gives_to_console = false;
     chanel_state->gives_to_central_file = false;
 
     for(isize i = 0; i < console_takes->size; i++)
     {
-        String filter = builder_string(console_takes->data[i]);
+        String filter = string_from_builder(console_takes->data[i]);
         if(string_is_equal(chanel, filter))
         {
             chanel_state->gives_to_console = true;
@@ -434,7 +433,7 @@ INTERNAL void _log_chanel_set_gives_to(Log_Chanel_State* chanel_state)
 
     for(isize i = 0; i < file_takes->size; i++)
     {
-        String filter = builder_string(file_takes->data[i]);
+        String filter = string_from_builder(file_takes->data[i]);
         if(string_is_equal(chanel, filter))
         {
             chanel_state->gives_to_central_file = true;
@@ -480,11 +479,11 @@ INTERNAL isize _log_find_init_chanel(String chanel)
     if(chanel_index == -1)
     {
         //@TODO: check hash conflicts
-        isize found = hash_table64_find(state->chanel_hash, chanel_hash);
+        isize found = hash_index_find(state->chanel_hash, chanel_hash);
         if(found == -1)
         {
             Log_Chanel_State chanel_state = {0};
-            found = hash_table64_insert(&state->chanel_hash, chanel_hash, state->chanels.size);
+            found = hash_index_insert(&state->chanel_hash, chanel_hash, state->chanels.size);
             array_push(&state->chanels, chanel_state);
         }
 
@@ -501,7 +500,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
     if(chanel_state->buffer.size == 0)
         return;
 
-    String chanel_file = builder_string(chanel_state->file_name);
+    String chanel_file = string_from_builder(chanel_state->file_name);
     isize file_index = -1;
     
     isize furthest_flush_time_index = 0;
@@ -510,7 +509,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
     for(isize i = 0; i < global_log_state.open_files_max; i++)
     {
         CHECK_BOUNDS(i, global_log_state.open_file_names.size);
-        String open_file = builder_string(global_log_state.open_file_names.data[i]);
+        String open_file = string_from_builder(global_log_state.open_file_names.data[i]);
         if(string_is_equal(open_file, chanel_file))
             file_index = i;
 
@@ -532,7 +531,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
             fclose(file);
 
         String_Builder local_path = {0};
-        String dir_path = builder_string(global_log_state.system_options.file_directory_path);
+        String dir_path = string_from_builder(global_log_state.system_options.file_directory_path);
         array_init_backed(&local_path, global_log_state.scratch_allocator, 256);
         builder_append(&local_path, dir_path);
         builder_append(&local_path, STRING_LIT("/"));
@@ -596,7 +595,7 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
 
     isize size_before = append_to->size;
     String group_separator = string_make(".   ");
-    String message_string = builder_string(entry.message);
+    String message_string = string_from_builder(entry.message);
     
     //Skip all trailing newlines
     isize message_size = message_string.size;
@@ -624,12 +623,12 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
     if(log_type_str != NULL)
     {
         format_into(append_to, "[%02d:%02d:%02d %03d %-5s] {%-5s} ", 
-            (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, log_type_str, builder_cstring(entry.chanel));
+            (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, log_type_str, cstring_from_builder(entry.chanel));
     }
     else
     {
         format_into(append_to, "[%02d:%02d:%02d %03d %-5d] {%-5s} ", 
-            (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, (int) entry.log_type, builder_cstring(entry.chanel));
+            (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, (int) entry.log_type, cstring_from_builder(entry.chanel));
     }
     
     isize size_after_header = append_to->size;
@@ -703,7 +702,7 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     
     isize chanel_index = _log_find_init_chanel(chanel);
     Log_Chanel_State* chanel_state = &state->chanels.data[chanel_index];
-    _log_print_to_chanel(chanel_state, builder_string(message));
+    _log_print_to_chanel(chanel_state, string_from_builder(message));
 
     bool console_bit_set = !!(opts->console_takes_log_types & log_type_bit);
     bool file_bit_set = !!(opts->file_takes_log_types & log_type_bit);
@@ -725,7 +724,7 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
         Log_Chanel_State* central_state = &state->chanels.data[state->central_chanel_index];
         assert(central_state->is_init == true);
         //_log_chanel_state_init(central_state, STRING_LIT(""));
-        _log_print_to_chanel(central_state, builder_string(message));
+        _log_print_to_chanel(central_state, string_from_builder(message));
     }
 
     array_deinit(&message);
@@ -846,7 +845,7 @@ EXPORT void allocator_out_of_memory(
         stats.type_name, stats.name, 
         (lld) new_size, (lld) old_size, 
         SOURCE_INFO_PRINT(called_from),
-        builder_cstring(user_message)
+        cstring_from_builder(user_message)
     );
     
     LOG_FATAL("MEMORY", "Allocator_Stats:");

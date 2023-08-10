@@ -163,7 +163,7 @@ extern Malloc_Allocator global_malloc_allocator;
 
     #include "platform.h"
 
-    static Allocator* _mask_allocator_bits(Allocator* self)
+    INTERNAL Allocator* _mask_allocator_bits(Allocator* self)
     {
         //mask off the lower 2 bits of allocator since allocators are required to be at least 4 aligned.
         //Those bits can be used internally to store some extra state (for example if deallocation is necessary)
@@ -205,8 +205,8 @@ extern Malloc_Allocator global_malloc_allocator;
         return masked->get_stats(masked);
     }
 
-    static THREAD_LOCAL Allocator* _default_allocator = &global_malloc_allocator.allocator;
-    static THREAD_LOCAL Allocator* _scratch_allocator = &global_malloc_allocator.allocator;
+    INTERNAL THREAD_LOCAL Allocator* _default_allocator = &global_malloc_allocator.allocator;
+    INTERNAL THREAD_LOCAL Allocator* _scratch_allocator = &global_malloc_allocator.allocator;
 
     EXPORT Allocator* allocator_get_default()
     {
@@ -256,7 +256,6 @@ extern Malloc_Allocator global_malloc_allocator;
     }
 
     #ifdef LIB_ALLOCATOR_NAKED
-    #define _CRT_SECURE_NO_WARNINGS
     #include <stdlib.h>
     #include <stdarg.h>
     #include <stdio.h>

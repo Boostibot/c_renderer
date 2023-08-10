@@ -7,7 +7,7 @@
 #include "log.h"													\
 
 //Maybe move to random or to test
-static void random_bits(Random_State* state, void* into, isize size)
+INTERNAL void random_bits(Random_State* state, void* into, isize size)
 {
 	isize full_randoms = size / 8;
 	isize remainder = size % 8;
@@ -26,7 +26,7 @@ typedef struct Discrete_Distribution
 	i32 prob_sum;
 } Discrete_Distribution;
 
-static Discrete_Distribution random_discrete_make(const i32 probabilities[], isize probabilities_size)
+INTERNAL Discrete_Distribution random_discrete_make(const i32 probabilities[], isize probabilities_size)
 {
 	i32 prob_sum = 0;
 	for(isize i = 0; i < probabilities_size; i++)
@@ -50,7 +50,7 @@ static Discrete_Distribution random_discrete_make(const i32 probabilities[], isi
 	return out;
 }
 
-static i32 random_discrete(Discrete_Distribution distribution)
+INTERNAL i32 random_discrete(Discrete_Distribution distribution)
 {
 	i64 random = random_range(0, distribution.prob_sum);
 	CHECK_BOUNDS(random, distribution.prob_table.size);
@@ -58,7 +58,7 @@ static i32 random_discrete(Discrete_Distribution distribution)
 	return index;
 }
 
-static void random_discrete_deinit(Discrete_Distribution* dist)
+INTERNAL void random_discrete_deinit(Discrete_Distribution* dist)
 {
 	array_deinit(&dist->prob_table);
 	dist->prob_sum = 0;

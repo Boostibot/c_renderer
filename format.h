@@ -26,7 +26,6 @@ typedef long long int lld;
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_IMPL)) && !defined(LIB_FORMAT_HAS_IMPL)
 #define LIB_FORMAT_HAS_IMPL
 
-    #define _CRT_SECURE_NO_WARNINGS
     #include <stdio.h>
 
     EXPORT void vformat_into(String_Builder* append_to, const char* format, va_list args)
@@ -59,7 +58,7 @@ typedef long long int lld;
         array_init_backed(&escaped, allocator_get_scratch(), 1024);
         builder_append(&escaped, format);
     
-        vformat_into(append_to, builder_cstring(escaped), args);
+        vformat_into(append_to, cstring_from_builder(escaped), args);
 
         array_deinit(&escaped);
     }

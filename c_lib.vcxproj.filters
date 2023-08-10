@@ -35,7 +35,7 @@
     <ClInclude Include="hash.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="hash_table.h">
+    <ClInclude Include="hash_index.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="platform.h">

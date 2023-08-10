@@ -1,16 +1,14 @@
-#define _CRT_SECURE_NO_WARNINGS
 #define LIB_ALL_IMPL
 #define LIB_MEM_DEBUG
 
 #include "platform.h"
 #include "string.h"
-#include "hash_table.h"
+#include "hash_index.h"
 #include "log.h"
 #include "_test_random.h"
 #include "_test_array.h"
-#include "_test_hash_table.h"
+#include "_test_hash_index.h"
 #include "_test_log.h"
-
 
 void error_func(void* context, Platform_Sandox_Error error_code);
 
@@ -20,7 +18,7 @@ void run_func(void* context)
 {
     test_log();
     test_array(1.0);
-    test_hash_table(1.0);
+    test_hash_index(1.0);
     test_random();
 
     LOG_INFO("APP", "All tests passed! uwu");

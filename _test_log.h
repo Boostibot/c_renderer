@@ -4,7 +4,7 @@
 #include "log.h"
 #include "allocator_debug.h"
 
-static void test_log()
+INTERNAL void test_log()
 {
     log_system_deinit();
 
@@ -29,5 +29,6 @@ static void test_log()
         log_system_deinit();
     }
     debug_allocator_deinit(&debug_allocator);
-}
 
+    log_system_init(allocator_get_default(), allocator_get_scratch());
+}

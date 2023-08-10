@@ -34,7 +34,7 @@
 //If fails does not compile. 
 //x must be a valid compile time exception. 
 //Is useful for validating if compile time settings are correct
-#define STATIC_ASSERT(x) typedef char static_assertion_##MSG[(x) ? 1 : -1]
+#define STATIC_ASSERT(x) typedef char PP_CONCAT(__static_assertion_, __LINE__)[(x) ? 1 : -1]
 
 //Gets called when assertion fails. 
 //Does not have to terminate process since that is done at call site 
