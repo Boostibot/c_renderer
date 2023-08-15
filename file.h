@@ -9,8 +9,8 @@ Platform_Error file_read_entire(String file_path, String_Builder* data);
 Platform_Error file_append_entire(String file_path, String contents);
 Platform_Error file_write_entire(String file_path, String data);
 
-bool file_create(String file_path, bool* was_just_created);
-bool file_remove(String file_path, bool* was_just_removed);
+Platform_Error file_create(String file_path, bool* was_just_created);
+Platform_Error file_remove(String file_path, bool* was_just_removed);
 void file_translate_error(String_Builder* into, u64 error);
 
 #endif
@@ -85,17 +85,34 @@ Platform_Error file_write_entire(String file_path, String contents)
 }
 
 
-bool file_create(String file_path, bool* was_just_created)
+Platform_Error file_create(String file_path, bool* was_just_created)
 {
+    String_Builder escpaed_file_path = {0};
+    array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
+    builder_append(&escpaed_file_path, file_path);
 
+    Platform_Error error = platform_file_create(cstring_from_builder(escpaed_file_path), was_just_created);
+    
+    array_deinit(&escpaed_file_path);
 }
-bool file_remove(String file_path, bool* was_just_removed)
+Platform_Error file_remove(String file_path, bool* was_just_removed)
 {
+    String_Builder escpaed_file_path = {0};
+    array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
+    builder_append(&escpaed_file_path, file_path);
 
+    Platform_Error error = platform_file_remove(cstring_from_builder(escpaed_file_path), was_just_removed);
+    
+    array_deinit(&escpaed_file_path);
 }
 void file_translate_error(String_Builder* into, u64 error)
 {
+    char* msg = platform_translate_error_alloc(error);
+    String msg_string = string_make(msg);
 
+    builder_append(into, msg_string);
+
+    platform_heap_reallocate(0, msg_string.data, msg_string.size, 8);
 }
 
 #endif
