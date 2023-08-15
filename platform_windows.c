@@ -21,6 +21,17 @@
 enum { WINDOWS_PLATFORM_FILE_TYPE_PIPE = PLATFORM_FILE_TYPE_PIPE };
 #undef PLATFORM_FILE_TYPE_PIPE
 
+
+void platform_init()
+{
+    platform_perf_counter();
+    platform_startup_epoch_time();
+}
+void platform_deinit()
+{
+    
+}
+
 //=========================================
 // Virtual memory
 //=========================================
@@ -72,6 +83,7 @@ int64_t platform_thread_get_proccessor_count()
     return GetCurrentProcessorNumber();
 }
 
+#pragma warning(disable : 4057)
 //typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(
 //    LPVOID lpThreadParameter
 //    );
@@ -154,22 +166,6 @@ double platform_perf_counter_frequency_d()
         freq = (double) platform_perf_counter_frequency(); 
     return freq;
 }
-
-
-//typedef struct Platform_Calendar_Time
-//{
-//    int8_t year;        // any
-//    int8_t month;       // [0, 12)
-//    int8_t day_of_week; // [0, 7)
-//    int8_t day;// [0, 31] !note the end bracket!
-//    
-//    int8_t hour;        // [0, 24)
-//    int8_t minute;      // [0, 60)
-//    int8_t second;      // [0, 60)
-//    
-//    int16_t millisecond; // [0, 1000)
-//    int16_t day_of_year; // [0, 356]
-//} Platform_Calendar_Time;
 
 //time -> filetime
 //(ts * 10000000LL) + 116444736000000000LL = t
@@ -262,9 +258,8 @@ Platform_Calendar_Time platform_epoch_time_to_calendar_time(int64_t epoch_time_u
 
     int64_t years_since_epoch = (int64_t) time.year - EPOCH_YEAR;
     int64_t microsec_diff = epoch_time_usec - years_since_epoch*YEAR_MICROSECONDS;
-    int64_t microsec_remainder = microsec_diff % YEAR_MICROSECONDS;
-
-    int64_t day_of_year = (microsec_remainder / DAY_MICROSECONDS);
+    //int64_t microsec_remainder = microsec_diff % YEAR_MICROSECONDS;
+    //int64_t day_of_year = (microsec_remainder / DAY_MICROSECONDS);
     //int64_t microsecond = (microsec_remainder % MILLISECOND_MICROSECOND);
     int64_t microsecond = (microsec_diff % MILLISECOND_MICROSECOND);
 
@@ -293,7 +288,7 @@ int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_tim
     systime.wMinute = calendar_time.minute;
     systime.wMonth = calendar_time.month;
     systime.wSecond = calendar_time.second;
-    systime.wYear = calendar_time.year;
+    systime.wYear = (WORD) calendar_time.year;
 
     FILETIME filetime;
     bool okay = SystemTimeToFileTime(&systime, &filetime);
@@ -331,13 +326,20 @@ typedef struct _Buffer
 
 static wchar_t* _wstring(_Buffer stack);
 static char*    _string(_Buffer stack);
-static _Buffer  _buffer_init_backed(void* backing, int64_t backing_size, int32_t item_size);
-static _Buffer  _buffer_init(int64_t item_size);
+static void     _buffer_init_backed(_Buffer* buffer, void* backing, int64_t backing_size, int32_t item_size);
+static _Buffer  _buffer_make(int64_t item_size);
 static void*    _buffer_resize(_Buffer* stack, int64_t new_size);
 static int64_t  _buffer_push(_Buffer* stack, const void* item, int64_t item_size);
 static void*    _buffer_at(_Buffer* stack, int64_t index);
 static void     _buffer_deinit(_Buffer* stack);
 
+static int64_t _wcslen(const wchar_t* str)
+{
+    if(str == NULL)
+        return 0;
+    else
+        return (int64_t) wcslen(str);
+}
 static int64_t _strlen(const char* str)
 {
     if(str == NULL)
@@ -384,19 +386,22 @@ static char* _string(_Buffer stack)
     return (char*) stack.data;
 }
 
-static _Buffer _buffer_init_backed(void* backing, int64_t backing_size, int32_t item_size)
+static void _buffer_init_backed(_Buffer* buffer, void* backing, int64_t backing_size, int32_t item_size)
 {
-    _Buffer out = {0};
-    out.data = backing;
-    out.item_size = item_size;
-    out.is_alloced = false;
-    out.capacity = backing_size/item_size;
-    memset(backing, 0, backing_size);
-
-    return out;
+    buffer->data = backing;
+    buffer->item_size = item_size;
+    buffer->is_alloced = false;
+    buffer->capacity = backing_size/item_size;
 }
 
-static _Buffer _buffer_init(int64_t item_size)
+#define CONCAT2(a, b) a ## b
+#define CONCAT(a, b) CONCAT2(a, b)
+
+#define _BUFFER_INIT_BACKED(buffer, type, backing_size) \
+    char CONCAT(__backing__, __LINE__)[(backing_size) * sizeof(type)] = {0}; \
+    _buffer_init_backed(buffer, CONCAT(__backing__, __LINE__), backing_size, sizeof(type))
+
+static _Buffer _buffer_make(int64_t item_size)
 {
     _Buffer out = {0};
     out.item_size = (int32_t) item_size;
@@ -419,7 +424,7 @@ static void* _buffer_resize(_Buffer* stack, int64_t new_size)
         void* prev_ptr = NULL;
         if(stack->is_alloced)
             prev_ptr = stack->data;
-        stack->data = platform_heap_reallocate((size_t) (new_capaity * i_size), prev_ptr, stack->capacity, IO_ALIGN);
+        stack->data = platform_heap_reallocate((int64_t) (new_capaity * i_size), prev_ptr, stack->capacity, IO_ALIGN);
         stack->is_alloced = true;
 
         //null newly added portion
@@ -462,9 +467,9 @@ static void _buffer_deinit(_Buffer* stack)
 
 static void _w_concat(const wchar_t* a, const wchar_t* b, const wchar_t* c, _Buffer* output)
 {
-    int64_t a_size = a != NULL ? (int64_t) wcslen(a) : 0;
-    int64_t b_size = b != NULL ? (int64_t) wcslen(b) : 0;
-    int64_t c_size = c != NULL ? (int64_t) wcslen(c) : 0;
+    int64_t a_size = _wcslen(a);
+    int64_t b_size = _wcslen(b);
+    int64_t c_size = _wcslen(c);
     int64_t composite_size = a_size + b_size + c_size;
         
     _buffer_resize(output, composite_size);
@@ -473,53 +478,266 @@ static void _w_concat(const wchar_t* a, const wchar_t* b, const wchar_t* c, _Buf
     memmove(_wstring(*output) + a_size + b_size, c, sizeof(wchar_t) * c_size);
 }
 
-_Buffer _normalize_convert_to_utf16_path(const char* path, int64_t path_size, int flags, char* buffer, int64_t buffer_size)
+void _normalize_convert_to_utf16_path(_Buffer* output, const char* path, int64_t path_size)
 {
-    _Buffer output = _buffer_init_backed(buffer, buffer_size, sizeof(wchar_t));
-    _utf8_to_utf16(path, path_size, &output);
-    return output;
+    assert(output->item_size == sizeof(wchar_t));
+    _utf8_to_utf16(path, path_size, output);
 }
 
-
-_Buffer _convert_to_utf8_normalize_path(const wchar_t* path, int64_t path_size, int flags, char* buffer, int64_t buffer_size)
+void _convert_to_utf8_normalize_path(_Buffer* output, const wchar_t* path, int64_t path_size)
 {
-    _Buffer output = _buffer_init_backed(buffer, buffer_size, sizeof(char));
-    _utf16_to_utf8(path, path_size, &output);
-    return output;
+    assert(output->item_size == sizeof(char));
+    _utf16_to_utf8(path, path_size, output);
+
+    char* str = _string(*output);
+    //just a quick conversion to linux style slashes for consistency
+    for(int64_t i = 0; i < output->size; i++)
+    {
+        if(str[i] == '\\')
+            str[i] = '/';
+    }
 }
 
-bool platform_file_move(const char* new_path, const char* old_path)
+void _normalize_convert_to_utf16_cpath(_Buffer* output, const char* null_terminated_path)
+{
+    int64_t new_path_size = _strlen(null_terminated_path);
+    _normalize_convert_to_utf16_path(output, null_terminated_path, new_path_size);
+}
+
+void _convert_to_utf8_normalize_cpath(_Buffer* output, const wchar_t* null_terminated_path)
+{
+    int64_t new_path_size = _wcslen(null_terminated_path);
+    _convert_to_utf8_normalize_path(output, null_terminated_path, new_path_size);
+}
+
+char* platform_translate_error_alloc(Platform_Error error)
+{
+    LPVOID trasnlated = NULL;
+
+    int64_t length = FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        (DWORD) error,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPSTR) &trasnlated,
+        0, NULL );
+    
+    char* out = platform_heap_reallocate(length + 1, NULL, 0, 8);
+    memcpy(out, trasnlated, length + 1);
+
+    if(length != 0)
+        LocalFree(trasnlated);
+
+    return (char*) out;
+}
+
+Platform_Error _error_code(bool state)
+{
+    if(state)
+        return PLATFORM_ERROR_OK;
+    else
+        return (Platform_Error) GetLastError();
+}
+
+//Makes a temporary buffer called buffer_name filled with utf16 representation of path.
+//buffer gets automatically freed upon exit. Return or other control from must not be used to
+// for it to work properly
+#define _TEMP_CONVERT_UTF16(buffer_name, path)                          \
+    _Buffer buffer_name = {0};                                          \
+    _BUFFER_INIT_BACKED(&buffer_name, wchar_t, IO_LOCAL_BUFFER_SIZE);   \
+    _normalize_convert_to_utf16_cpath(&buffer_name, path);              \
+    for(; buffer_name.item_size != 0 ;_buffer_deinit(&buffer_name))
+
+Platform_Error platform_file_create(const char* file_path, bool* was_just_created)
+{
+    bool state = true;
+    _TEMP_CONVERT_UTF16(normalized_path, file_path) {
+        HANDLE handle = CreateFileW(_wstring(normalized_path), 0, 0, NULL, OPEN_ALWAYS, 0, NULL);
+        state = handle != INVALID_HANDLE_VALUE;
+
+        if(was_just_created != NULL)
+        {
+            DWORD last_error = GetLastError();
+            if(last_error == ERROR_ALREADY_EXISTS)
+                *was_just_created = false;
+            else
+                *was_just_created = true;
+        }
+
+        CloseHandle(handle);
+    }
+
+    return _error_code(state);
+}
+Platform_Error platform_file_remove(const char* file_path, bool* was_deleted_deleted)
+{
+    bool state = true;
+    _TEMP_CONVERT_UTF16(normalized_path, file_path) {
+        SetFileAttributesW(_wstring(normalized_path), FILE_ATTRIBUTE_NORMAL);
+        state = !!DeleteFileW(_wstring(normalized_path));
+        
+        if(was_deleted_deleted != NULL)
+            *was_deleted_deleted = state;
+
+        DWORD last_error = GetLastError();
+        if(last_error == ERROR_FILE_NOT_FOUND)
+        {
+            state = true;
+            if(was_deleted_deleted != NULL)
+                *was_deleted_deleted = false;
+        }
+    }
+
+    return _error_code(state);
+}
+
+Platform_Error platform_file_move(const char* new_path, const char* old_path)
 {       
-    int64_t new_path_size = _strlen(new_path);
-    int64_t old_path_size = _strlen(old_path);
-    char new_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    char old_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer new_path_norm = _normalize_convert_to_utf16_path(new_path, new_path_size, 0, new_path_buffer, IO_LOCAL_BUFFER_SIZE);
-    _Buffer old_path_norm = _normalize_convert_to_utf16_path(old_path, old_path_size, 0, old_path_buffer, IO_LOCAL_BUFFER_SIZE);
-        
-    bool state = !!MoveFileExW(_wstring(old_path_norm), _wstring(new_path_norm), MOVEFILE_COPY_ALLOWED);
-
-    _buffer_deinit(&new_path_norm);
-    _buffer_deinit(&old_path_norm);
-    return state;
+    bool state = true;
+    _TEMP_CONVERT_UTF16(new_path_norm, new_path) {
+        _TEMP_CONVERT_UTF16(old_path_norm, old_path) {
+            state = !!MoveFileExW(_wstring(old_path_norm), _wstring(new_path_norm), MOVEFILE_COPY_ALLOWED);
+        }
+    }
+    
+    return _error_code(state);
 }
 
-bool platform_file_copy(const char* copy_to_path, const char* copy_from_path)
+Platform_Error platform_file_copy(const char* copy_to_path, const char* copy_from_path)
 {
-    int64_t to_path_size = _strlen(copy_to_path);
-    int64_t from_path_size = _strlen(copy_from_path);
-    char to_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    char from_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer to_path_norm = _normalize_convert_to_utf16_path(copy_to_path, to_path_size, 0, to_path_buffer, IO_LOCAL_BUFFER_SIZE);
-    _Buffer from_path_norm = _normalize_convert_to_utf16_path(copy_from_path, from_path_size, 0, from_path_buffer, IO_LOCAL_BUFFER_SIZE);
-        
-    bool state = !!CopyFileW(_wstring(from_path_norm), _wstring(to_path_norm), true);
-
-    _buffer_deinit(&to_path_norm);
-    _buffer_deinit(&from_path_norm);
-    return state;
+    bool state = true;
+    _TEMP_CONVERT_UTF16(to_path_norm, copy_to_path) {
+        _TEMP_CONVERT_UTF16(from_path_norm, copy_from_path) {
+            state = !!CopyFileW(_wstring(from_path_norm), _wstring(to_path_norm), true);
+        }
+    }
+    
+    return _error_code(state);
 }
 
+void platform_file_memory_unmap(Platform_Memory_Mapping* mapping)
+{
+    if(mapping == NULL)
+        return;
+
+    HANDLE hFile = (HANDLE) mapping->state[0];
+    HANDLE hMap = (HANDLE) mapping->state[1];
+    LPVOID lpBasePtr = mapping->address;
+
+    if(lpBasePtr != NULL)
+        UnmapViewOfFile(lpBasePtr);
+    if(hMap != NULL && hMap != INVALID_HANDLE_VALUE)
+        CloseHandle(hMap);
+    if(hFile != NULL && hFile != INVALID_HANDLE_VALUE)
+        CloseHandle(hFile);
+        
+    memset(mapping, 0, sizeof *mapping);
+}
+
+Platform_Error platform_file_memory_map(const char* file_path, int64_t desired_size_or_zero, Platform_Memory_Mapping* mapping)
+{
+    memset(mapping, 0, sizeof *mapping);
+
+    HANDLE hFile = INVALID_HANDLE_VALUE;
+    HANDLE hMap = INVALID_HANDLE_VALUE;
+    LPVOID lpBasePtr = NULL;
+    LARGE_INTEGER liFileSize;
+    liFileSize.QuadPart = 0;
+
+    DWORD disposition = 0;
+    if(desired_size_or_zero == 0)
+        disposition = OPEN_EXISTING;
+    else
+        disposition = OPEN_ALWAYS;
+        
+    _TEMP_CONVERT_UTF16(normalized_path, file_path) {
+        wchar_t* wfile_path = _wstring(normalized_path);
+        hFile = CreateFileW(
+            wfile_path,                            // lpFileName
+            GENERIC_READ | GENERIC_WRITE,          // dwDesiredAccess
+            FILE_SHARE_READ | FILE_SHARE_WRITE,    // dwShareMode
+            NULL,                                  // lpSecurityAttributes
+            disposition,                           // dwCreationDisposition
+            FILE_ATTRIBUTE_NORMAL,                 // dwFlagsAndAttributes
+            0);                                    // hTemplateFile
+    }
+
+    if (hFile == INVALID_HANDLE_VALUE)
+        goto error;
+
+    if (!GetFileSizeEx(hFile, &liFileSize)) 
+        goto error;
+
+    //If the file is completely empty 
+    // we dont perform any more operations
+    // return a valid pointer and size of 0
+    if (liFileSize.QuadPart == 0 && desired_size_or_zero == 0) 
+    {
+        CloseHandle(hFile);
+        mapping->size = 0;
+        mapping->address = NULL;
+        return PLATFORM_ERROR_OK;
+    }
+
+    LARGE_INTEGER desired_size = {0};
+    if(desired_size_or_zero == 0)
+        desired_size.QuadPart = liFileSize.QuadPart;
+    if(desired_size_or_zero > 0)
+    {
+        desired_size.QuadPart = desired_size_or_zero;
+
+        //if is desired smaller shrinks the file
+        if(desired_size_or_zero < liFileSize.QuadPart)
+        {
+            DWORD dwPtrLow = SetFilePointer(hFile, desired_size.LowPart, &desired_size.HighPart,  FILE_BEGIN); 
+            if(dwPtrLow == INVALID_SET_FILE_POINTER)
+                goto error;
+
+            if(SetEndOfFile(hFile) == FALSE)
+                goto error;
+        }
+    }
+    if(desired_size_or_zero < 0)
+        desired_size.QuadPart = -desired_size_or_zero + liFileSize.QuadPart;
+
+    hMap = CreateFileMappingW(
+        hFile,
+        NULL,                          // Mapping attributes
+        PAGE_READWRITE ,               // Protection flags
+        desired_size.HighPart,         // MaximumSizeHigh
+        desired_size.LowPart,          // MaximumSizeLow
+        NULL);                         // Name
+    if (hMap == 0) 
+        goto error;
+
+    lpBasePtr = MapViewOfFile(
+        hMap,
+        FILE_MAP_ALL_ACCESS,   // dwDesiredAccess
+        0,                     // dwFileOffsetHigh
+        0,                     // dwFileOffsetLow
+        0);                    // dwNumberOfBytesToMap
+    if (lpBasePtr == NULL) 
+        goto error;
+
+    mapping->size = desired_size.QuadPart;
+    mapping->address = lpBasePtr;
+    mapping->state[0] = (uint64_t) hFile;
+    mapping->state[1] = (uint64_t) hMap;
+
+    return PLATFORM_ERROR_OK;
+
+    error: {
+        DWORD err = GetLastError();
+        if(hMap != INVALID_HANDLE_VALUE)
+            CloseHandle(hMap);
+        if(hFile != INVALID_HANDLE_VALUE)
+            CloseHandle(hFile);
+
+        return err;
+    }
+}
 
 static bool _is_file_link(const wchar_t* directory_path)
 {
@@ -531,28 +749,21 @@ static bool _is_file_link(const wchar_t* directory_path)
     return requiredSize == 0;
 }
 
-bool platform_file_info(const char* file_path, Platform_File_Info* info)
+Platform_Error platform_file_info(const char* file_path, Platform_File_Info* info)
 {    
-    int64_t path_size = _strlen(file_path);
-    #define IO_NORMALIZE_PATH_OP(path, path_size, execute)  \
-        char normalized_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; \
-        _Buffer normalized_path = _normalize_convert_to_utf16_path(path, path_size, 0, normalized_path_buffer, IO_LOCAL_BUFFER_SIZE); \
-        \
-        execute\
-        \
-        _buffer_deinit(&normalized_path); \
-
     WIN32_FILE_ATTRIBUTE_DATA native_info;
     memset(&native_info, 0, sizeof(native_info)); 
     memset(info, 0, sizeof(*info)); 
-    IO_NORMALIZE_PATH_OP(file_path, path_size, 
-        bool state = !!GetFileAttributesExW(_wstring(normalized_path), GetFileExInfoStandard, &native_info);
+    
+    bool state = true;
+    _TEMP_CONVERT_UTF16(normalized_path, file_path) {
+        state = !!GetFileAttributesExW(_wstring(normalized_path), GetFileExInfoStandard, &native_info);
         
         if(native_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
             info->is_link = _is_file_link(_wstring(normalized_path));
-    )   
+    }
     if(!state)
-        return false;
+        return _error_code(state);
             
     info->created_epoch_time = _filetime_to_epoch_time(native_info.ftCreationTime);
     info->last_access_epoch_time = _filetime_to_epoch_time(native_info.ftLastAccessTime);
@@ -564,7 +775,7 @@ bool platform_file_info(const char* file_path, Platform_File_Info* info)
     else
         info->type = PLATFORM_FILE_TYPE_FILE;
 
-    return state;
+    return _error_code(state);
 }
     
 //@TODO: create a cyclically overriden buffers that will get used for utf8 conversions
@@ -573,28 +784,30 @@ bool platform_file_info(const char* file_path, Platform_File_Info* info)
 // once we run out of slots we allocate only if we need to grow. If we use a slot some number of times (2x lets say)
 // we reallocate it to ensure that the space shrinks once not needed.
 
-bool platform_directory_create(const char* dir_path)
+Platform_Error platform_directory_create(const char* dir_path)
 {
-    int64_t path_size = _strlen(dir_path);
-    IO_NORMALIZE_PATH_OP(dir_path, path_size, 
-        bool state = !!CreateDirectoryW(_wstring(normalized_path), NULL);
-    )
-    return state;
+    bool state = true;
+    _TEMP_CONVERT_UTF16(normalized_path, dir_path) {
+        state = !!CreateDirectoryW(_wstring(normalized_path), NULL);
+    }
+
+    return _error_code(state);
 }
     
-bool platform_directory_remove(const char* dir_path)
+Platform_Error platform_directory_remove(const char* dir_path)
 {
-    int64_t path_size = _strlen(dir_path);
-    IO_NORMALIZE_PATH_OP(dir_path, path_size, 
-        bool state = !!RemoveDirectoryW(_wstring(normalized_path));
-    )
-    return state;
+    bool state = true;
+    _TEMP_CONVERT_UTF16(normalized_path, dir_path) {
+        state = !!RemoveDirectoryW(_wstring(normalized_path));
+    }
+
+    return _error_code(state);
 }
 
-static _Buffer _malloc_full_path(const wchar_t* local_path, int flags)
+static _Buffer _alloc_full_path(const wchar_t* local_path)
 {
-    char full_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer full_path = _buffer_init_backed(full_path_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
+    _Buffer full_path = {0};
+    _BUFFER_INIT_BACKED(&full_path, wchar_t, IO_LOCAL_BUFFER_SIZE);
 
     int64_t needed_size = GetFullPathNameW(local_path, 0, NULL, NULL);
     if(needed_size > full_path.size)
@@ -602,8 +815,10 @@ static _Buffer _malloc_full_path(const wchar_t* local_path, int flags)
         _buffer_resize(&full_path, needed_size);
         needed_size = GetFullPathNameW(local_path, (DWORD) full_path.size, _wstring(full_path), NULL);
     }
-    _Buffer out_string = _convert_to_utf8_normalize_path(_wstring(full_path), full_path.size, flags, NULL, 0);
-        
+    
+    _Buffer out_string = _buffer_make(sizeof(char));
+    _convert_to_utf8_normalize_path(&out_string, _wstring(full_path), full_path.size);
+
     _buffer_deinit(&full_path);
     return out_string;
 }
@@ -619,9 +834,8 @@ typedef struct Directory_Visitor
 
 static Directory_Visitor _directory_iterate_init(const wchar_t* dir_path, const wchar_t* file_mask)
 {
-    char built_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer built_path = _buffer_init_backed(built_path_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
-    
+    _Buffer built_path = {0};
+    _BUFFER_INIT_BACKED(&built_path, wchar_t, IO_LOCAL_BUFFER_SIZE);
     _w_concat(dir_path, file_mask, NULL, &built_path);
 
     Directory_Visitor visitor = {0};
@@ -635,10 +849,12 @@ static Directory_Visitor _directory_iterate_init(const wchar_t* dir_path, const 
         else
             break;
     }
+
+    _buffer_deinit(&built_path);
     return visitor;
 }
 
-static bool _directory_iterate_has(const Directory_Visitor* visitor)
+static Platform_Error _directory_iterate_has(const Directory_Visitor* visitor)
 {
     return visitor->first_found != INVALID_HANDLE_VALUE && visitor->failed == false;
 }
@@ -653,7 +869,7 @@ static void _directory_iterate_deinit(Directory_Visitor* visitor)
     FindClose(visitor->first_found);
 }
 
-static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buffer* entries, int64_t max_depth)
+static Platform_Error _directory_list_contents_alloc(const wchar_t* directory_path, _Buffer* entries, int64_t max_depth)
 {
     typedef struct Dir_Context
     {
@@ -669,13 +885,13 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
     first.visitor = _directory_iterate_init(directory_path, WIO_FILE_MASK_ALL);
     first.path = directory_path;
     if(_directory_iterate_has(&first.visitor) == false)
-        return false;
-        
-    char stack_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    char built_path_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
+        return _error_code(false);
     
-    _Buffer stack = _buffer_init_backed(stack_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(Dir_Context));
-    _Buffer built_path = _buffer_init_backed(built_path_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
+    _Buffer stack = {0};
+    _Buffer built_path = {0};
+
+    _BUFFER_INIT_BACKED(&stack, Dir_Context, 16);
+    _BUFFER_INIT_BACKED(&stack, wchar_t, IO_LOCAL_BUFFER_SIZE);
 
     _buffer_push(&stack, &first, sizeof(first));
 
@@ -713,7 +929,7 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
                 flag |= IO_NORMALIZE_DIRECTORY;
             else
                 flag |= IO_NORMALIZE_FILE;
-            _Buffer out_string = _malloc_full_path(_wstring(built_path), flag);
+            _Buffer out_string = _alloc_full_path(_wstring(built_path));
 
             Platform_Directory_Entry entry = {0};
             entry.info = info;
@@ -725,7 +941,7 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
             bool recursion = dir_context->depth + 1 < max_depth || max_depth <= 0;
             if(info.type == PLATFORM_FILE_TYPE_DIRECTORY && info.is_link == false && recursion)
             {
-                _Buffer next_path = _buffer_init(sizeof(wchar_t));
+                _Buffer next_path = _buffer_make(sizeof(wchar_t));
                 _w_concat(_wstring(built_path), NULL, NULL, &next_path);
 
                 Dir_Context next = {0};
@@ -752,21 +968,22 @@ static bool _directory_list_contents_malloc(const wchar_t* directory_path, _Buff
 
     _buffer_deinit(&stack);
     _buffer_deinit(&built_path);
-    return true;
+    return _error_code(true);
 }
 
-bool platform_directory_list_contents_malloc(const char* directory_path, Platform_Directory_Entry** entries, int64_t* entries_count, int64_t max_depth)
+Platform_Error platform_directory_list_contents_alloc(const char* directory_path, Platform_Directory_Entry** entries, int64_t* entries_count, int64_t max_depth)
 {
-    int64_t path_size = _strlen(directory_path);
     assert(entries != NULL && entries_count != NULL);
-    _Buffer entries_stack = _buffer_init(sizeof(Platform_Directory_Entry));
-    IO_NORMALIZE_PATH_OP(directory_path, path_size,
-        bool ok = _directory_list_contents_malloc(_wstring(normalized_path), &entries_stack, max_depth);
-    )
+    _Buffer entries_stack = _buffer_make(sizeof(Platform_Directory_Entry));
+
+    Platform_Error error = _error_code(true);
+    _TEMP_CONVERT_UTF16(normalized_path, directory_path) {
+        error = _directory_list_contents_alloc(_wstring(normalized_path), &entries_stack, max_depth);
+    }
 
     *entries = (Platform_Directory_Entry*) entries_stack.data;
     *entries_count = entries_stack.size;
-    return ok;
+    return error;
 }
 
 void platform_directory_list_contents_free(Platform_Directory_Entry* entries)
@@ -780,23 +997,24 @@ void platform_directory_list_contents_free(Platform_Directory_Entry* entries)
     platform_heap_reallocate(0, entries, 0, IO_ALIGN);
 }
 
-bool platform_directory_set_current_working(const char* new_working_dir)
+Platform_Error platform_directory_set_current_working(const char* new_working_dir)
 {
-    int64_t path_size = _strlen(new_working_dir);
-    IO_NORMALIZE_PATH_OP(new_working_dir, path_size,
-        bool state = _wchdir(_wstring(normalized_path)) == 0;
-    )
-    return state;
+    bool state = true;
+    _TEMP_CONVERT_UTF16(normalized_path, new_working_dir) {
+         state = _wchdir(_wstring(normalized_path)) == 0;
+    }
+
+    return _error_code(state);
 }
     
-char* platform_directory_get_current_working_malloc()
+char* platform_directory_get_current_working_alloc()
 {
-    //@TODO: use the local malloc
     wchar_t* current_working = _wgetcwd(NULL, 0);
     if(current_working == NULL)
         abort();
-
-    _Buffer output = _convert_to_utf8_normalize_path(current_working, (int64_t) wcslen(current_working), IO_NORMALIZE_LINUX | IO_NORMALIZE_DIRECTORY, NULL, 0);
+    
+    _Buffer output = _buffer_make(sizeof(char));
+    _convert_to_utf8_normalize_cpath(&output, current_working);
     free(current_working);
     return _string(output);
 }
@@ -820,21 +1038,15 @@ Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_
         default: style = MB_OK; break;
     }
     
-    char message_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    char title_buffer[IO_LOCAL_BUFFER_SIZE] = {0}; 
-    _Buffer message_wide = _buffer_init_backed(message_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
-    _Buffer title_wide = _buffer_init_backed(title_buffer, IO_LOCAL_BUFFER_SIZE, sizeof(wchar_t));
+    int value = 0;
+    _TEMP_CONVERT_UTF16(message_wide, message) { 
+        _TEMP_CONVERT_UTF16(title_wide, title) { 
+            wchar_t* message_ptr = _wstring(message_wide);
+            wchar_t* title_ptr = _wstring(title_wide);
 
-    _utf8_to_utf16(message, _strlen(message), &message_wide);
-    _utf8_to_utf16(title, _strlen(title), &title_wide);
-
-    wchar_t* message_ptr = _wstring(message_wide);
-    wchar_t* title_ptr = _wstring(title_wide);
-
-    int value = MessageBoxW(0, message_ptr, title_ptr, style | icon);
-
-    _buffer_deinit(&message_wide);
-    _buffer_deinit(&title_wide);
+            value = MessageBoxW(0, message_ptr, title_ptr, style | icon);
+        }
+    }
 
     switch(value)
     {
@@ -851,8 +1063,6 @@ Platform_Window_Popup_Controls platform_window_make_popup(Platform_Window_Popup_
     }
 }
 
-
-//Implementation
 #include <stdint.h>
 #include <stdbool.h>
 #include <windows.h>
@@ -877,7 +1087,7 @@ int64_t platform_capture_call_stack(void** stack, int64_t stack_size, int64_t sk
 }
 
 #define MAX_MODULES 128 
-#define MAX_NAME_LEN 4096
+#define MAX_NAME_LEN 2048
 
 static bool   stack_trace_init = false;
 static HANDLE stack_trace_process;
@@ -889,8 +1099,6 @@ static void _platform_stack_trace_init(const char* search_path)
         return;
 
     stack_trace_process = GetCurrentProcess();
-    HANDLE thread = GetCurrentThread();
-
     if (!SymInitialize(stack_trace_process, search_path, false)) 
     {
         assert(false);
@@ -912,6 +1120,7 @@ static void _platform_stack_trace_init(const char* search_path)
     for(int64_t i = 0; i < module_count; i++)
     {
         HMODULE module_handle = module_handles[i];
+        assert(module_handle != 0);
         MODULEINFO module_info = {0};
         GetModuleInformation(stack_trace_process, module_handle, &module_info, sizeof(module_info));
         GetModuleFileNameExW(stack_trace_process, module_handle, module_filename, sizeof(module_filename));
@@ -965,7 +1174,7 @@ void platform_translate_call_stack(Platform_Stack_Trace_Entry* tanslated, const 
             
         if (symbol_info->Name[0] != '\0')
         {
-            int64_t actual_size = UnDecorateSymbolName(symbol_info->Name, entry->function, sizeof entry->function, UNDNAME_COMPLETE);
+            UnDecorateSymbolName(symbol_info->Name, entry->function, sizeof entry->function, UNDNAME_COMPLETE);
         }
            
         IMAGEHLP_MODULE module_info = {0};
@@ -1050,7 +1259,7 @@ static int64_t _platform_stack_trace_walk(CONTEXT context, HANDLE process, HANDL
     return i;
 }
 
-typedef void (*Sandbox_Error_Func)(void* context, int64_t error_code);
+typedef void (*Sandbox_Error_Func)(void* context, Platform_Sandox_Error error_code);
 
 __declspec(thread) Sandbox_Error_Func sandbox_error_func;
 __declspec(thread) void* sandbox_error_context;
@@ -1185,13 +1394,3 @@ Platform_Sandox_Error platform_exception_sandbox(
     return 0;
 }
 
-
-void platform_init()
-{
-    platform_perf_counter();
-    platform_startup_epoch_time();
-}
-void platform_deinit()
-{
-    
-}

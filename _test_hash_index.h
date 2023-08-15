@@ -77,7 +77,6 @@ INTERNAL void test_hash_index_stress(f64 max_seconds)
 
 	i32 max_size = 0;
 	i32 max_capacity = 0;
-	u64 monotonic_key = 0;
 	f64 start = clock_s();
 	for(isize i = 0; i < MAX_ITERS; i++)
 	{
@@ -138,6 +137,8 @@ INTERNAL void test_hash_index_stress(f64 max_seconds)
 					u64 removed_index = random_range(0, truth_val_array.size);
 					u64 last_index = truth_val_array.size - 1;
 
+					CHECK_BOUNDS(truth_key_array.size, (isize) removed_index);
+					CHECK_BOUNDS(truth_val_array.size, (isize) removed_index);
 					u64 key = truth_key_array.data[removed_index];
 					u64 val = truth_val_array.data[removed_index];
 
@@ -154,6 +155,7 @@ INTERNAL void test_hash_index_stress(f64 max_seconds)
 					hash_index_remove(&table, found);
 				
 					isize found_after = hash_index_find(table, key);
+					TEST(found_after == -1);
 				}
 
 				break;
@@ -196,6 +198,7 @@ INTERNAL void test_hash_index_stress(f64 max_seconds)
 				break;
 			}
 
+			case ACTION_ENUM_COUNT:
 			default: {
 				ASSERT(false && "unreachable");
 				break;		

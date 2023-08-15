@@ -416,7 +416,7 @@ INTERNAL void* _debug_allocator_get_placed_block(const Debug_Allocator* self, vo
     return block;
 }
 
-INTERNAL Debug_Allocation debug_allocator_get_allocation(const Debug_Allocator* self, void* user_ptr)
+EXPORT Debug_Allocation debug_allocator_get_allocation(const Debug_Allocator* self, void* user_ptr)
 {
     Debug_Allocation allocation = {self->parent};
     Debug_Allocation_Pre_Block pre = _debug_allocator_get_pre_block(self, user_ptr);
@@ -487,7 +487,8 @@ INTERNAL isize _debug_allocator_find_allocation(const Debug_Allocator* self, voi
         if(found_ptr == ptr)
             break;
 
-        hash_found = hash_index_find_next(self->alive_allocations_hash, hashed, hash_found);
+        isize finished_at = 0;
+        hash_found = hash_index_find_next(self->alive_allocations_hash, hashed, hash_found, &finished_at);
     }
 
     return hash_found;
@@ -665,7 +666,7 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
         if(allocator.captured_callstack_size > 0)
         {
             log_group_push();
-            log_captured_callstack(STRING_LIT("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
+            log_captured_callstack(STRING("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
             log_group_pop();
         }
     }
@@ -714,12 +715,12 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
             log_group_push();
                 LOG_TRACE("MEMORY", "allocation callstack (%lld):", (lld) curr.allocation_trace.size);
                 log_group_push();
-                log_captured_callstack(STRING_LIT("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
+                log_captured_callstack(STRING("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
                 log_group_pop();
 
                 LOG_TRACE("MEMORY", "deallocation callstack (%lld):", (lld) curr.deallocation_trace.size);
                 log_group_push();
-                log_captured_callstack(STRING_LIT("MEMORY"), curr.deallocation_trace.data, curr.deallocation_trace.size);
+                log_captured_callstack(STRING("MEMORY"), curr.deallocation_trace.data, curr.deallocation_trace.size);
                 log_group_pop();
             log_group_pop();
         }

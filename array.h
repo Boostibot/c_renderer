@@ -77,23 +77,22 @@ EXPORT void _array_append(void* array, isize item_size, const void* data, isize 
 EXPORT void _array_unappend(void* array, isize item_size, isize data_count);
 EXPORT void _array_clear(void* array, isize item_size);
 
-//@TODO: make backing less error prone
 #define array_set_capacity(darray_ptr, capacity) \
     _array_set_capacity(darray_ptr, sizeof *(darray_ptr)->data, capacity, SOURCE_INFO())
     
 #define array_init(darray_ptr, allocator) \
     _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, NULL, 0)
 
-#define array_init(darray_ptr, allocator) \
-    _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, NULL, 0)
-
 #ifndef LIB_MEM_DEBUG
-#define array_init_backed(darray_ptr, allocator, backed_elements_count) \
-    char PP_CONCAT(_backing_buffer_, __LINE__)[backed_elements_count * sizeof *(darray_ptr)->data]; \
-    _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, PP_CONCAT(_backing_buffer_, __LINE__), sizeof PP_CONCAT(_backing_buffer_, __LINE__))
+
+    #define array_init_backed(darray_ptr, allocator, backed_elements_count) \
+        char PP_CONCAT(_backing_buffer_, __LINE__)[backed_elements_count * sizeof *(darray_ptr)->data]; \
+        _array_init(darray_ptr, sizeof *(darray_ptr)->data, allocator, PP_CONCAT(_backing_buffer_, __LINE__), sizeof PP_CONCAT(_backing_buffer_, __LINE__))
 #else
-#define array_init_backed(darray_ptr, allocator, backed_elements_count) \
-    array_init(darray_ptr, allocator)
+    //Backing hides small allocations making it harder to catch memory leaks during testing.
+    //As sich we disable it when LIB_MEM_DEBUG is on.
+    #define array_init_backed(darray_ptr, allocator, backed_elements_count) \
+        array_init(darray_ptr, allocator)
 #endif // ARRAY_DEBUG
 
 #define array_init_backed_custom(darray_ptr, allocator, backing_array, backing_array_size) \
@@ -133,25 +132,35 @@ EXPORT void _array_clear(void* array, isize item_size);
 #define array_unappend(darray_ptr, item_count) \
     _array_unappend(darray_ptr, sizeof *(darray_ptr)->data, item_count)
         
+//Discards current items in the array and replaces them with the provided items
 #define array_assign(darray_ptr, items, item_count) \
     array_clear(darray_ptr), \
     array_append(darray_ptr, items, item_count)
     
+//
 #define array_copy(copy_into_darray_ptr, copy_from_darray) \
     array_assign(copy_into_darray_ptr, (copy_from_darray).data, (copy_from_darray).size)
 
+//Appends a single item to the end of the array
 #define array_push(darray_ptr, item_value)            \
     _array_prepare_push(darray_ptr, sizeof *(darray_ptr)->data, SOURCE_INFO()), \
     (darray_ptr)->data[(darray_ptr)->size - 1] = item_value \
 
+//Removes a single item from the end of the array
 #define array_pop(darray_ptr) \
     _array_unappend(darray_ptr, sizeof *(darray_ptr)->data, 1) \
     
-#define array_first(darray_ptr) \
-    (darray_ptr)->data[0]
+//Returns the value of the first item. The array must not be empty!
+#define array_first(darray) \
+    (CHECK_BOUNDS(0, (darray).size), &(darray).data[0])
 
-#define array_last(darray_ptr) \
-    (darray_ptr)->data[(darray_ptr)->size - 1]
+//Returns the value of the last item. The array must not be empty!
+#define array_last(darray) \
+    (CHECK_BOUNDS(0, (darray).size), &(darray).data[(darray).size - 1])
+
+//Returns a pointer to i-th item. Also does bounds checking.
+#define array_get(darray, index) \
+    (CHECK_BOUNDS(index, (darray).size), &(darray).data[index]) 
 
 #endif
 

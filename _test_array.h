@@ -54,8 +54,8 @@ INTERNAL void test_array_stress(f64 max_seconds)
 	char* buffer = buffer1;
 	i64_Array* arr = &array1;
 	
-	char* other_buffer = buffer1;
-	i64_Array* other_array = &array1;
+	char* other_buffer = buffer2;
+	i64_Array* other_array = &array2;
 	
 	Discrete_Distribution dist = random_discrete_make(probabilities, ACTION_ENUM_COUNT);
 	//*random_state() = random_state_from_seed(1);
@@ -118,7 +118,7 @@ INTERNAL void test_array_stress(f64 max_seconds)
 			case POP: {
 				if(arr->size > 0)
 				{
-					i64 value = array_last(arr);
+					i64 value = *array_last(*arr);
 					TEST(is_power_of_two_zero(value));
 					array_pop(arr);
 				}
@@ -154,11 +154,11 @@ INTERNAL void test_array_stress(f64 max_seconds)
 				i64 appended[64] = {0};
 				isize append_count = random_range(0, 64);
 				
-				CHECK_BOUNDS(append_count, 64)
-				for(isize i = 0; i < append_count; i++)
+				CHECK_BOUNDS(append_count, 64);
+				for(isize k = 0; k < append_count; k++)
 				{
 					i64 value = (i64) 1 << random_range(0, 64);
-					appended[i] = value;
+					appended[k] = value;
 				}
 				
 				array_append(arr, appended, append_count);
@@ -182,8 +182,8 @@ INTERNAL void test_array_stress(f64 max_seconds)
 		if(max_capacity < arr->capacity)
 			max_capacity = arr->capacity;
 
-		for(isize i = 0; i < arr->size; i++)
-			TEST(arr->data != NULL && is_power_of_two_zero(arr->data[i]));
+		for(isize k = 0; k < arr->size; k++)
+			TEST(arr->data != NULL && is_power_of_two_zero(arr->data[k]));
 
 		TEST(_array_is_invariant(arr, sizeof *arr->data));
 	}

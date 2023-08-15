@@ -16,15 +16,15 @@
 #define ASSERT_SLOW(x)         ASSERT_SLOW_MSG(x, "")       /* is enabled by DO_ASSERTS_SLOW */
 #define CHECK_BOUNDS(i, upper) CHECK_BOUNDS_EX(i, 0, upper) /* if i is not within [0, upper) panics. is enabled by DO_BOUNDS_CHECKS*/
 
-#define TEST_MSG(x, msg)                    while(!(x)) {platform_trap(); assertion_report(#x, msg, __FILE__, __LINE__); platform_abort();}
+#define TEST_MSG(x, msg)                    (!(x) ? (platform_trap(), assertion_report(#x, msg, __FILE__, __LINE__), platform_abort()) : (void) 0)
 #define ASSERT_MSG(x, msg)                  PP_IF(DO_ASSERTS,       TEST_MSG)(x, msg)
 #define ASSERT_SLOW_MSG(x, msg)             PP_IF(DO_ASSERTS_SLOW,  TEST_MSG)(x, msg)
 #define CHECK_BOUNDS_EX(i, lower, upper)    PP_IF(DO_ASSERTS,       TEST_MSG)((lower) <= (i) && (i) <= (upper), "Bounds check failed!")
 
 //Doesnt do anything (failed branch) but still properly expands x and msg so it can be type checked.
 //Dissabled asserts expand to this.
-#define NO_ASSERT_MSG(x, msg)               while(0) {x; const char* _msg = (msg);}
-#define NO_CHECK_BOUNDS_EX(i, lower, upper) while(0) {(lower) <= (i) && (i) <= (upper); }
+#define NO_ASSERT_MSG(x, msg)               (0 ? (x, assertion_report(#x, msg, __FILE__, __LINE__)) : (void) 0)
+#define NO_CHECK_BOUNDS_EX(i, lower, upper) (0 ? ((lower) <= (i) && (i) <= (upper)) : (void) 0)
 
 //If dissabled expand to this
 #define _IF_NOT_DO_ASSERTS(ignore)         NO_ASSERT_MSG

@@ -36,6 +36,7 @@ typedef double      f64;
 #define MAX(a, b)   ((a) > (b) ? (a) : (b))
 #define CLAMP(value, low, high) MAX(low, MIN(value, high))
 #define DIV_ROUND_UP(value, div_by) (((value) + (div_by) - 1) / (div_by))
+#define MODULO(val, range) (((val) % (range) + (range)) % (range))
 #define SWAP(a_ptr, b_ptr, Type) \
     do { \
          Type temp = *(a_ptr); \

@@ -107,7 +107,12 @@ double  platform_perf_counter_frequency_d(); //returns the frequency of the perf
 // Filesystem
 //=========================================
 
-typedef enum File_Type
+typedef enum Platform_Error
+{
+    PLATFORM_ERROR_OK = 0
+} Platform_Error;
+
+typedef enum Platform_File_Type
 {
     PLATFORM_FILE_TYPE_NOT_FOUND = 0,
     PLATFORM_FILE_TYPE_FILE = 1,
@@ -115,12 +120,12 @@ typedef enum File_Type
     PLATFORM_FILE_TYPE_CHARACTER_DEVICE = 2,
     PLATFORM_FILE_TYPE_PIPE = 3,
     PLATFORM_FILE_TYPE_OTHER = 5,
-} File_Type;
+} Platform_File_Type;
 
 typedef struct Platform_File_Info
 {
     int64_t size;
-    File_Type type;
+    Platform_File_Type type;
     int64_t created_epoch_time;
     int64_t last_write_epoch_time;  
     int64_t last_access_epoch_time; //The last time file was either read or written
@@ -136,28 +141,57 @@ typedef struct Platform_Directory_Entry
     Platform_File_Info info;
 } Platform_Directory_Entry;
 
+typedef struct Platform_Memory_Mapping
+{
+    void* address;
+    int64_t size;
+    uint64_t state[8];
+} Platform_Memory_Mapping;
+
+char* platform_translate_error_alloc(Platform_Error error);
+
 //retrieves info about the specified file or directory
-bool platform_file_info(const char* file_path, Platform_File_Info* info);
-//Moves or renames a file. If the file cannot be found or renamed to file already exists fails
-bool platform_file_move(const char* new_path, const char* old_path);
-//Copies a file. If the file cannot be found or copy_to_path file already exists fails
-bool platform_file_copy(const char* copy_to_path, const char* copy_from_path);
+Platform_Error platform_file_info(const char* file_path, Platform_File_Info* info);
+//Creates an empty file at the specified path. Succeeds if the file exists after the call.
+//Saves to was_just_created wheter the file was just now created. If is null doesnt save anything.
+Platform_Error platform_file_create(const char* file_path, bool* was_just_created);
+//Removes a file at the specified path. Succeeds if the file exists after the call
+//Saves to was_just_deleted wheter the file was just now deleted. If is null doesnt save anything.
+Platform_Error platform_file_remove(const char* file_path, bool* was_just_deleted);
+//Moves or renames a file. If the file cannot be found or renamed to file that already exists, fails.
+Platform_Error platform_file_move(const char* new_path, const char* old_path);
+//Copies a file. If the file cannot be found or copy_to_path file that already exists, fails.
+Platform_Error platform_file_copy(const char* copy_to_path, const char* copy_from_path);
+//Resizes a file. The file must exist.
+Platform_Error platform_file_resize(const char* file_path, int64_t size);
 
 //Makes an empty directory
-bool platform_directory_create(const char* dir_path);
+Platform_Error platform_directory_create(const char* dir_path);
 //Removes an empty directory
-bool platform_directory_remove(const char* dir_path);
+Platform_Error platform_directory_remove(const char* dir_path);
 //changes the current working directory to the new_working_dir.  
-bool platform_directory_set_current_working(const char* new_working_dir);    
+Platform_Error platform_directory_set_current_working(const char* new_working_dir);    
 //Retrieves the current working directory as allocated string. Needs to be freed using io_free()
-char* platform_directory_get_current_working_malloc();    
+char* platform_directory_get_current_working_alloc();    
 
 //Gathers and allocates list of files in the specified directory. Saves a pointer to array of entries to entries and its size to entries_count. 
 //Needs to be freed using directory_list_contents_free()
-bool platform_directory_list_contents_malloc(const char* directory_path, Platform_Directory_Entry** entries, int64_t* entries_count, int64_t max_depth);
+Platform_Error platform_directory_list_contents_alloc(const char* directory_path, Platform_Directory_Entry** entries, int64_t* entries_count, int64_t max_depth);
 //Frees previously allocated file list
 void platform_directory_list_contents_free(Platform_Directory_Entry* entries);
 
+//Memory maps the file pointed to by file_path and saves the adress and size of the mapped block into mapping. 
+//If the desired_size_or_zero == 0 maps the entire file. 
+//  if the file doesnt exist the function fails.
+//If the desired_size_or_zero > 0 maps only up to desired_size_or_zero bytes from the file.
+//  The file is resized so that it is exactly desired_size_or_zero bytes (filling empty space with 0)
+//  if the file doesnt exist the function creates a new file.
+//If the desired_size_or_zero < 0 maps additional desired_size_or_zero bytes from the file 
+//    (for appending) extending it by that ammount and filling the space with 0.
+//  if the file doesnt exist the function creates a new file.
+Platform_Error platform_file_memory_map(const char* file_path, int64_t desired_size_or_zero, Platform_Memory_Mapping* mapping);
+//Unmpas the previously mapped file. If mapping is a result of failed platform_file_memory_map does nothing.
+void platform_file_memory_unmap(Platform_Memory_Mapping* mapping);
 
 //=========================================
 // Window managmenet

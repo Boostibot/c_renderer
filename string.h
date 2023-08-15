@@ -14,8 +14,17 @@ DEFINE_ARRAY_TYPE(char, String_Builder);
 DEFINE_ARRAY_TYPE(String, String_Array);
 DEFINE_ARRAY_TYPE(String_Builder, String_Builder_Array);
 
-#define STRING_LIT(cstring) BRACE_INIT(String){cstring, sizeof cstring - 1}
+//Constructs a String out of a string literal. Cannot be used with dynamic strings!
+#define STRING(cstring) BRACE_INIT(String){cstring, sizeof(cstring) - 1}
 
+//if the string is valid -> returns it
+//if the string is NULL  -> returns ""
+EXPORT const char*      cstring_escape(const char* string);
+//Returns always null terminated string contained within a builder
+EXPORT const char*      cstring_from_builder(String_Builder builder); 
+
+//Returns a String contained within string builder. The data portion of the string MIGHT be null and in that case its size == 0
+EXPORT String string_from_builder(String_Builder builder); 
 EXPORT String string_make(const char* cstring); //converts a null terminated cstring into a String
 EXPORT String string_head(String string, isize to); //keeps only charcters to to ( [0, to) interval )
 EXPORT String string_tail(String string, isize from); //keeps only charcters from from ( [from, string.size) interval )
@@ -36,19 +45,13 @@ EXPORT isize  string_find_first_char(String string, char search_for, isize from)
 EXPORT isize  string_find_last_from_char(String in_str, char search_for, isize from);
 EXPORT isize  string_find_last_char(String string, char search_for); 
 
-//if the string is valid -> returns it
-//if the string is NULL  -> returns ""
-EXPORT const char* cstring_escape(const char* string);
+EXPORT void             builder_append(String_Builder* builder, String string); //Appends a string
+EXPORT String_Builder   builder_from_string(String string); //Allocates a String_Builder from String. The String_Builder needs to be deinit just line any other ???_Array type!
+EXPORT String_Builder   builder_from_cstring(const char* cstring); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
+EXPORT String_Builder   builder_from_string_alloc(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
 
-//Returns a null terminated string contained in a string builder. The string is always null terminate even when the String_Builder is not yet initialized
-EXPORT const char*     cstring_from_builder(String_Builder builder); 
-//Returns a String contained within string builder. The data portion of the string MIGHT be null and in that case its size == 0
-EXPORT String          string_from_builder(String_Builder builder); 
-EXPORT void            builder_append(String_Builder* builder, String string); //Appends a string
-EXPORT String_Builder  builder_from_string(String string); //Allocates a String_Builder from String. The String_Builder needs to be deinit just line any other ???_Array type!
-EXPORT String_Builder  builder_from_cstring(const char* cstring); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
-EXPORT String_Builder  builder_from_string_alloc(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
-
+EXPORT bool             builder_is_equal(String_Builder a, String_Builder b); //Returns true if the contents and sizes of the strings match
+EXPORT int              builder_compare(String_Builder a, String_Builder b); //Compares sizes and then lexographically the contents. Shorter strings are placed before longer ones.
 
 EXPORT void string_join_into(String_Builder* append_to, const String* strings, isize strings_count, String separator); //Appends all strings in the strings array to append_to
 EXPORT void string_split_into(String_Array* append_to, String to_split, String split_by); //Splits the to_split string using split_by as a separator and appends the individual split parts into append_to
@@ -149,6 +152,7 @@ EXPORT String_Array string_split(String to_split, String split_by);
             bool found = true;
             for(isize j = 0; j < search_for.size; j++)
             {
+                CHECK_BOUNDS(i + j, in_str.size);
                 if(in_str.data[i + j] != search_for.data[j])
                 {
                     found = false;
@@ -254,7 +258,7 @@ EXPORT String_Array string_split(String to_split, String split_by);
     EXPORT String_Builder builder_from_string_alloc(String string, Allocator* allocator)
     {
         String_Builder builder = {allocator};
-        array_assign(&builder, string.data, string.size);
+        array_append(&builder, string.data, string.size);
         return builder;
     }
 
@@ -266,6 +270,16 @@ EXPORT String_Array string_split(String to_split, String split_by);
     EXPORT String_Builder builder_from_cstring(const char* cstring)
     {
         return builder_from_string(string_make(cstring));
+    }
+
+    EXPORT bool builder_is_equal(String_Builder a, String_Builder b)
+    {
+        return string_is_equal(string_from_builder(a), string_from_builder(b));
+    }
+    
+    EXPORT int builder_compare(String_Builder a, String_Builder b)
+    {
+        return string_compare(string_from_builder(a), string_from_builder(b));
     }
 
     EXPORT void string_join_into(String_Builder* append_to, const String* strings, isize strings_count, String separator)

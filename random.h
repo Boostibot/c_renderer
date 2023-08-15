@@ -21,7 +21,7 @@ float    random_f32();
 double   random_f64(); 
 //generates random u64 in range [0, U64_MAX] 
 uint64_t random_u64();  
-//generates random u64 in range [I64_MIN, U64_MAX] 
+//generates random i64 in range [I64_MIN, U64_MAX] 
 int64_t  random_i64();  
 //generates unbiased random integer in range [from, to)
 int64_t  random_range(int64_t from, int64_t to); 
@@ -54,7 +54,7 @@ float    random_state_f32(Random_State* state);
 double   random_state_f64(Random_State* state); 
 //generates random u64 in range [0, U64_MAX] 
 uint64_t random_state_u64(Random_State* state);  
-//generates random u64 in range [I64_MIN, U64_MAX] 
+//generates random i64 in range [I64_MIN, U64_MAX] 
 int64_t  random_state_i64(Random_State* state);  
 //generates unbiased random integer in range [from, to)
 int64_t  random_state_range(Random_State* state, int64_t from, int64_t to); 
@@ -137,7 +137,9 @@ void     random_state_shuffle(Random_State* state, void* elements, int64_t eleme
 	uint64_t random_clock_seed()
 	{
 		//if the test fails this does not compile
-		int _static_assert_[sizeof(clock_t) <= sizeof(uint64_t) ? 1 : 0] = {0};
+		int _static_assert_[sizeof(clock_t) <= sizeof(uint64_t) ? 1 : -1] = {0};
+		(void) _static_assert_;
+
 		uint64_t clock1 = 0;
 		uint64_t clock2 = 0;
 		
@@ -291,7 +293,6 @@ void     random_state_shuffle(Random_State* state, void* elements, int64_t eleme
 		char temp[LOCAL] = {0};
 		char* elems = (char*) elements;
 		int64_t s = element_size;
-		int64_t c = element_count;
 
 		if(element_size <= LOCAL)
 		{

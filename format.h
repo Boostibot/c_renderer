@@ -11,8 +11,9 @@ EXPORT void format_into(String_Builder* append_to, const char* format, ...);
 EXPORT void format_into_sized(String_Builder* append_to, String format, ...);
 
 #define CSTRING_ESCAPE(s) (s) == NULL ? "" : (s)
-#define STR_FMT "%.*s"
-#define STR_PRINT(string) (string).size, (string).data
+
+#define STRING_FMT "%.*s"
+#define STRING_PRINT(string) (string).size, (string).data
 
 #define SOURCE_INFO_FMT "( %s : %lld )"
 #define SOURCE_INFO_PRINT(source_info) cstring_escape((source_info).file), (source_info).line
@@ -43,7 +44,7 @@ typedef long long int lld;
         if(count > estimated_size)
         {
             array_resize(append_to, base_size + count + 3);
-            isize count = vsnprintf(append_to->data + base_size, (size_t) (append_to->size - base_size), format, args);
+            count = vsnprintf(append_to->data + base_size, (size_t) (append_to->size - base_size), format, args);
         }
     
         //if(count != 0)

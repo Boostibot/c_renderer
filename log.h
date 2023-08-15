@@ -188,10 +188,11 @@ EXPORT String_Builder         log_encode(Log_Chanel_Entry_Array array);
 #include "hash_index.h"
 #include "hash.h"
 
-#define _LOG_SYSTEM_EXTENSION STRING_LIT("txt")
-#define _LOG_FILE_SLOTS 2
+#define _LOG_SYSTEM_EXTENSION STRING("txt")
+#define _LOG_FILE_SLOTS 4
 #define _LOG_DEF_BUFFER_FLUSH_SIZE 0
 #define _LOG_DEF_FUSH_EVERY_S 0.02
+#define _LOG_MAX_RECURSION_DEPTH 3
 
 typedef struct Log_Chanel_State {
     String_Builder buffer;
@@ -236,6 +237,10 @@ typedef struct
 
     u64 last_hash;
     isize last_index;
+    isize error_recusion_depth;
+    //used to prevent log infinite recursion errors
+    // ie printing error msg triggers an error msg ad infinity
+    // this can easily happen with file io, allocations and others.
 } Log_System_Module_State;
 
 INTERNAL Log_System_Module_State global_log_state = {0};
@@ -265,11 +270,11 @@ INTERNAL void _log_system_create_log_name(String_Builder* into, u64 epoch_time, 
 {
     Platform_Calendar_Time calendar = platform_epoch_time_to_calendar_time(epoch_time);
     const char* space = chanel.size > 0 ? "_" : "";
-    format_into(into, "log_"STR_FMT"%s%04d-%02d-%02d_%02d-%02d-%02d." STR_FMT, 
-        STR_PRINT(chanel), space,
+    format_into(into, "log_"STRING_FMT"%s%04d-%02d-%02d_%02d-%02d-%02d." STRING_FMT, 
+        STRING_PRINT(chanel), space,
         (int) calendar.year, (int) calendar.month, (int) calendar.day, 
         (int) calendar.hour, (int) calendar.minute, (int) calendar.second, 
-        STR_PRINT(extension));
+        STRING_PRINT(extension));
 }
 
 EXPORT void string_builder_array_deinit(String_Builder_Array* array)
@@ -297,7 +302,6 @@ EXPORT void log_system_init(Allocator* default_allocator, Allocator* scratch_all
         i64 startup_universal = platform_startup_epoch_time();
         i64 startup_local = startup_universal + delta;
 
-        global_log_state.is_init = true;
         global_log_state.default_allocator = default_allocator;
         global_log_state.scratch_allocator = scratch_allocator;
         global_log_state.last_index = -1;
@@ -315,7 +319,7 @@ EXPORT void log_system_init(Allocator* default_allocator, Allocator* scratch_all
         array_resize(&global_log_state.open_file_names, global_log_state.open_files_max);
 
         Log_Chanel_State state = {0};
-        _log_chanel_state_init(&state, STRING_LIT(""));
+        _log_chanel_state_init(&state, STRING(""));
         array_push(&global_log_state.chanels, state);
         
         options.buffer_size = _LOG_DEF_BUFFER_FLUSH_SIZE;
@@ -323,10 +327,11 @@ EXPORT void log_system_init(Allocator* default_allocator, Allocator* scratch_all
         options.console_takes_log_types = 0xFFFFFFFF;
         options.file_takes_log_types = 0xFFFFFFFF;
         
-        builder_append(&options.file_directory_path, STRING_LIT("logs/"));
+        builder_append(&options.file_directory_path, STRING("logs/"));
 
         array_copy(&options.file_filename, state.file_name);
         global_log_state.system_options = options;
+        global_log_state.is_init = true;
     }
 }
 
@@ -506,6 +511,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
     isize furthest_flush_time_index = 0;
     double furthest_flush_time = INFINITY;
 
+    ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
     for(isize i = 0; i < global_log_state.open_files_max; i++)
     {
         CHECK_BOUNDS(i, global_log_state.open_file_names.size);
@@ -534,7 +540,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
         String dir_path = string_from_builder(global_log_state.system_options.file_directory_path);
         array_init_backed(&local_path, global_log_state.scratch_allocator, 256);
         builder_append(&local_path, dir_path);
-        builder_append(&local_path, STRING_LIT("/"));
+        builder_append(&local_path, STRING("/"));
         builder_append(&local_path, chanel_file);
 
         platform_directory_create(dir_path.data);
@@ -559,7 +565,7 @@ INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
     array_clear(&chanel_state->buffer);
 }
 
-INTERNAL void log_flush_all()
+EXPORT void log_flush_all()
 {
     if(global_log_state.is_init == false)
         return;
@@ -568,7 +574,7 @@ INTERNAL void log_flush_all()
         _log_flush_chanel(&global_log_state.chanels.data[i]);
 }
 
-INTERNAL void log_flush(String chanel)
+EXPORT void log_flush(String chanel)
 {
     if(global_log_state.is_init == false)
         return;
@@ -592,7 +598,8 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
 {
     if(global_log_state.is_init == false)
         return;
-
+        
+    ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
     isize size_before = append_to->size;
     String group_separator = string_make(".   ");
     String message_string = string_from_builder(entry.message);
@@ -638,18 +645,25 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
     bool run = true;
     while(run)
     {
+        isize next_line_pos = -1;
         if(curr_line_pos >= message_size)
-            break;
+        {
+            if(message_size != 0)
+                break;
+        }
+        else
+        {
+            next_line_pos = string_find_first_char(message_string, '\n', curr_line_pos);
+        }
 
-        isize next_line_pos = string_find_first_char(message_string, '\n', curr_line_pos);
         if(next_line_pos == -1)
         {
             next_line_pos = message_size;
             run = false;
         }
         
-        assert(curr_line_pos < message_size);
-        assert(next_line_pos <= message_size);
+        ASSERT(curr_line_pos <= message_size);
+        ASSERT(next_line_pos <= message_size);
 
         String curr_line = string_range(message_string, curr_line_pos, next_line_pos);
 
@@ -666,7 +680,7 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
             builder_append(append_to, group_separator);
         
         //array_push(append_to, ':');
-        builder_append(append_to, STRING_LIT(":"));
+        builder_append(append_to, STRING(":"));
         builder_append(append_to, curr_line);
         array_push(append_to, '\n');
 
@@ -676,8 +690,11 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
 
 EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
 {
-    if(global_log_state.is_init == false)
+    if(global_log_state.is_init == false || global_log_state.error_recusion_depth > _LOG_MAX_RECURSION_DEPTH)
         return;
+        
+    ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
+    global_log_state.error_recusion_depth += 1;
 
     assert(log_type < 64);
     //log_system_init();
@@ -723,13 +740,15 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     {
         Log_Chanel_State* central_state = &state->chanels.data[state->central_chanel_index];
         assert(central_state->is_init == true);
-        //_log_chanel_state_init(central_state, STRING_LIT(""));
+        //_log_chanel_state_init(central_state, STRING(""));
         _log_print_to_chanel(central_state, string_from_builder(message));
     }
 
     array_deinit(&message);
     array_deinit(&chanel_entry.message);
     array_deinit(&chanel_entry.chanel);
+
+    global_log_state.error_recusion_depth -= 1;
 }
 
 
@@ -764,11 +783,7 @@ EXPORT void log_callstack(String chanel, isize depth, isize skip)
         }
     }
 
-    void** callstack = stack.data;
-    captured_depth;
-    chanel;
-
-    log_captured_callstack(chanel, callstack, captured_depth);
+    log_captured_callstack(chanel, stack.data, captured_depth);
 
     array_deinit(&stack);
 }
@@ -807,7 +822,7 @@ EXPORT void assertion_report(const char* expression, const char* message, const 
         LOG_FATAL("TEST", "with message:\n%s", message);
         
     log_group_push();
-    log_callstack(STRING_LIT("TEST"), -1, 1);
+    log_callstack(STRING("TEST"), -1, 1);
     log_group_pop();
     log_flush_all();
 }
@@ -859,7 +874,7 @@ EXPORT void allocator_out_of_memory(
 
     
     log_group_push();
-        log_callstack(STRING_LIT("MEMORY"), -1, 1);
+        log_callstack(STRING("MEMORY"), -1, 1);
     log_group_pop();
 
     log_flush_all();

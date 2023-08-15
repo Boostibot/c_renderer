@@ -109,6 +109,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
+      <AdditionalOptions>/wd4996 /Wall /wd4820 /wd4255 /wd4127 /wd5045 /wd4100 /wd4064 /wd4548 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -127,6 +128,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
+      <AdditionalOptions>/wd4996 /Wall /wd4820 /wd4255 /wd4127 /wd5045 /wd4100 /wd4064 /wd4548 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -144,11 +146,12 @@
     <ClInclude Include="allocator_debug.h" />
     <ClInclude Include="array.h" />
     <ClInclude Include="assert.h" />
-    <ClInclude Include="handle_table.h" />
     <ClInclude Include="defines.h" />
+    <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_index.h" />
+    <ClInclude Include="hash_table.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />
@@ -157,6 +160,7 @@
     <ClInclude Include="time.h" />
     <ClInclude Include="_test.h" />
     <ClInclude Include="_test_array.h" />
+    <ClInclude Include="_test_hash_index.h" />
     <ClInclude Include="_test_hash_table.h" />
     <ClInclude Include="_test_log.h" />
     <ClInclude Include="_test_random.h" />

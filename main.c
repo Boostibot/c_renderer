@@ -9,6 +9,8 @@
 #include "_test_array.h"
 #include "_test_hash_index.h"
 #include "_test_log.h"
+#include "_test_hash_table.h"
+#include "file.h"
 
 void error_func(void* context, Platform_Sandox_Error error_code);
 
@@ -16,25 +18,92 @@ void error_func(void* context, Platform_Sandox_Error error_code);
 //Lives inside a sandbox :3
 void run_func(void* context)
 {
+    test_hash_table_stress(3.0);
+    LOG_INFO("APP", "All tests passed! uwu");
+    return;
+
     test_log();
     test_array(1.0);
     test_hash_index(1.0);
     test_random();
 
-    LOG_INFO("APP", "All tests passed! uwu");
 }
 
 int main()
 {
     platform_init();
+    
     Allocator* alloc = allocator_get_default();
     log_system_init(alloc, alloc);
+
+    Debug_Allocator debug_allocator = {0};
+    debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_PRINT | DEBUG_ALLOCATOR_CONTINUOUS);
+
+
+    file_system_init(&debug_allocator.allocator, &debug_allocator.allocator);
+
+    {
+        String_Builder contents = {0};
+        LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+
+        //Platform_Error error = file_read_entire(STRING("main.c"), &contents);
+        Platform_Error error = file_read_entire(STRING("main.c"), &contents);
+        if(error != 0)
+        {
+            LOG_ERROR("APP", "%s", platform_translate_error_alloc(error));
+        }
+        
+        LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+        
+        error = file_append_entire(STRING("main_new.c"), string_from_builder(contents));
+        error = file_append_entire(STRING("main_new.c"), string_from_builder(contents));
+        if(error != 0)
+        {
+            LOG_ERROR("APP", "%s", platform_translate_error_alloc(error));
+        }
+        
+        error = file_write_entire(STRING("main_new.c"), string_from_builder(contents));
+    }
+
+
+    String_Builder contents = {0};
+    array_resize(&contents, 500);
+    File_IO_Result read_result = {0};
+
+    
+
+    read_result = file_read(STRING("main.c"), 0,    500, contents.data);
+    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+
+    read_result = file_read(STRING("file.h"), 0,    500, contents.data);
+    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+
+    read_result = file_read(STRING("main.c"), 500, 500, contents.data);
+    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+
+    file_create(STRING("custom_log.txt"));
+    read_result = file_write(STRING("custom_log.txt"), 500, 500, contents.data);
+    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+
+    read_result = file_read(STRING("main.c"), 1000, 500, contents.data);
+    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
+    
+    read_result = file_read(STRING("main.c"), 3000, 500, contents.data);
+    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
 
     Platform_Sandox_Error error = platform_exception_sandbox(
         run_func, NULL, 
         error_func, NULL);
     
+    (void) error;
+    array_deinit(&contents);
+
+    file_system_deinit();
+
+    debug_allocator_deinit(&debug_allocator);
+
     log_system_deinit();
+
     platform_deinit();
 
     return 0;    
@@ -77,6 +146,6 @@ void error_func(void* context, Platform_Sandox_Error error_code)
     LOG_ERROR("APP", "%s exception occured", msg);
     LOG_TRACE("APP", "printing trace:");
     log_group_push();
-    log_callstack(STRING_LIT("APP"), -1, 1);
+    log_callstack(STRING("APP"), -1, 1);
     log_group_pop();
 }
