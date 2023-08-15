@@ -81,6 +81,10 @@ typedef union Mat4
     };
 } Mat4;
 
+#define VEC2(a, b) BRACE_INIT(Vec3){a, b}
+#define VEC3(a, b, c) BRACE_INIT(Vec3){a, b, c}
+#define VEC4(a, b, c, d) BRACE_INIT(Vec3){a, b, c, d}
+
 JMAPI float lerpf(float lo, float hi, float t) 
 {
     return lo * (1.0f - t) + hi * t;

@@ -9,6 +9,8 @@
 
 INTERNAL void test_hash_table_stress(f64 max_seconds)
 {
+    (void) max_seconds;
+
     Debug_Allocator debug_allocator = {0};
     debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_PRINT | DEBUG_ALLOCATOR_CONTINUOUS);
 

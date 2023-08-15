@@ -854,11 +854,16 @@ EXPORT void allocator_out_of_memory(
     LOG_FATAL("MEMORY", 
         "Allocator %s %s ran out of memory\n"
         "new_size:    %lld B\n"
+        "old_ptr:     %p\n"
         "old_size:    %lld B\n"
+        "align:       %lld B\n"
         "called from: " SOURCE_INFO_FMT "\n"
         "user message:\n%s",
         stats.type_name, stats.name, 
-        (lld) new_size, (lld) old_size, 
+        (lld) new_size, 
+        old_ptr,
+        (lld) old_size,
+        (lld) align,
         SOURCE_INFO_PRINT(called_from),
         cstring_from_builder(user_message)
     );

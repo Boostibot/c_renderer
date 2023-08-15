@@ -325,6 +325,7 @@ extern Malloc_Allocator global_malloc_allocator;
 
     EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
     {
+        (void) called_from;
         Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
         isize size_delta = new_size - old_size;
         self->bytes_allocated += size_delta;

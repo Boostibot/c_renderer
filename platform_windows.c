@@ -3,9 +3,6 @@
 #include <assert.h>
 #include <windows.h>
 
-#include <gl\gl.h>          // Header File For The OpenGL32 Library
-#include <gl\glu.h>         // Header File For The GLu32 Library
-
 #include <memoryapi.h>
 #include <processthreadsapi.h>
 #include <winnt.h>
@@ -66,6 +63,7 @@ void* platform_virtual_reallocate(void* adress, int64_t bytes, Platform_Virtual_
 
 void* platform_heap_reallocate(int64_t new_size, void* old_ptr, int64_t old_size, int64_t align)
 {
+    (void) old_size;
     if(new_size == 0)
     {
         _aligned_free(old_ptr);
@@ -458,14 +456,14 @@ static int64_t _buffer_push(_Buffer* stack, const void* item, int64_t item_size)
 {
     return _buffer_append(stack, item, item_size, 1);
 
-    if(stack->item_size == 0)
-        stack->item_size = (int32_t) item_size;
+    //if(stack->item_size == 0)
+    //    stack->item_size = (int32_t) item_size;
 
-    assert(stack->item_size == item_size);
-    _buffer_resize(stack, stack->size + 1);
+    //assert(stack->item_size == item_size);
+    //_buffer_resize(stack, stack->size + 1);
 
-    memmove((char*) stack->data + (stack->size - 1)*item_size, item, item_size);
-    return stack->size;
+    //memmove((char*) stack->data + (stack->size - 1)*item_size, item, item_size);
+    //return stack->size;
 }
 
 static void* _buffer_at(_Buffer* stack, int64_t index)
@@ -1270,7 +1268,7 @@ static int64_t _platform_stack_trace_walk(CONTEXT context, HANDLE process, HANDL
     if(image_type == 0)
         image_type = native_image; 
     
-    //HANDLE thread = GetCurrentThread();
+    (void) process;
     int64_t i = 0;
     for(; i < frame_count; i++)
     {

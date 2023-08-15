@@ -170,6 +170,7 @@ EXPORT void _array_clear(void* array, isize item_size);
 
 EXPORT bool _array_is_invariant(const void* array, isize item_size)
 {
+    (void) item_size;
     u8_Array* base = (u8_Array*) array;
     bool is_capaicty_correct = 0 <= base->capacity;
     bool is_size_correct = (0 <= base->size && base->size < base->capacity);
@@ -184,6 +185,7 @@ EXPORT bool _array_is_invariant(const void* array, isize item_size)
 
 EXPORT bool _array_is_backed(const void* array, isize item_size)
 {
+    (void) item_size;
     u8_Array* base = (u8_Array*) array;
     bool is_backed = (usize) base->allocator & 1;
     return is_backed;
@@ -191,6 +193,7 @@ EXPORT bool _array_is_backed(const void* array, isize item_size)
 
 EXPORT void _array_set_backed(void* array, isize item_size, bool to)
 {
+    (void) item_size;
     u8_Array* base = (u8_Array*) array;
     if(to)
         base->allocator = (Allocator*) ((usize) base->allocator | 1);

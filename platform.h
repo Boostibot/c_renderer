@@ -341,12 +341,16 @@ typedef enum {
     
     inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64_t value)
     {
+        (void) value; 
+        (void) target;
         return 0;
         //return (int64_t) _InterlockedAddLargeStatistic((volatile long long*) target, (long long) value);
     }
 
     inline static int32_t platform_interlocked_add32(volatile int32_t* target, int32_t value)
     {
+        (void) value; 
+        (void) target;
         return 0;
         //return (int32_t) _InterlockedAdd((volatile long*) target, (long) value);
     }

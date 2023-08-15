@@ -84,7 +84,6 @@ Platform_Error file_write_entire(String file_path, String contents)
     return error;
 }
 
-
 Platform_Error file_create(String file_path, bool* was_just_created)
 {
     String_Builder escpaed_file_path = {0};
@@ -94,6 +93,7 @@ Platform_Error file_create(String file_path, bool* was_just_created)
     Platform_Error error = platform_file_create(cstring_from_builder(escpaed_file_path), was_just_created);
     
     array_deinit(&escpaed_file_path);
+    return error;
 }
 Platform_Error file_remove(String file_path, bool* was_just_removed)
 {
@@ -104,6 +104,7 @@ Platform_Error file_remove(String file_path, bool* was_just_removed)
     Platform_Error error = platform_file_remove(cstring_from_builder(escpaed_file_path), was_just_removed);
     
     array_deinit(&escpaed_file_path);
+    return error;
 }
 void file_translate_error(String_Builder* into, u64 error)
 {
@@ -112,7 +113,8 @@ void file_translate_error(String_Builder* into, u64 error)
 
     builder_append(into, msg_string);
 
-    platform_heap_reallocate(0, msg_string.data, msg_string.size, 8);
+    //@NOTE: Also potential leak here if builder panics => add allocators!
+    platform_heap_reallocate(0, msg, msg_string.size, 8);
 }
 
 #endif
