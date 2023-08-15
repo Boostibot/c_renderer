@@ -330,6 +330,7 @@ static void     _buffer_init_backed(_Buffer* buffer, void* backing, int64_t back
 static _Buffer  _buffer_make(int64_t item_size);
 static void*    _buffer_resize(_Buffer* stack, int64_t new_size);
 static int64_t  _buffer_push(_Buffer* stack, const void* item, int64_t item_size);
+static int64_t  _buffer_append(_Buffer* stack, const void* items, int64_t item_size, int64_t item_count);
 static void*    _buffer_at(_Buffer* stack, int64_t index);
 static void     _buffer_deinit(_Buffer* stack);
 
@@ -348,30 +349,32 @@ static int64_t _strlen(const char* str)
         return (int64_t) strlen(str);
 }
 
-static void _utf16_to_utf8(const wchar_t* utf16, int64_t utf16len, _Buffer* output) 
+static void _utf16_to_utf8(const wchar_t* utf16, int64_t utf16len, _Buffer* append_to) 
 {
     if (utf16 == NULL || utf16len == 0) 
     {
-        _buffer_resize(output, 0);
+        _buffer_resize(append_to, 0);
         return;
     }
 
     int utf8len = WideCharToMultiByte(CP_UTF8, 0, utf16, (int) utf16len, NULL, 0, NULL, NULL);
-    _buffer_resize(output, utf8len);
-    WideCharToMultiByte(CP_UTF8, 0, utf16, (int) utf16len, _string(*output), (int) utf8len, 0, 0);
+    int64_t size_before = append_to->size;
+    _buffer_resize(append_to, size_before + utf8len);
+    WideCharToMultiByte(CP_UTF8, 0, utf16, (int) utf16len, _string(*append_to) + size_before, (int) utf8len, 0, 0);
 }
     
-static void _utf8_to_utf16(const char* utf8, int64_t utf8len, _Buffer* output) 
+static void _utf8_to_utf16(const char* utf8, int64_t utf8len, _Buffer* append_to) 
 {
     if (utf8 == NULL || utf8len == 0) 
     {
-        _buffer_resize(output, 0);
+        _buffer_resize(append_to, 0);
         return;
     }
 
     int utf16len = MultiByteToWideChar(CP_UTF8, 0, utf8, (int) utf8len, NULL, 0);
-    _buffer_resize(output, utf16len);
-    MultiByteToWideChar(CP_UTF8, 0, utf8, (int) utf8len, _wstring(*output), (int) utf16len);
+    int64_t size_before = append_to->size;
+    _buffer_resize(append_to, size_before + utf8len);
+    MultiByteToWideChar(CP_UTF8, 0, utf8, (int) utf8len, _wstring(*append_to) + size_before, (int) utf16len);
 }
 
 static wchar_t* _wstring(_Buffer stack)
@@ -438,8 +441,23 @@ static void* _buffer_resize(_Buffer* stack, int64_t new_size)
     return stack->data;
 }
 
+
+static int64_t _buffer_append(_Buffer* stack, const void* items, int64_t item_size, int64_t item_count)
+{
+    if(stack->item_size == 0)
+        stack->item_size = (int32_t) item_size;
+
+    assert(stack->item_size == item_size);
+    _buffer_resize(stack, stack->size + item_count);
+
+    memmove((char*) stack->data + (stack->size - item_count)*item_size, items, item_size*item_count);
+    return stack->size;
+}
+
 static int64_t _buffer_push(_Buffer* stack, const void* item, int64_t item_size)
 {
+    return _buffer_append(stack, item, item_size, 1);
+
     if(stack->item_size == 0)
         stack->item_size = (int32_t) item_size;
 
@@ -481,7 +499,21 @@ static void _w_concat(const wchar_t* a, const wchar_t* b, const wchar_t* c, _Buf
 void _normalize_convert_to_utf16_path(_Buffer* output, const char* path, int64_t path_size)
 {
     assert(output->item_size == sizeof(wchar_t));
+
+    //if(path_size > _MAX_PATH + 5)
+    //{
+    //    const wchar_t* long_path_prefix = L"\\\\?\\";
+    //    _buffer_append(output, long_path_prefix, sizeof(wchar_t), _wcslen(long_path_prefix));
+    //}
+
     _utf8_to_utf16(path, path_size, output);
+    wchar_t* str = _wstring(*output);
+
+    for(int64_t i = 0; i < output->size; i++)
+    {
+        if(str[i] == L'/')
+            str[i] = L'\\';
+    }
 }
 
 void _convert_to_utf8_normalize_path(_Buffer* output, const wchar_t* path, int64_t path_size)
@@ -490,7 +522,7 @@ void _convert_to_utf8_normalize_path(_Buffer* output, const wchar_t* path, int64
     _utf16_to_utf8(path, path_size, output);
 
     char* str = _string(*output);
-    //just a quick conversion to linux style slashes for consistency
+
     for(int64_t i = 0; i < output->size; i++)
     {
         if(str[i] == '\\')

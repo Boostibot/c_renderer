@@ -39,9 +39,6 @@ int main()
     Debug_Allocator debug_allocator = {0};
     debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_PRINT | DEBUG_ALLOCATOR_CONTINUOUS);
 
-
-    file_system_init(&debug_allocator.allocator, &debug_allocator.allocator);
-
     {
         String_Builder contents = {0};
         LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
@@ -66,39 +63,9 @@ int main()
     }
 
 
-    String_Builder contents = {0};
-    array_resize(&contents, 500);
-    File_IO_Result read_result = {0};
-
-    
-
-    read_result = file_read(STRING("main.c"), 0,    500, contents.data);
-    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
-
-    read_result = file_read(STRING("file.h"), 0,    500, contents.data);
-    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
-
-    read_result = file_read(STRING("main.c"), 500, 500, contents.data);
-    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
-
-    file_create(STRING("custom_log.txt"));
-    read_result = file_write(STRING("custom_log.txt"), 500, 500, contents.data);
-    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
-
-    read_result = file_read(STRING("main.c"), 1000, 500, contents.data);
-    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
-    
-    read_result = file_read(STRING("main.c"), 3000, 500, contents.data);
-    LOG_INFO("APP", STRING_FMT, STRING_PRINT(contents));
-
     Platform_Sandox_Error error = platform_exception_sandbox(
         run_func, NULL, 
         error_func, NULL);
-    
-    (void) error;
-    array_deinit(&contents);
-
-    file_system_deinit();
 
     debug_allocator_deinit(&debug_allocator);
 
