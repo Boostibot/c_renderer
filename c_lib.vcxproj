@@ -113,7 +113,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
-      <AdditionalOptions>/wd4996  /wd4820 /wd4255  /wd5045  /wd4064 /wd4548 /wd4201 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/wd4996  /wd4820 /wd4255  /wd5045  /wd4064 /wd4548 /wd4201 /wd4296 %(AdditionalOptions)</AdditionalOptions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
     </ClCompile>
@@ -133,7 +133,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
-      <AdditionalOptions>/wd4996  /wd4820 /wd4255  /wd5045  /wd4064 /wd4548 /wd4201 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/wd4996  /wd4820 /wd4255  /wd5045  /wd4064 /wd4548 /wd4201 /wd4296 %(AdditionalOptions)</AdditionalOptions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
     </ClCompile>
@@ -158,6 +158,8 @@
     <ClInclude Include="defines.h" />
     <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
+    <ClInclude Include="gl.h" />
+    <ClInclude Include="gl_debug_output.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_index.h" />
     <ClInclude Include="hash_table.h" />
@@ -165,6 +167,8 @@
     <ClInclude Include="math.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="random.h" />
+    <ClInclude Include="gl_shader_util.h" />
+    <ClInclude Include="shapes.h" />
     <ClInclude Include="string.h" />
     <ClInclude Include="time.h" />
     <ClInclude Include="_test.h" />
@@ -172,7 +176,16 @@
     <ClInclude Include="_test_hash_index.h" />
     <ClInclude Include="_test_hash_table.h" />
     <ClInclude Include="_test_log.h" />
+    <ClInclude Include="_test_math.h" />
     <ClInclude Include="_test_random.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\depth_color.frag" />
+    <None Include="shaders\depth_color.vert" />
+    <None Include="shaders\screen.frag" />
+    <None Include="shaders\screen.vert" />
+    <None Include="shaders\solid_color.frag" />
+    <None Include="shaders\solid_color.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

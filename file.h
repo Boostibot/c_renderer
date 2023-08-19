@@ -108,6 +108,9 @@ Platform_Error file_remove(String file_path, bool* was_just_removed)
 }
 void file_translate_error(String_Builder* into, u64 error)
 {
+    if(into == NULL)
+        return;
+
     char* msg = platform_translate_error_alloc(error);
     String msg_string = string_make(msg);
 

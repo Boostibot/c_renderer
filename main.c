@@ -11,15 +11,15 @@
 #include "random.h"
 #include "math.h"
 
-#include "glad2/gl.h"
+#include "gl.h"
+#include "gl_shader_util.h"
+#include "gl_tables.h"
+#include "gl_debug_output.h"
+#include "shapes.h"
+
+#include "linmath/linmath.h"
 #include "glfw/glfw3.h"
 
-
-
-typedef struct Inputs
-{
-    uint8_t keys[256];  
-} Inputs;
 
 typedef enum Control_Name
 {
@@ -39,8 +39,8 @@ typedef enum Control_Name
 
     CONTROL_MOVE_FORWARD,
     CONTROL_MOVE_BACKWARD,
-    CONTROL_MOVE_LEFT,
     CONTROL_MOVE_RIGHT,
+    CONTROL_MOVE_LEFT,
     CONTROL_MOVE_UP,
     CONTROL_MOVE_DOWN,
 
@@ -50,6 +50,11 @@ typedef enum Control_Name
     CONTROL_PAUSE,
     CONTROL_SPRINT,
     
+    CONTROL_REFRESH_SHADERS,
+    CONTROL_REFRESH_ART,
+    CONTROL_REFRESH_CODE,
+    CONTROL_REFRESH_ALL,
+
     CONTROL_DEBUG_1,
     CONTROL_DEBUG_2,
     CONTROL_DEBUG_3,
@@ -64,7 +69,11 @@ typedef enum Control_Name
     CONTROL_COUNT,
 } Control_Name;
 
-#define CONTROL_MAPPING_SETS 3
+//just for consistency here
+#define GLFW_MOUSE_X 0
+#define GLFW_MOUSE_Y 1
+#define GLFW_MOUSE_SCROLL 2
+#define GLFW_MOUSE_LAST GLFW_MOUSE_SCROLL
 
 //Maps physical inputs to abstract game actions
 //each entry can be assigned to one action.
@@ -73,15 +82,18 @@ typedef enum Control_Name
 // by duplicating this structure
 typedef struct Control_Mapping
 {
-    uint8_t mouse_x;
-    uint8_t mouse_y;
-    uint8_t mouse_scroll;
-
-    //Joystick and gamepads later....
-    uint8_t mouse_buttons[GLFW_MOUSE_BUTTON_LAST];
-    uint8_t keys[GLFW_KEY_LAST];
+    u8 mouse[GLFW_MOUSE_LAST];
+    u8 mouse_buttons[GLFW_MOUSE_BUTTON_LAST + 1];
+    u8 keys[GLFW_KEY_LAST + 1];
+    //@TODO: Joystick and gamepads later....
 } Control_Mapping;
 
+typedef enum Input_Type
+{
+    INPUT_TYPE_MOUSE,
+    INPUT_TYPE_MOUSE_BUTTON,
+    INPUT_TYPE_KEY
+} Input_Type;
 
 //An abstarct set of game actions to be used by the game code
 //we represent all values as ammount and the number of interactions
@@ -92,36 +104,68 @@ typedef struct Control_Mapping
 typedef struct Controls
 {
     f32 values[CONTROL_COUNT];
-    uint8_t interactions[CONTROL_COUNT];
+    u8 interactions[CONTROL_COUNT];
 } Controls;
+
+//windows defines...
+#undef near
+#undef far
 
 typedef struct Camera
 {
-    int x;
+    f32 fov;
+    f32 aspect_ratio;
+    Vec3 pos;
+    Vec3 looking_at;
+    Vec3 up_dir;
+
+    f32 near;
+    f32 far;
+    
+    //if is set to true looking_at is relative to pos 
+    //effectively making the looking_at become looking_at + pos
+    bool is_position_relative;  
+
+    //specifies if should use ortographic projection.
+    //If is true uses top/bot/left/right. The area of the rectangle must not be 0!
+    bool is_ortographic;        
+    f32 top;
+    f32 bot;
+    f32 left;
+    f32 right;
 } Camera;
 
-typedef struct Game_State
+typedef struct Render_State
 {
-    Vec3 camera_pos;
-    Vec3 camera_front_dir;
-    Vec3 camera_up_dir;
-    Vec3 active_object_pos;
+    int x;
+} Render_State;
 
+typedef struct Game_Settings
+{
+    f32 fov;
     f32 movement_speed;
     f32 movement_sprint_mult;
 
-    f64 delta_time;
-    f64 last_frame_timepoint;
     f32 screen_gamma;
     f32 screen_exposure;
+    f32 paralax_heigh_scale;
 
     f32 mouse_sensitivity;
     f32 mouse_wheel_sensitivity;
+} Game_Settings;
 
-    f32 camera_yaw;
-    f32 camera_pitch;
-    f32 camera_fov;
-    f32 heigh_scale;
+#define CONTROL_MAPPING_SETS 3
+typedef struct Game_State
+{
+    Render_State render;
+    Game_Settings settings;
+    Camera camera;
+
+    Vec3 active_object_pos;
+    Vec3 player_pos;
+
+    f64 delta_time;
+    f64 last_frame_timepoint;
 
     i32 window_screen_width_prev;
     i32 window_screen_height_prev;
@@ -140,42 +184,88 @@ typedef struct Game_State
     Controls controls;
     Controls controls_prev;
     Control_Mapping control_mappings[CONTROL_MAPPING_SETS];
+    bool key_states[GLFW_KEY_LAST + 1];
 } Game_State;
+
+typedef struct Screen_Frame_Buffers
+{
+    GLuint frame_buff; //glDeleteFramebuffers
+    GLuint color_buff; //glDeleteBuffers
+    GLuint render_buff; //glDeleteRenderbuffers
+} Screen_Frame_Buffers;
+
+
 
 void error_func(void* context, Platform_Sandox_Error error_code);
 void run_test_func(void* context);
 
-void mapping_make_default(Control_Mapping mappings[CONTROL_MAPPING_SETS]);
-void game_state_init(Game_State* state);
 
-void window_process_input(GLFWwindow* window, bool is_initial_call);
-
-//there must not be 2 or more of the same control on the same physical input device
-bool mapping_check(Control_Mapping mappings[CONTROL_MAPPING_SETS])
+bool control_was_pressed(Controls* controls, Control_Name control)
 {
-    (void) mappings;
-    return true;
+    u8 interactions = controls->interactions[control];
+    f32 value = controls->values[control];
+
+    //was pressed and released at least once
+    if(interactions > 2)
+        return true;
+
+    //was interacted with once to pressed state
+    if(interactions == 1 && value != 0.0f)
+        return true;
+
+    return false;
 }
 
-void run_func(void* context)
+bool control_was_released(Controls* controls, Control_Name control)
 {
-    GLFWwindow* window = (GLFWwindow*) context;
-    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    
-    game_state_init(game_state);
+    u8 interactions = controls->interactions[control];
+    f32 value = controls->values[control];
 
-    mapping_make_default(game_state->control_mappings);
-    window_process_input(window, true);
+    //was pressed and released at least once
+    if(interactions > 2)
+        return true;
 
-    while(game_state->should_close == false)
+    //was interacted with once to released state
+    if(interactions == 1 && value == 0.0f)
+        return true;
+
+    return false;
+}
+
+bool control_is_down(Controls* controls, Control_Name control)
+{
+    f32 value = controls->values[control];
+    return value != 0;
+}
+
+u8* control_mapping_get_entry(Control_Mapping* mapping, Input_Type type, isize index)
+{
+    switch(type)
     {
-        if(game_state->controls.interactions[CONTROL_ESCAPE] && game_state->controls.values[CONTROL_ESCAPE] > 0)
-            LOG_INFO("APP", "escaped interacted with %d and value %f", (int) game_state->controls.interactions[CONTROL_ESCAPE], game_state->controls.values[CONTROL_ESCAPE]);
-            
-        //if(game_state->controls.values[CONTROL_ESCAPE] > 0)
+        case INPUT_TYPE_MOUSE:        
+            CHECK_BOUNDS(index, GLFW_MOUSE_LAST + 1); 
+            return &mapping->mouse[index];
+        case INPUT_TYPE_MOUSE_BUTTON: 
+            CHECK_BOUNDS(index, GLFW_MOUSE_BUTTON_LAST + 1); 
+            return &mapping->mouse_buttons[index];
+        case INPUT_TYPE_KEY:          
+            CHECK_BOUNDS(index, GLFW_KEY_LAST + 1); 
+            return &mapping->keys[index];
+        default: ASSERT(false); return NULL;
+    }
+}
 
-        //platform_thread_sleep(500);
-        window_process_input(window, false);
+void control_mapping_add(Control_Mapping mappings[CONTROL_MAPPING_SETS], Control_Name control, Input_Type type, isize index)
+{
+    for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
+    {
+        Control_Mapping* mapping = &mappings[i];
+        u8* control_slot = control_mapping_get_entry(mapping, type, index);
+        if(*control_slot == CONTROL_NONE)
+        {
+            *control_slot = control;
+            break;
+        }
     }
 }
 
@@ -183,70 +273,54 @@ void mapping_make_default(Control_Mapping mappings[CONTROL_MAPPING_SETS])
 {
     memset(mappings, 0, sizeof(Control_Mapping) * CONTROL_MAPPING_SETS);
 
-    mappings[1].mouse_x = CONTROL_MOUSE_X;
-    mappings[1].mouse_y = CONTROL_MOUSE_Y;
+    const Input_Type MOUSE = INPUT_TYPE_MOUSE;
+    const Input_Type KEY = INPUT_TYPE_KEY;
+    const Input_Type MOUSE_BUTTON = INPUT_TYPE_MOUSE_BUTTON;
 
-    mappings[1].mouse_scroll = CONTROL_SCROLL;
-    
-    mappings[0].mouse_x = CONTROL_LOOK_X;
-    mappings[0].mouse_y = CONTROL_LOOK_Y;
-    
-    mappings[0].mouse_scroll = CONTROL_ZOOM;
+    (void) MOUSE_BUTTON;
 
-    mappings[0].keys[GLFW_KEY_W] = CONTROL_MOVE_FORWARD;
-    mappings[0].keys[GLFW_KEY_S] = CONTROL_MOVE_BACKWARD;
-    mappings[0].keys[GLFW_KEY_A] = CONTROL_MOVE_LEFT;
-    mappings[0].keys[GLFW_KEY_D] = CONTROL_MOVE_RIGHT;
-    mappings[0].keys[GLFW_KEY_SPACE] = CONTROL_MOVE_UP;
-    mappings[0].keys[GLFW_KEY_LEFT_SHIFT] = CONTROL_MOVE_DOWN;
+    control_mapping_add(mappings, CONTROL_MOUSE_X,      MOUSE, GLFW_MOUSE_X);
+    control_mapping_add(mappings, CONTROL_MOUSE_Y,      MOUSE, GLFW_MOUSE_Y);
+    control_mapping_add(mappings, CONTROL_LOOK_X,       MOUSE, GLFW_MOUSE_X);
+    control_mapping_add(mappings, CONTROL_LOOK_Y,       MOUSE, GLFW_MOUSE_Y);
+    control_mapping_add(mappings, CONTROL_SCROLL,       MOUSE, GLFW_MOUSE_SCROLL);
     
-    mappings[1].keys[GLFW_KEY_UP] = CONTROL_MOVE_FORWARD;
-    mappings[1].keys[GLFW_KEY_DOWN] = CONTROL_MOVE_BACKWARD;
-    mappings[1].keys[GLFW_KEY_LEFT] = CONTROL_MOVE_LEFT;
-    mappings[1].keys[GLFW_KEY_RIGHT] = CONTROL_MOVE_RIGHT;
-
+    control_mapping_add(mappings, CONTROL_MOVE_FORWARD, KEY, GLFW_KEY_W);
+    control_mapping_add(mappings, CONTROL_MOVE_BACKWARD,KEY, GLFW_KEY_S);
+    control_mapping_add(mappings, CONTROL_MOVE_RIGHT,   KEY, GLFW_KEY_D);
+    control_mapping_add(mappings, CONTROL_MOVE_LEFT,    KEY, GLFW_KEY_A);
+    control_mapping_add(mappings, CONTROL_MOVE_UP,      KEY, GLFW_KEY_SPACE);
+    control_mapping_add(mappings, CONTROL_MOVE_DOWN,    KEY, GLFW_KEY_LEFT_SHIFT);
     
-    mappings[1].keys[GLFW_KEY_SPACE] = CONTROL_JUMP;
-    mappings[0].keys[GLFW_KEY_E] = CONTROL_INTERACT;
-    mappings[0].keys[GLFW_KEY_ESCAPE] = CONTROL_ESCAPE;
-    mappings[1].keys[GLFW_KEY_ESCAPE] = CONTROL_PAUSE;
-    mappings[0].keys[GLFW_KEY_LEFT_ALT] = CONTROL_SPRINT;
-
+    control_mapping_add(mappings, CONTROL_MOVE_FORWARD, KEY, GLFW_KEY_UP);
+    control_mapping_add(mappings, CONTROL_MOVE_FORWARD, KEY, GLFW_KEY_DOWN);
+    control_mapping_add(mappings, CONTROL_MOVE_RIGHT,   KEY, GLFW_KEY_RIGHT);
+    control_mapping_add(mappings, CONTROL_MOVE_RIGHT,   KEY, GLFW_KEY_LEFT);
     
-    mappings[0].keys[GLFW_KEY_F1] = CONTROL_DEBUG_1;
-    mappings[0].keys[GLFW_KEY_F2] = CONTROL_DEBUG_2;
-    mappings[0].keys[GLFW_KEY_F3] = CONTROL_DEBUG_3;
-    mappings[0].keys[GLFW_KEY_F4] = CONTROL_DEBUG_4;
-    mappings[0].keys[GLFW_KEY_F5] = CONTROL_DEBUG_5;
-    mappings[0].keys[GLFW_KEY_F6] = CONTROL_DEBUG_6;
-    mappings[0].keys[GLFW_KEY_F7] = CONTROL_DEBUG_7;
-    mappings[0].keys[GLFW_KEY_F8] = CONTROL_DEBUG_8;
-    mappings[0].keys[GLFW_KEY_F9] = CONTROL_DEBUG_9;
-    mappings[0].keys[GLFW_KEY_F10] = CONTROL_DEBUG_10;
+    control_mapping_add(mappings, CONTROL_JUMP,         KEY, GLFW_KEY_SPACE);
+    control_mapping_add(mappings, CONTROL_INTERACT,     KEY, GLFW_KEY_E);
+    control_mapping_add(mappings, CONTROL_ESCAPE,       KEY, GLFW_KEY_ESCAPE);
+    control_mapping_add(mappings, CONTROL_PAUSE,        KEY, GLFW_KEY_ESCAPE);
+    control_mapping_add(mappings, CONTROL_SPRINT,       KEY, GLFW_KEY_LEFT_ALT);
+    
+    control_mapping_add(mappings, CONTROL_REFRESH_ALL,  KEY, GLFW_KEY_R);
+    control_mapping_add(mappings, CONTROL_DEBUG_1,      KEY, GLFW_KEY_F1);
+    control_mapping_add(mappings, CONTROL_DEBUG_2,      KEY, GLFW_KEY_F2);
+    control_mapping_add(mappings, CONTROL_DEBUG_3,      KEY, GLFW_KEY_F3);
+    control_mapping_add(mappings, CONTROL_DEBUG_4,      KEY, GLFW_KEY_F4);
+    control_mapping_add(mappings, CONTROL_DEBUG_5,      KEY, GLFW_KEY_F5);
+    control_mapping_add(mappings, CONTROL_DEBUG_6,      KEY, GLFW_KEY_F6);
+    control_mapping_add(mappings, CONTROL_DEBUG_7,      KEY, GLFW_KEY_F7);
+    control_mapping_add(mappings, CONTROL_DEBUG_8,      KEY, GLFW_KEY_F8);
+    control_mapping_add(mappings, CONTROL_DEBUG_9,      KEY, GLFW_KEY_F9);
+    control_mapping_add(mappings, CONTROL_DEBUG_10,     KEY, GLFW_KEY_F10);
 }
 
-void game_state_init(Game_State* state)
+//there must not be 2 or more of the same control on the same physical input device
+bool mapping_check(u8 mappings[CONTROL_MAPPING_SETS])
 {
-    memset(state, 0, sizeof *state);
-
-    state->camera_yaw = -PI/2.0f;
-    state->camera_pitch = 0.0f;
-    state->camera_fov = PI/4.0f;
-    state->camera_pos       = VEC3(0.0f, 0.0f,  3.0f);
-    state->camera_front_dir = VEC3(1.0f, 0.0f,  0.0f);
-    state->camera_up_dir    = VEC3(0.0f, 1.0f,  0.0f);
-    state->active_object_pos = VEC3(0, 0, 0);
-
-    state->movement_speed = 2.5f;
-    state->movement_sprint_mult = state->movement_speed * 5;
-
-    state->delta_time = 0.0f;
-    state->last_frame_timepoint = 0.0f;
-    state->screen_gamma = 2.2f;
-    state->screen_exposure = 1.0;
-
-    state->mouse_sensitivity = 0.002f;
-    state->mouse_wheel_sensitivity = 0.01f; // uwu
+    (void) mappings;
+    return true;
 }
 
 Vec3 gamma_correct(Vec3 color, f32 gamma)
@@ -263,6 +337,7 @@ Vec3 inv_gamma_correct(Vec3 color, f32 gamma)
     return gamma_correct(color, 1.0f/gamma);
 }
 
+
 void* glfw_malloc_func(size_t size, void* user);
 void* glfw_realloc_func(void* block, size_t size, void* user);
 void glfw_free_func(void* block, void* user);
@@ -271,6 +346,25 @@ void glfw_error_func(int code, const char* description);
 void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mods);
 void glfw_mouse_button_func(GLFWwindow* window, int button, int action, int mods);
 void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset);
+
+void controls_effect_by_input(Game_State* game_state, Input_Type input_type, isize index, f32 value)
+{
+    for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
+    {
+        Control_Mapping* mapping = &game_state->control_mappings[i];
+        u8* control_slot = control_mapping_get_entry(mapping, input_type, index);
+        if(*control_slot != CONTROL_NONE)
+        {
+            u8* interactions = &game_state->controls.interactions[*control_slot];
+            f32* stored_value = &game_state->controls.values[*control_slot];
+
+            if(*interactions < UINT8_MAX)
+                *interactions += 1;
+
+            *stored_value = value;
+        }
+    }
+}
 
 void window_process_input(GLFWwindow* window, bool is_initial_call)
 {
@@ -287,15 +381,14 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
         glfwSetMouseButtonCallback(window, glfw_mouse_button_func);
         glfwSetScrollCallback(window, glfw_scroll_func);
         glfwSetScrollCallback(window, glfw_scroll_func); 
-        game_state->is_in_mouse_mode = false;
     }
     
+    game_state->controls_prev = game_state->controls;
     memset(&game_state->controls.interactions, 0, sizeof game_state->controls.interactions);
+    //memset(&game_state->controls.values, 0, sizeof game_state->controls.values);
+
     glfwPollEvents();
-    f64 time = clock_s();
     game_state->should_close = glfwWindowShouldClose(window);
-    game_state->delta_time = time - game_state->last_frame_timepoint; 
-    game_state->last_frame_timepoint = time; 
     
     STATIC_ASSERT(sizeof(int) == sizeof(i32));
 
@@ -312,179 +405,126 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
     game_state->window_framebuffer_width = MAX(game_state->window_framebuffer_width, 1);
     game_state->window_framebuffer_height = MAX(game_state->window_framebuffer_height, 1);
 
-    f64 new_mouse[2] = {0};
-    glfwGetCursorPos(window, &new_mouse[0], &new_mouse[1]);
-
-    for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
-    {
-        Control_Mapping* mapping = &game_state->control_mappings[i];
-        u8 controls[2] = {mapping->mouse_x, mapping->mouse_y};
-        for(isize k = 0; k < 2; k++)
-        {
-            u8 control = controls[k];
-            f32 mouse = (f32) new_mouse[k];
-
-            if(control != CONTROL_NONE)
-            {
-                if(game_state->controls.interactions[control] < UINT8_MAX)
-                    game_state->controls.interactions[control] ++;
-                game_state->controls.values[control] = mouse;
-            }
-        }
-    }
+    f64 new_mouse_x = 0;
+    f64 new_mouse_y = 0;
+    glfwGetCursorPos(window, &new_mouse_x, &new_mouse_y);
+    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_X, (f32) new_mouse_x);
+    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_Y, (f32) new_mouse_y);
     
-    if(game_state->is_in_mouse_mode_prev != game_state->is_in_mouse_mode)
+    if(game_state->is_in_mouse_mode_prev != game_state->is_in_mouse_mode || is_initial_call)
     {
         if(game_state->is_in_mouse_mode == false)
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); 
+            if(glfwRawMouseMotionSupported())
+                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); 
         }
         else
         {
-            if(glfwRawMouseMotionSupported())
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); 
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); 
+            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
         }
     }
 
-    game_state->controls_prev = game_state->controls;
     game_state->is_in_mouse_mode_prev = game_state->is_in_mouse_mode;
-    
 }
 
 void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     (void) mods;
     (void) scancode;
-    f32 to_value = 0.0f;
+    f32 value = 0.0f;
     if(action == GLFW_PRESS)
     {
-        to_value = 1.0f;
+        value = 1.0f;
     }
     else if(action == GLFW_RELEASE)
     {
-        to_value = 0.0f;
+        value = 0.0f;
     }
     else
-    {
         return;
-    }
-
 
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
-    {
-        Control_Mapping* mapping = &game_state->control_mappings[i];
-        u8 control = mapping->keys[key];
-        if(control != CONTROL_NONE)
-        {
-            if(game_state->controls.interactions[control] < UINT8_MAX)
-                game_state->controls.interactions[control] ++;
-            game_state->controls.values[control] = to_value;
-        }
-    }
+    controls_effect_by_input(game_state, INPUT_TYPE_KEY, key, value);
+    
 }
 
 void glfw_mouse_button_func(GLFWwindow* window, int button, int action, int mods)
 {
     (void) mods;
-    f32 to_value = 0.0f;
+    f32 value = 0.0f;
     if(action == GLFW_PRESS)
-        to_value = 1.0f;
+        value = 1.0f;
     else if(action == GLFW_RELEASE)
-        to_value = 0.0f;
+        value = 0.0f;
     else
         return;
 
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
-    {
-        Control_Mapping* mapping = &game_state->control_mappings[i];
-        u8 control = mapping->mouse_buttons[button];
-        if(control != CONTROL_NONE)
-        {
-            if(game_state->controls.interactions[control] < UINT8_MAX)
-                game_state->controls.interactions[control] ++;
-            game_state->controls.values[control] = to_value;
-        }
-    }
+    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE_BUTTON, button, value);
 }
 
 void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset)
 {   
     (void) xoffset;
+    f32 value = (f32) yoffset;
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
-    {
-        Control_Mapping* mapping = &game_state->control_mappings[i];
-        u8 control = mapping->mouse_scroll;
-        if(control != CONTROL_NONE)
-        {
-            if(game_state->controls.interactions[control] < UINT8_MAX)
-                game_state->controls.interactions[control] ++;
-            game_state->controls.values[control] += (f32) yoffset;
-        }
-    }
+    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_SCROLL, value);
 }
 
-int main()
+void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 height)
 {
-    platform_init();
-    log_system_init(&global_malloc_allocator.allocator, &global_malloc_allocator.allocator);
 
-    Debug_Allocator debug_allocator = {0};
-    debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
+    memset(buffer, 0, sizeof *buffer);
 
-    GLFWallocator allocator = {0};
-    allocator.allocate = glfw_malloc_func;
-    allocator.reallocate = glfw_realloc_func;
-    allocator.deallocate = glfw_free_func;
-    allocator.user = &debug_allocator;
- 
-    glfwInitAllocator(&allocator);
-    glfwSetErrorCallback(glfw_error_func);
-    TEST_MSG(glfwInit(), "Failed to init glfw");
+    LOG_INFO("RENDR", "screen_frame_buffers_init %-4d x %-4d", width, height);
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);  
- 
-    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-    ASSERT(monitor && mode);
-    if(monitor != NULL && mode != NULL)
-    {
-        glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-        glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-        glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-        glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-    }
- 
-    //Create window set it as context and set its resize event
-    GLFWwindow* window = glfwCreateWindow(1600, 900, "title", NULL, NULL);
-    TEST_MSG(window != NULL, "Failed to make glfw window");
+    //@NOTE: 
+    //The lack of the following line caused me 2 hours of debugging why my application crashed due to NULL ptr 
+    //deref in glDrawArrays. I still dont know why this occurs but just for safety its better to leave this here.
+    glBindVertexArray(0);
 
-    Game_State game_state = {0};
-    glfwSetWindowUserPointer(window, &game_state);
-    glfwMakeContextCurrent(window);
+    glGenFramebuffers(1, &buffer->frame_buff);
+    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff);    
 
-    int version = gladLoadGL((GLADloadfunc) glfwGetProcAddress);
-    TEST_MSG(version != 0, "Failed to load opengl with glad");
+    // generate texture
+    glGenTextures(1, &buffer->color_buff);
+    glBindTexture(GL_TEXTURE_2D, buffer->color_buff);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-    platform_exception_sandbox(
-        run_func, window, 
-        error_func, window);
+    // attach it to currently bound screen_frame_buffers object
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer->color_buff, 0);
 
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    glGenRenderbuffers(1, &buffer->render_buff);
+    glBindRenderbuffer(GL_RENDERBUFFER, buffer->render_buff); 
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);  
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-    debug_allocator_deinit(&debug_allocator);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, buffer->render_buff);
 
-    log_system_deinit();
-    platform_deinit();
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+       TEST_MSG(false, "frame buffer creation failed!"); 
 
-    return 0;    
+    glDisable(GL_FRAMEBUFFER_SRGB);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
 }
+
+void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
+{
+    glBindVertexArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glDeleteFramebuffers(1, &buffer->frame_buff);
+    glDeleteBuffers(1, &buffer->color_buff);
+    glDeleteRenderbuffers(1, &buffer->render_buff);
+
+    memset(buffer, 0, sizeof *buffer);
+}
+
 
 const char* platform_sandbox_error_to_cstring(Platform_Sandox_Error error)
 {
@@ -544,7 +584,6 @@ void glfw_error_func(int code, const char* description)
     LOG_ERROR("APP", "GLWF error %d with message: %s", code, description);
 }
 
-
 void error_func(void* context, Platform_Sandox_Error error_code)
 {
     (void) context;
@@ -562,14 +601,485 @@ void error_func(void* context, Platform_Sandox_Error error_code)
 #include "_test_hash_index.h"
 #include "_test_log.h"
 #include "_test_hash_table.h"
+#include "_test_math.h"
 void run_test_func(void* context)
 {
     (void) context;
-    test_hash_table_stress(3.0);
-    test_log();
-    test_array(1.0);
-    test_hash_index(1.0);
-    test_random();
+    test_math(10.0);
+    //test_hash_table_stress(3.0);
+    //test_log();
+    //test_array(1.0);
+    //test_hash_index(1.0);
+    //test_random();
     LOG_INFO("TEST", "All tests passed! uwu");
     return;
+}
+
+Mat4 camera_make_projection_matrix(Camera camera)
+{
+    Mat4 projection = {0};
+    if(camera.is_ortographic)
+        projection = mat4_ortographic_projection(camera.bot, camera.top, camera.left, camera.right, camera.near, camera.far);
+    else
+        projection = mat4_perspective_projection(camera.fov, camera.aspect_ratio, camera.near, camera.far);
+    return projection;
+}
+
+Vec3 camera_get_look_dir(Camera camera)
+{
+    Vec3 look_dir = camera.looking_at;
+    if(camera.is_position_relative == false)
+        look_dir = vec3_add(look_dir, camera.pos);
+    return look_dir;
+}
+
+Vec3 camera_get_looking_at(Camera camera)
+{
+    Vec3 looking_at = camera.looking_at;
+    if(camera.is_position_relative)
+        looking_at = vec3_add(looking_at, camera.pos); 
+    return looking_at;
+}
+
+Mat4 camera_make_view_matrix(Camera camera)
+{
+    Vec3 looking_at = camera_get_looking_at(camera);
+    Mat4 view = mat4_look_at(camera.pos, looking_at, camera.up_dir);
+    return view;
+}
+
+void run_func(void* context);
+
+int main()
+{
+    platform_init();
+    log_system_init(&global_malloc_allocator.allocator, &global_malloc_allocator.allocator);
+
+    Debug_Allocator debug_allocator = {0};
+    debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
+
+    GLFWallocator allocator = {0};
+    allocator.allocate = glfw_malloc_func;
+    allocator.reallocate = glfw_realloc_func;
+    allocator.deallocate = glfw_free_func;
+    allocator.user = &debug_allocator;
+ 
+    glfwInitAllocator(&allocator);
+    glfwSetErrorCallback(glfw_error_func);
+    TEST_MSG(glfwInit(), "Failed to init glfw");
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);  
+ 
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    ASSERT(monitor && mode);
+    if(monitor != NULL && mode != NULL)
+    {
+        glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+        glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+        glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+        glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    }
+ 
+    //Create window set it as context and set its resize event
+    GLFWwindow* window = glfwCreateWindow(1600, 900, "title", NULL, NULL);
+    TEST_MSG(window != NULL, "Failed to make glfw window");
+
+    Game_State game_state = {0};
+    glfwSetWindowUserPointer(window, &game_state);
+    glfwMakeContextCurrent(window);
+
+    int version = gladLoadGL((GLADloadfunc) glfwGetProcAddress);
+    TEST_MSG(version != 0, "Failed to load opengl with glad");
+
+    gl_debug_output_enable();
+
+    platform_exception_sandbox(
+        run_func, window, 
+        error_func, window);
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
+    debug_allocator_deinit(&debug_allocator);
+
+    log_system_deinit();
+    platform_deinit();
+
+    return 0;    
+}
+typedef struct Shader_Params
+{
+    Vec3 view_pos;
+    Vec3 light_pos;
+    Vec3 light_color;
+
+    Mat4 model;
+    Mat4 view;
+    Mat4 projection;
+
+    f32 light_radius;
+    f32 light_linear_attentuation;
+    f32 light_quadratic_attentuation;
+    f32 ambient_strength;
+    i32 options;
+} Shader_Params;
+
+typedef struct Drawable_Mesh
+{
+    GLuint vao;
+    GLuint vbo;
+    GLuint ebo;
+} Drawable_Mesh;
+
+typedef struct Drawable_Vertex
+{
+    Vec3 pos;
+    Vec3 norm;
+    Vec3 tan;
+    Vec3 bitan;
+    Vec2 uv;
+} Drawable_Vertex;
+
+
+#define VEC2_FMT "{%f, %f}"
+#define VEC2_PRINT(vec) (vec).x, (vec).y
+
+#define VEC3_FMT "{%f, %f, %f}"
+#define VEC3_PRINT(vec) (vec).x, (vec).y, (vec).z
+
+#define VEC4_FMT "{%f, %f, %f, %f}"
+#define VEC4_PRINT(vec) (vec).x, (vec).y, (vec).z, (vec).w
+
+const f32 TRIANGLE_VERTICES[] = {
+    0.0f,  1.0f, 0.0f, 1.0f, 0.0f,
+    -0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
+    0.5f,  0.0f, 0.0f, 1.0f, 0.0f,
+};
+const GLuint TRIANGLE_INDECES[] = {
+    0, 1, 2
+};
+
+void run_func(void* context)
+{
+    LOG_INFO("APP", "run_func enter");
+
+    GLFWwindow* window = (GLFWwindow*) context;
+    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
+    
+    memset(game_state, 0, sizeof *game_state);
+
+    game_state->camera.pos        = VEC3(0.0f, 0.0f,  0.0f);
+    game_state->camera.looking_at = VEC3(1.0f, 0.0f,  0.0f);
+    game_state->camera.up_dir     = VEC3(0.0f, 1.0f,  0.0f);
+    game_state->camera.is_position_relative = true;
+
+    f32 CAMERA_yaw = -TAU/4;
+    f32 CAMERA_pitch = 0.0;
+
+    game_state->is_in_mouse_mode = false;
+    game_state->settings.fov = TAU/4;
+    game_state->settings.movement_speed = 2.5f;
+    game_state->settings.movement_sprint_mult = 5;
+    game_state->settings.screen_gamma = 2.2f;
+    game_state->settings.screen_exposure = 1.0;
+    game_state->settings.mouse_sensitivity = 0.002f;
+    game_state->settings.mouse_wheel_sensitivity = 0.01f; // uwu
+
+    mapping_make_default(game_state->control_mappings);
+
+    
+    GLuint quadVAO = 0;  
+    GLuint quadVBO = 0;
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_VERTICES), QUAD_VERTICES, GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+
+    GLuint solid_color_shader = 0;
+    GLuint screen_shader = 0;
+
+    //String_Builder fps_display = {0};
+
+    Screen_Frame_Buffers screen_buffers = {0};
+
+    Drawable_Mesh drawable_cube = {0};
+
+    glGenVertexArrays(1, &drawable_cube.vao);
+    glGenBuffers(1, &drawable_cube.vbo);
+    glGenBuffers(1, &drawable_cube.ebo);
+  
+    glBindVertexArray(drawable_cube.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, drawable_cube.vbo);
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof CUBE_VERTICES, CUBE_VERTICES, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, drawable_cube.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof CUBE_INDECES, CUBE_INDECES, GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+    
+    glEnableVertexAttribArray(0);	
+    glEnableVertexAttribArray(1);	
+    
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
+
+    // vertex positions
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
+    //glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tan));
+    //glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, bitan));
+    //glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+
+    //glEnableVertexAttribArray(0);	
+    //glEnableVertexAttribArray(1);	
+    //glEnableVertexAttribArray(2);	
+    //glEnableVertexAttribArray(3);	
+    //glEnableVertexAttribArray(4);
+
+    glBindVertexArray(0);
+    for(bool first_run = true; game_state->should_close == false; first_run = false)
+    {
+        f64 time = clock_s();
+        game_state->delta_time = time - game_state->last_frame_timepoint; 
+        game_state->last_frame_timepoint = time; 
+
+        window_process_input(window, first_run);
+        if(game_state->window_framebuffer_width != game_state->window_framebuffer_width_prev 
+            || game_state->window_framebuffer_height != game_state->window_framebuffer_height_prev
+            || first_run)
+        {
+            LOG_INFO("APP", "Resizing");
+            screen_frame_buffers_deinit(&screen_buffers);
+            screen_frame_buffers_init(&screen_buffers, game_state->window_framebuffer_width, game_state->window_framebuffer_height);
+            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height);
+        }
+        
+        if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&game_state->controls, CONTROL_REFRESH_SHADERS)
+            || first_run)
+        {
+            LOG_INFO("APP", "Refreshing shaders");
+            shader_unload(&solid_color_shader);
+            shader_unload(&screen_shader);
+            solid_color_shader = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING("//prepended"), NULL);
+            screen_shader = shader_load(STRING("shaders/screen.vert"), STRING("shaders/screen.frag"), STRING(""), STRING(""), NULL);
+        }
+        
+        if(control_was_pressed(&game_state->controls, CONTROL_ESCAPE))
+        {
+            game_state->is_in_mouse_mode = !game_state->is_in_mouse_mode;
+        }
+        
+        //Movement
+        {
+            f32 move_speed = game_state->settings.movement_speed;
+            if(control_is_down(&game_state->controls, CONTROL_SPRINT))
+                move_speed *= game_state->settings.movement_sprint_mult;
+
+            Vec3 direction_forward = vec3_norm(camera_get_look_dir(game_state->camera));
+            Vec3 direction_up = vec3_norm(game_state->camera.up_dir);
+            Vec3 direction_right = vec3_norm(vec3_cross(direction_forward, game_state->camera.up_dir));
+            
+            Vec3 move_dir = {0};
+            move_dir = vec3_add(move_dir, vec3_scale(game_state->controls.values[CONTROL_MOVE_FORWARD], direction_forward));
+            move_dir = vec3_add(move_dir, vec3_scale(game_state->controls.values[CONTROL_MOVE_UP], direction_up));
+            move_dir = vec3_add(move_dir, vec3_scale(game_state->controls.values[CONTROL_MOVE_RIGHT], direction_right));
+            
+            move_dir = vec3_add(move_dir, vec3_scale(-game_state->controls.values[CONTROL_MOVE_BACKWARD], direction_forward));
+            move_dir = vec3_add(move_dir, vec3_scale(-game_state->controls.values[CONTROL_MOVE_DOWN], direction_up));
+            move_dir = vec3_add(move_dir, vec3_scale(-game_state->controls.values[CONTROL_MOVE_LEFT], direction_right));
+
+            if(vec3_len(move_dir) != 0.0f)
+                move_dir = vec3_norm(move_dir);
+
+            Vec3 move_ammount = vec3_scale(move_speed * (f32) game_state->delta_time, move_dir);
+            game_state->camera.pos = vec3_add(game_state->camera.pos, move_ammount);
+        }
+
+        #if 1
+        //Camera rotation
+        if(game_state->is_in_mouse_mode == false)
+        {
+            f32 mousex_prev = game_state->controls_prev.values[CONTROL_LOOK_X];
+            f32 mousey_prev = game_state->controls_prev.values[CONTROL_LOOK_Y];
+
+            f32 mousex = game_state->controls.values[CONTROL_LOOK_X];
+            f32 mousey = game_state->controls.values[CONTROL_LOOK_Y];
+
+            if(mousex != mousex_prev || mousey != mousey_prev)
+            {
+                f64 xoffset = mousex - mousex_prev;
+                f64 yoffset = mousey_prev - mousey; // reversed since y-coordinates range from bottom to top
+
+                xoffset *= game_state->settings.mouse_sensitivity;
+                yoffset *= game_state->settings.mouse_sensitivity;
+                f32 epsilon = 1e-5f;
+
+                CAMERA_yaw   += (f32) xoffset;
+                CAMERA_pitch += (f32) yoffset; 
+                CAMERA_pitch = CLAMP(CAMERA_pitch, -TAU/4.0f + epsilon, TAU/4.0f - epsilon);
+        
+                Vec3 direction = {0};
+                direction.x = cosf(CAMERA_yaw) * cosf(CAMERA_pitch);
+                direction.y = sinf(CAMERA_pitch);
+                direction.z = sinf(CAMERA_yaw) * cosf(CAMERA_pitch);
+
+                //game_state->camera.looking_at = VEC3(0, 0, 0);
+                game_state->camera.looking_at = vec3_norm(direction);
+            }
+        
+        }
+        #endif
+
+        //@TODO: remove useless comments
+        //       fps counter
+        //       second pass fix
+        //       sphere mesh finish
+        //       PBR rendering
+
+        game_state->camera.fov = game_state->settings.fov;
+        game_state->camera.near = 0.1f;
+        game_state->camera.far = 100.0f;
+        game_state->camera.is_ortographic = false;
+        game_state->camera.aspect_ratio = (f32) game_state->window_framebuffer_width / (f32) game_state->window_framebuffer_height;
+        //game_state->camera.aspect_ratio = 1;
+        //game_state->camera.up_dir = VEC3(0, 1, 0);
+        //game_state->camera.pos = VEC3(3, 0, 0);
+        //float radius = 10.0f;
+
+        //game_state->camera.pos = VEC3(sinf((f32) glfwGetTime()) * radius, 0, cosf((f32) glfwGetTime()) * radius);
+        //game_state->camera.looking_at = VEC3(0, 0, 0);
+
+        Mat4 view = camera_make_view_matrix(game_state->camera);
+        //projection = mat4_scale(-1, projection);
+        Mat4 projection = camera_make_projection_matrix(game_state->camera);
+        
+        mat4x4 view_control = {0};
+        //mat4x4 projection_control = {0};
+        
+        _mat4x4_look_at(view_control, AS_FLOATS(game_state->camera.pos), AS_FLOATS(game_state->camera.looking_at), AS_FLOATS(game_state->camera.up_dir));
+
+        //Shader_Params shader_params = {0};
+        //shader_params.view_pos = game_state->camera.pos;
+        //shader_params.light_pos = game_state->active_object_pos;
+        //shader_params.light_color = VEC3(1, 1, 0);
+        //shader_params.light_radius = 2.0f;
+        //
+        //shader_params.view = view;
+        //shader_params.projection = projection;
+        //shader_params.model = model;
+        //
+        //shader_params.light_color = VEC3(1, 0, 0);
+        //shader_params.light_radius = 0.5;
+        //shader_params.light_linear_attentuation = 0;
+        //shader_params.light_quadratic_attentuation = 0.005f;
+        //shader_params.ambient_strength = 0.02f;
+        //shader_params.options = 0;
+        //
+        //shader_set_vec3(solid_color_shader, "view_pos", shader_params.view_pos);
+        //shader_set_vec3(solid_color_shader, "light_pos", shader_params.light_pos);
+        //shader_set_vec3(solid_color_shader, "light_color", shader_params.light_color);
+        //shader_set_f32(solid_color_shader, "light_radius", shader_params.light_radius);
+        //shader_set_f32(solid_color_shader, "light_linear_attentuation", shader_params.light_linear_attentuation);
+        //shader_set_f32(solid_color_shader, "light_quadratic_attentuation", shader_params.light_quadratic_attentuation);
+        //shader_set_f32(solid_color_shader, "ambient_strength", shader_params.ambient_strength);
+        //shader_set_mat4(solid_color_shader, "model", shader_params.model);
+        //shader_set_mat4(solid_color_shader, "view", shader_params.view);
+        //shader_set_mat4(solid_color_shader, "projection", shader_params.projection);
+        //shader_set_mat3(solid_color_shader, "normal_matrix", normal_matrix);
+        //shader_set_i32(solid_color_shader, "options", shader_params.options);
+
+        //================ FIRST PASS ==================
+        glBindFramebuffer(GL_FRAMEBUFFER, screen_buffers.frame_buff); 
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
+        glBindVertexArray(drawable_cube.vao);
+        glClearColor(0.0f, 0.4f, 0.4f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        for(isize i = 0; i < 20; i++)
+        {
+            //isize i = 0;
+            glEnable(GL_DEPTH_TEST);
+            //glDisable(GL_DEPTH_TEST);
+            //glEnable(GL_CULL_FACE);
+            //glCullFace(GL_FRONT); 
+            //glFrontFace(GL_CW); 
+        
+            //Mat4 model = mat4_identity();
+            //Mat4 model = mat4_translate(mat4_rotate(mat4_identity(), VEC3(0, 1, 0), (f32) clock_s()), game_state->camera.pos);
+            Mat4 model = mat4_rotate(mat4_translate(mat4_identity(), VEC3(10, 0, 0)), VEC3(0, 1, 0), 2*PI/20*(f32)i);
+        
+            shader_use(solid_color_shader);
+            shader_set_vec3(solid_color_shader, "color", VEC3(1, 0, 0));
+            shader_set_mat4(solid_color_shader, "projection", projection);
+            shader_set_mat4(solid_color_shader, "view", view);
+            shader_set_mat4(solid_color_shader, "model", model);
+
+            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+        }
+
+        {
+            Mat4 X = mat4_translate(mat4_identity(), VEC3(3, 0, 0));
+            shader_set_vec3(solid_color_shader, "color", VEC3(1, 0, 0));
+            shader_set_mat4(solid_color_shader, "model", X);
+            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+        }
+        
+        {
+            Mat4 Y = mat4_translate(mat4_identity(), VEC3(0, 3, 0));
+            shader_set_vec3(solid_color_shader, "color", VEC3(0, 1, 0));
+            shader_set_mat4(solid_color_shader, "model", Y);
+            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+        }
+        
+        {
+            Mat4 Z = mat4_translate(mat4_identity(), VEC3(0, 0, 3));
+            shader_set_vec3(solid_color_shader, "color", VEC3(0, 0, 1));
+            shader_set_mat4(solid_color_shader, "model", Z);
+            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+        }
+
+        glBindVertexArray(0);
+
+        if(0)
+        {
+            // ============== POST PROCESSING PASS ==================
+            glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
+            glDisable(GL_DEPTH_TEST);
+
+            shader_use(screen_shader);
+            shader_set_i32(screen_shader, "screen", 0);
+            shader_set_f32(screen_shader, "gamma", game_state->settings.screen_gamma);
+            shader_set_f32(screen_shader, "exposure", game_state->settings.screen_exposure);
+
+            glBindVertexArray(quadVAO);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, screen_buffers.color_buff);
+
+            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(QUAD_VERTICES)); 
+            glBindVertexArray(0);
+        }
+
+        glfwSwapBuffers(window);
+        
+    }
+    LOG_INFO("APP", "run_func exit");
 }

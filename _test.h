@@ -4,7 +4,6 @@
 #include "array.h"
 #include "time.h"
 #include "random.h"
-#include "log.h"													\
 
 //Maybe move to random or to test
 INTERNAL void random_bits(Random_State* state, void* into, isize size)

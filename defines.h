@@ -50,6 +50,8 @@ typedef double      f64;
     #define BRACE_INIT(Struct_Type) (Struct_Type)
 #endif 
 
+#define STATIC_ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
+
 //@TODO
 #ifndef EXPORT
     #define EXPORT
