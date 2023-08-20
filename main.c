@@ -13,11 +13,9 @@
 
 #include "gl.h"
 #include "gl_shader_util.h"
-#include "gl_tables.h"
 #include "gl_debug_output.h"
 #include "shapes.h"
 
-#include "linmath/linmath.h"
 #include "glfw/glfw3.h"
 
 
@@ -135,11 +133,6 @@ typedef struct Camera
     f32 right;
 } Camera;
 
-typedef struct Render_State
-{
-    int x;
-} Render_State;
-
 typedef struct Game_Settings
 {
     f32 fov;
@@ -157,7 +150,6 @@ typedef struct Game_Settings
 #define CONTROL_MAPPING_SETS 3
 typedef struct Game_State
 {
-    Render_State render;
     Game_Settings settings;
     Camera camera;
 
@@ -186,18 +178,6 @@ typedef struct Game_State
     Control_Mapping control_mappings[CONTROL_MAPPING_SETS];
     bool key_states[GLFW_KEY_LAST + 1];
 } Game_State;
-
-typedef struct Screen_Frame_Buffers
-{
-    GLuint frame_buff; //glDeleteFramebuffers
-    GLuint color_buff; //glDeleteBuffers
-    GLuint render_buff; //glDeleteRenderbuffers
-} Screen_Frame_Buffers;
-
-
-
-void error_func(void* context, Platform_Sandox_Error error_code);
-void run_test_func(void* context);
 
 
 bool control_was_pressed(Controls* controls, Control_Name control)
@@ -316,13 +296,6 @@ void mapping_make_default(Control_Mapping mappings[CONTROL_MAPPING_SETS])
     control_mapping_add(mappings, CONTROL_DEBUG_10,     KEY, GLFW_KEY_F10);
 }
 
-//there must not be 2 or more of the same control on the same physical input device
-bool mapping_check(u8 mappings[CONTROL_MAPPING_SETS])
-{
-    (void) mappings;
-    return true;
-}
-
 Vec3 gamma_correct(Vec3 color, f32 gamma)
 {
     color.x = powf(color.x, 1.0f/gamma);
@@ -336,7 +309,6 @@ Vec3 inv_gamma_correct(Vec3 color, f32 gamma)
 {
     return gamma_correct(color, 1.0f/gamma);
 }
-
 
 void* glfw_malloc_func(size_t size, void* user);
 void* glfw_realloc_func(void* block, size_t size, void* user);
@@ -385,7 +357,6 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
     
     game_state->controls_prev = game_state->controls;
     memset(&game_state->controls.interactions, 0, sizeof game_state->controls.interactions);
-    //memset(&game_state->controls.values, 0, sizeof game_state->controls.values);
 
     glfwPollEvents();
     game_state->should_close = glfwWindowShouldClose(window);
@@ -400,8 +371,6 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
     game_state->window_framebuffer_height_prev = game_state->window_framebuffer_height;
     glfwGetFramebufferSize(window, (int*) &game_state->window_framebuffer_width, (int*) &game_state->window_framebuffer_height);
     
-    //game_state->window_screen_width = MAX(game_state->window_screen_width, 1);
-    //game_state->window_screen_height = MAX(game_state->window_screen_height, 1);
     game_state->window_framebuffer_width = MAX(game_state->window_framebuffer_width, 1);
     game_state->window_framebuffer_height = MAX(game_state->window_framebuffer_height, 1);
 
@@ -425,6 +394,9 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
             glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
         }
     }
+
+    //if(is_initial_call)
+        //game_state->controls_prev = game_state->controls;
 
     game_state->is_in_mouse_mode_prev = game_state->is_in_mouse_mode;
 }
@@ -472,59 +444,6 @@ void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset)
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
     controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_SCROLL, value);
 }
-
-void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 height)
-{
-
-    memset(buffer, 0, sizeof *buffer);
-
-    LOG_INFO("RENDR", "screen_frame_buffers_init %-4d x %-4d", width, height);
-
-    //@NOTE: 
-    //The lack of the following line caused me 2 hours of debugging why my application crashed due to NULL ptr 
-    //deref in glDrawArrays. I still dont know why this occurs but just for safety its better to leave this here.
-    glBindVertexArray(0);
-
-    glGenFramebuffers(1, &buffer->frame_buff);
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff);    
-
-    // generate texture
-    glGenTextures(1, &buffer->color_buff);
-    glBindTexture(GL_TEXTURE_2D, buffer->color_buff);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // attach it to currently bound screen_frame_buffers object
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer->color_buff, 0);
-
-    glGenRenderbuffers(1, &buffer->render_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, buffer->render_buff); 
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);  
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, buffer->render_buff);
-
-    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-       TEST_MSG(false, "frame buffer creation failed!"); 
-
-    glDisable(GL_FRAMEBUFFER_SRGB);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
-}
-
-void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
-{
-    glBindVertexArray(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    glDeleteFramebuffers(1, &buffer->frame_buff);
-    glDeleteBuffers(1, &buffer->color_buff);
-    glDeleteRenderbuffers(1, &buffer->render_buff);
-
-    memset(buffer, 0, sizeof *buffer);
-}
-
 
 const char* platform_sandbox_error_to_cstring(Platform_Sandox_Error error)
 {
@@ -606,11 +525,11 @@ void run_test_func(void* context)
 {
     (void) context;
     test_math(10.0);
-    //test_hash_table_stress(3.0);
-    //test_log();
-    //test_array(1.0);
-    //test_hash_index(1.0);
-    //test_random();
+    test_hash_table_stress(3.0);
+    test_log();
+    test_array(1.0);
+    test_hash_index(1.0);
+    test_random();
     LOG_INFO("TEST", "All tests passed! uwu");
     return;
 }
@@ -711,6 +630,67 @@ int main()
 
     return 0;    
 }
+
+typedef struct Screen_Frame_Buffers
+{
+    GLuint frame_buff; //glDeleteFramebuffers
+    GLuint color_buff; //glDeleteBuffers
+    GLuint render_buff; //glDeleteRenderbuffers
+} Screen_Frame_Buffers;
+
+void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 height)
+{
+    memset(buffer, 0, sizeof *buffer);
+
+    LOG_INFO("RENDR", "screen_frame_buffers_init %-4d x %-4d", width, height);
+
+    //@NOTE: 
+    //The lack of the following line caused me 2 hours of debugging why my application crashed due to NULL ptr 
+    //deref in glDrawArrays. I still dont know why this occurs but just for safety its better to leave this here.
+    glBindVertexArray(0);
+
+    glGenFramebuffers(1, &buffer->frame_buff);
+    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff);    
+
+    // generate texture
+    glGenTextures(1, &buffer->color_buff);
+    glBindTexture(GL_TEXTURE_2D, buffer->color_buff);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // attach it to currently bound screen_frame_buffers object
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer->color_buff, 0);
+
+    glGenRenderbuffers(1, &buffer->render_buff);
+    glBindRenderbuffer(GL_RENDERBUFFER, buffer->render_buff); 
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);  
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, buffer->render_buff);
+
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+       TEST_MSG(false, "frame buffer creation failed!"); 
+
+    glDisable(GL_FRAMEBUFFER_SRGB);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
+}
+
+void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
+{
+    glBindVertexArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glDeleteFramebuffers(1, &buffer->frame_buff);
+    glDeleteBuffers(1, &buffer->color_buff);
+    glDeleteRenderbuffers(1, &buffer->render_buff);
+
+    memset(buffer, 0, sizeof *buffer);
+}
+
+
+#if 0
 typedef struct Shader_Params
 {
     Vec3 view_pos;
@@ -728,13 +708,6 @@ typedef struct Shader_Params
     i32 options;
 } Shader_Params;
 
-typedef struct Drawable_Mesh
-{
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
-} Drawable_Mesh;
-
 typedef struct Drawable_Vertex
 {
     Vec3 pos;
@@ -743,7 +716,19 @@ typedef struct Drawable_Vertex
     Vec3 bitan;
     Vec2 uv;
 } Drawable_Vertex;
+#endif
 
+typedef struct Drawable_Mesh
+{
+    String_Builder name;
+
+    GLuint vao;
+    GLuint vbo;
+    GLuint ebo;
+
+    GLuint vertex_count;
+    GLuint index_count;
+} Drawable_Mesh;
 
 #define VEC2_FMT "{%f, %f}"
 #define VEC2_PRINT(vec) (vec).x, (vec).y
@@ -754,14 +739,67 @@ typedef struct Drawable_Vertex
 #define VEC4_FMT "{%f, %f, %f, %f}"
 #define VEC4_PRINT(vec) (vec).x, (vec).y, (vec).z, (vec).w
 
-const f32 TRIANGLE_VERTICES[] = {
-    0.0f,  1.0f, 0.0f, 1.0f, 0.0f,
-    -0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
-    0.5f,  0.0f, 0.0f, 1.0f, 0.0f,
-};
-const GLuint TRIANGLE_INDECES[] = {
-    0, 1, 2
-};
+void drawable_mesh_init(Drawable_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Indeces* indeces, isize indeces_count, String name)
+{
+    memset(mesh, 0, sizeof *mesh);
+
+    glGenVertexArrays(1, &mesh->vao);
+    glGenBuffers(1, &mesh->vbo);
+    glGenBuffers(1, &mesh->ebo);
+  
+    glBindVertexArray(mesh->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indeces_count * sizeof(Triangle_Indeces), indeces, GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+    
+    glEnableVertexAttribArray(0);	
+    glEnableVertexAttribArray(1);	
+
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
+    //glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tan));
+    //glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, bitan));
+    //glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+
+    //glEnableVertexAttribArray(0);	
+    //glEnableVertexAttribArray(1);	
+    //glEnableVertexAttribArray(2);	
+    //glEnableVertexAttribArray(3);	
+    //glEnableVertexAttribArray(4);
+    
+    //@NOTE: this causes crashes??
+    //@TODO: investigate
+    
+    //glBindBuffer(GL_ARRAY_BUFFER, 0);
+    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    glBindVertexArray(0);   
+    
+    builder_append(&mesh->name, name);
+    mesh->index_count = (GLuint) indeces_count;
+    mesh->vertex_count = (GLuint) vertices_count;
+}
+
+void drawable_mesh_deinit(Drawable_Mesh* mesh)
+{
+    array_deinit(&mesh->name);
+    glDeleteVertexArrays(1, &mesh->vao);
+    glDeleteBuffers(1, &mesh->ebo);
+    glDeleteBuffers(1, &mesh->vbo);
+    memset(mesh, 0, sizeof *mesh);
+}
+
+void drawable_mesh_draw(Drawable_Mesh mesh)
+{
+    glBindVertexArray(mesh.vao);
+    glDrawElements(GL_TRIANGLES, mesh.vertex_count, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
 
 void run_func(void* context)
 {
@@ -790,76 +828,26 @@ void run_func(void* context)
     game_state->settings.mouse_wheel_sensitivity = 0.01f; // uwu
 
     mapping_make_default(game_state->control_mappings);
-
     
-    GLuint quadVAO = 0;  
-    GLuint quadVBO = 0;
-    glGenVertexArrays(1, &quadVAO);
-    glGenBuffers(1, &quadVBO);
-    glBindVertexArray(quadVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_VERTICES), QUAD_VERTICES, GL_STATIC_DRAW);
+    Screen_Frame_Buffers screen_buffers = {0};
+    Drawable_Mesh drawable_cube = {0};
+    Drawable_Mesh drawable_quad = {0};
     
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+    drawable_mesh_init(&drawable_quad, XY_QUAD_VERTICES, STATIC_ARRAY_SIZE(XY_QUAD_VERTICES), XY_QUAD_INDECES, STATIC_ARRAY_SIZE(XY_QUAD_INDECES), STRING("cube"));
+    drawable_mesh_init(&drawable_cube, CUBE_VERTICES, STATIC_ARRAY_SIZE(CUBE_VERTICES), CUBE_INDECES, STATIC_ARRAY_SIZE(CUBE_INDECES), STRING("cube"));
 
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
+    f64 fps_display_frequency = 4;
+    f64 fps_display_last_update = 0;
+    String_Builder fps_display = {0};
 
     GLuint solid_color_shader = 0;
     GLuint screen_shader = 0;
-
-    //String_Builder fps_display = {0};
-
-    Screen_Frame_Buffers screen_buffers = {0};
-
-    Drawable_Mesh drawable_cube = {0};
-
-    glGenVertexArrays(1, &drawable_cube.vao);
-    glGenBuffers(1, &drawable_cube.vbo);
-    glGenBuffers(1, &drawable_cube.ebo);
-  
-    glBindVertexArray(drawable_cube.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, drawable_cube.vbo);
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof CUBE_VERTICES, CUBE_VERTICES, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, drawable_cube.ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof CUBE_INDECES, CUBE_INDECES, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
-    
-    glEnableVertexAttribArray(0);	
-    glEnableVertexAttribArray(1);	
-    
-    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
-
-    // vertex positions
-    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
-    //glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tan));
-    //glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, bitan));
-    //glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
-
-    //glEnableVertexAttribArray(0);	
-    //glEnableVertexAttribArray(1);	
-    //glEnableVertexAttribArray(2);	
-    //glEnableVertexAttribArray(3);	
-    //glEnableVertexAttribArray(4);
-
-    glBindVertexArray(0);
     for(bool first_run = true; game_state->should_close == false; first_run = false)
     {
-        f64 time = clock_s();
-        game_state->delta_time = time - game_state->last_frame_timepoint; 
-        game_state->last_frame_timepoint = time; 
+        f64 start_frame_time = clock_s();
+        game_state->delta_time = start_frame_time - game_state->last_frame_timepoint; 
+        game_state->last_frame_timepoint = start_frame_time; 
+
 
         window_process_input(window, first_run);
         if(game_state->window_framebuffer_width != game_state->window_framebuffer_width_prev 
@@ -949,133 +937,96 @@ void run_func(void* context)
         }
         #endif
 
-        //@TODO: remove useless comments
-        //       fps counter
-        //       second pass fix
-        //       sphere mesh finish
-        //       PBR rendering
+        //@TODO: sphere mesh finish
+        //       zoom 
+        //       skybox
+        //       PBR rendering - make function requiring all inputs to shader
+        //       drawable_mesh_pbr_render(...)
 
         game_state->camera.fov = game_state->settings.fov;
         game_state->camera.near = 0.1f;
         game_state->camera.far = 100.0f;
         game_state->camera.is_ortographic = false;
         game_state->camera.aspect_ratio = (f32) game_state->window_framebuffer_width / (f32) game_state->window_framebuffer_height;
-        //game_state->camera.aspect_ratio = 1;
-        //game_state->camera.up_dir = VEC3(0, 1, 0);
-        //game_state->camera.pos = VEC3(3, 0, 0);
-        //float radius = 10.0f;
-
-        //game_state->camera.pos = VEC3(sinf((f32) glfwGetTime()) * radius, 0, cosf((f32) glfwGetTime()) * radius);
-        //game_state->camera.looking_at = VEC3(0, 0, 0);
 
         Mat4 view = camera_make_view_matrix(game_state->camera);
-        //projection = mat4_scale(-1, projection);
         Mat4 projection = camera_make_projection_matrix(game_state->camera);
         
-        mat4x4 view_control = {0};
-        //mat4x4 projection_control = {0};
-        
-        _mat4x4_look_at(view_control, AS_FLOATS(game_state->camera.pos), AS_FLOATS(game_state->camera.looking_at), AS_FLOATS(game_state->camera.up_dir));
-
-        //Shader_Params shader_params = {0};
-        //shader_params.view_pos = game_state->camera.pos;
-        //shader_params.light_pos = game_state->active_object_pos;
-        //shader_params.light_color = VEC3(1, 1, 0);
-        //shader_params.light_radius = 2.0f;
-        //
-        //shader_params.view = view;
-        //shader_params.projection = projection;
-        //shader_params.model = model;
-        //
-        //shader_params.light_color = VEC3(1, 0, 0);
-        //shader_params.light_radius = 0.5;
-        //shader_params.light_linear_attentuation = 0;
-        //shader_params.light_quadratic_attentuation = 0.005f;
-        //shader_params.ambient_strength = 0.02f;
-        //shader_params.options = 0;
-        //
-        //shader_set_vec3(solid_color_shader, "view_pos", shader_params.view_pos);
-        //shader_set_vec3(solid_color_shader, "light_pos", shader_params.light_pos);
-        //shader_set_vec3(solid_color_shader, "light_color", shader_params.light_color);
-        //shader_set_f32(solid_color_shader, "light_radius", shader_params.light_radius);
-        //shader_set_f32(solid_color_shader, "light_linear_attentuation", shader_params.light_linear_attentuation);
-        //shader_set_f32(solid_color_shader, "light_quadratic_attentuation", shader_params.light_quadratic_attentuation);
-        //shader_set_f32(solid_color_shader, "ambient_strength", shader_params.ambient_strength);
-        //shader_set_mat4(solid_color_shader, "model", shader_params.model);
-        //shader_set_mat4(solid_color_shader, "view", shader_params.view);
-        //shader_set_mat4(solid_color_shader, "projection", shader_params.projection);
-        //shader_set_mat3(solid_color_shader, "normal_matrix", normal_matrix);
-        //shader_set_i32(solid_color_shader, "options", shader_params.options);
-
         //================ FIRST PASS ==================
         glBindFramebuffer(GL_FRAMEBUFFER, screen_buffers.frame_buff); 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
-        glBindVertexArray(drawable_cube.vao);
         glClearColor(0.0f, 0.4f, 0.4f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+        
         for(isize i = 0; i < 20; i++)
         {
-            //isize i = 0;
             glEnable(GL_DEPTH_TEST);
-            //glDisable(GL_DEPTH_TEST);
-            //glEnable(GL_CULL_FACE);
-            //glCullFace(GL_FRONT); 
-            //glFrontFace(GL_CW); 
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_FRONT); 
+            glFrontFace(GL_CW); 
         
-            //Mat4 model = mat4_identity();
-            //Mat4 model = mat4_translate(mat4_rotate(mat4_identity(), VEC3(0, 1, 0), (f32) clock_s()), game_state->camera.pos);
             Mat4 model = mat4_rotate(mat4_translate(mat4_identity(), VEC3(10, 0, 0)), VEC3(0, 1, 0), 2*PI/20*(f32)i);
         
+
             shader_use(solid_color_shader);
             shader_set_vec3(solid_color_shader, "color", VEC3(1, 0, 0));
             shader_set_mat4(solid_color_shader, "projection", projection);
             shader_set_mat4(solid_color_shader, "view", view);
             shader_set_mat4(solid_color_shader, "model", model);
-
-            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+            drawable_mesh_draw(drawable_cube);
         }
 
         {
-            Mat4 X = mat4_translate(mat4_identity(), VEC3(3, 0, 0));
+            Mat4 model = mat4_translate(mat4_identity(), VEC3(3, 0, 0));
             shader_set_vec3(solid_color_shader, "color", VEC3(1, 0, 0));
-            shader_set_mat4(solid_color_shader, "model", X);
-            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+            shader_set_mat4(solid_color_shader, "model", model);
+            drawable_mesh_draw(drawable_cube);
         }
         
         {
-            Mat4 Y = mat4_translate(mat4_identity(), VEC3(0, 3, 0));
+            Mat4 model = mat4_translate(mat4_identity(), VEC3(0, 3, 0));
             shader_set_vec3(solid_color_shader, "color", VEC3(0, 1, 0));
-            shader_set_mat4(solid_color_shader, "model", Y);
-            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+            shader_set_mat4(solid_color_shader, "model", model);
+            drawable_mesh_draw(drawable_cube);
         }
         
         {
-            Mat4 Z = mat4_translate(mat4_identity(), VEC3(0, 0, 3));
+            Mat4 model = mat4_translate(mat4_identity(), VEC3(0, 0, 3));
             shader_set_vec3(solid_color_shader, "color", VEC3(0, 0, 1));
-            shader_set_mat4(solid_color_shader, "model", Z);
-            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(CUBE_VERTICES)); 
+            shader_set_mat4(solid_color_shader, "model", model);
+            drawable_mesh_draw(drawable_cube);
         }
 
         glBindVertexArray(0);
 
-        if(0)
+        //if(0)
         {
             // ============== POST PROCESSING PASS ==================
             glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
             glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
 
-            shader_use(screen_shader);
-            shader_set_i32(screen_shader, "screen", 0);
-            shader_set_f32(screen_shader, "gamma", game_state->settings.screen_gamma);
-            shader_set_f32(screen_shader, "exposure", game_state->settings.screen_exposure);
+            //@TODO: drawable_mesh_draw_postprocess(...);
+            {
+                shader_use(screen_shader);
+                shader_set_i32(screen_shader, "screen", 0);
+                shader_set_f32(screen_shader, "gamma", game_state->settings.screen_gamma);
+                shader_set_f32(screen_shader, "exposure", game_state->settings.screen_exposure);
 
-            glBindVertexArray(quadVAO);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, screen_buffers.color_buff);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, screen_buffers.color_buff);
+            
+                drawable_mesh_draw(drawable_quad);
+            }
+        }
 
-            glDrawArrays(GL_TRIANGLES, 0, STATIC_ARRAY_SIZE(QUAD_VERTICES)); 
-            glBindVertexArray(0);
+        f64 end_frame_time = clock_s();
+        f64 frame_time = end_frame_time - start_frame_time;
+        if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
+        {
+            fps_display_last_update = end_frame_time;
+            array_clear(&fps_display);
+            format_into(&fps_display, "Game %5d fps", (int) (1.0f/frame_time));
+            glfwSetWindowTitle(window, cstring_from_builder(fps_display));
         }
 
         glfwSwapBuffers(window);
