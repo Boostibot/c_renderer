@@ -633,9 +633,9 @@ int main()
 
 typedef struct Screen_Frame_Buffers
 {
-    GLuint frame_buff; //glDeleteFramebuffers
-    GLuint color_buff; //glDeleteBuffers
-    GLuint render_buff; //glDeleteRenderbuffers
+    GLuint frame_buff;
+    GLuint color_buff;
+    GLuint render_buff;
 } Screen_Frame_Buffers;
 
 void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 height)
@@ -797,8 +797,19 @@ void drawable_mesh_deinit(Drawable_Mesh* mesh)
 void drawable_mesh_draw(Drawable_Mesh mesh)
 {
     glBindVertexArray(mesh.vao);
-    glDrawElements(GL_TRIANGLES, mesh.vertex_count, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, mesh.index_count * 3, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+void drawable_mesh_draw_using_depth_color(Drawable_Mesh mesh, GLuint solid_color_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+{
+    shader_use(solid_color_shader);
+    shader_set_vec3(solid_color_shader, "color", color);
+    shader_set_mat4(solid_color_shader, "projection", projection);
+    shader_set_mat4(solid_color_shader, "view", view);
+    shader_set_mat4(solid_color_shader, "model", model);
+    drawable_mesh_draw(mesh);
+    shader_unuse();
 }
 
 void run_func(void* context)
@@ -831,10 +842,27 @@ void run_func(void* context)
     
     Screen_Frame_Buffers screen_buffers = {0};
     Drawable_Mesh drawable_cube = {0};
-    Drawable_Mesh drawable_quad = {0};
-    
-    drawable_mesh_init(&drawable_quad, XY_QUAD_VERTICES, STATIC_ARRAY_SIZE(XY_QUAD_VERTICES), XY_QUAD_INDECES, STATIC_ARRAY_SIZE(XY_QUAD_INDECES), STRING("cube"));
+    Drawable_Mesh drawable_screen_quad = {0};
+    drawable_mesh_init(&drawable_screen_quad, XY_QUAD_VERTICES, STATIC_ARRAY_SIZE(XY_QUAD_VERTICES), XY_QUAD_INDECES, STATIC_ARRAY_SIZE(XY_QUAD_INDECES), STRING("screen_quad"));
     drawable_mesh_init(&drawable_cube, CUBE_VERTICES, STATIC_ARRAY_SIZE(CUBE_VERTICES), CUBE_INDECES, STATIC_ARRAY_SIZE(CUBE_INDECES), STRING("cube"));
+
+    Debug_Allocator debug_alloc = {0};
+    debug_allocator_init_use(&debug_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
+
+    Drawable_Mesh drawable_sphere_up = {0};
+    Drawable_Mesh drawable_sphere_down = {0};
+    Drawable_Mesh drawable_sphere_left = {0};
+    Drawable_Mesh drawable_sphere_right = {0};
+    Drawable_Mesh drawable_sphere_front = {0};
+    Drawable_Mesh drawable_sphere_back = {0};
+    
+    Shape sphere_side_up = {0};
+    Shape sphere_side_left = {0};
+    Shape sphere_side_front = {0};
+    Shape sphere_side_down = {0};
+    Shape sphere_side_right = {0};
+    Shape sphere_side_back = {0};
+
 
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
@@ -848,6 +876,54 @@ void run_func(void* context)
         game_state->delta_time = start_frame_time - game_state->last_frame_timepoint; 
         game_state->last_frame_timepoint = start_frame_time; 
 
+
+        
+        {
+            shape_deinit(&sphere_side_up);
+            shape_deinit(&sphere_side_left);
+            shape_deinit(&sphere_side_front);
+            shape_deinit(&sphere_side_down);
+            shape_deinit(&sphere_side_right);
+            shape_deinit(&sphere_side_back);
+
+            isize iters = 4;
+            f32 radius = 1.0f;
+            f32 sin_time = sinf((f32) clock_s());
+            f32 p = sin_time*sin_time*3.0f + 0.3f;
+            sphere_side_up = shapes_make_xz_sphere_side(iters, radius, p);
+            sphere_side_left = shape_duplicate(sphere_side_up);
+            sphere_side_front = shape_duplicate(sphere_side_up);
+        
+            Mat4 rotate_left = mat4_rotation(VEC3(1, 0, 0), TAU/4);
+            Mat4 rotate_front = mat4_rotation(VEC3(0, 0, 1), TAU/4);
+        
+            shape_tranform(&sphere_side_left, rotate_left);
+            shape_tranform(&sphere_side_front, rotate_front);
+        
+            Mat4 negate = mat4_scaling(VEC3(-1, -1, -1));
+            sphere_side_down = shape_duplicate(sphere_side_up);
+            sphere_side_right = shape_duplicate(sphere_side_left);
+            sphere_side_back = shape_duplicate(sphere_side_front);
+        
+            shape_tranform(&sphere_side_down, negate);
+            shape_tranform(&sphere_side_right, negate);
+            shape_tranform(&sphere_side_back, negate);
+        }
+    
+        drawable_mesh_deinit(&drawable_sphere_up);
+        drawable_mesh_deinit(&drawable_sphere_down);
+        drawable_mesh_deinit(&drawable_sphere_left);
+        drawable_mesh_deinit(&drawable_sphere_right);
+        drawable_mesh_deinit(&drawable_sphere_front);
+        drawable_mesh_deinit(&drawable_sphere_back);
+
+        drawable_mesh_init(&drawable_sphere_up, sphere_side_up.vertices.data, sphere_side_up.vertices.size, sphere_side_up.indeces.data, sphere_side_up.indeces.size, STRING("sphere_side_up"));
+        drawable_mesh_init(&drawable_sphere_down, sphere_side_down.vertices.data, sphere_side_down.vertices.size, sphere_side_down.indeces.data, sphere_side_down.indeces.size, STRING("sphere_side_down"));
+        drawable_mesh_init(&drawable_sphere_left, sphere_side_left.vertices.data, sphere_side_left.vertices.size, sphere_side_left.indeces.data, sphere_side_left.indeces.size, STRING("sphere_side_left"));
+        drawable_mesh_init(&drawable_sphere_right, sphere_side_right.vertices.data, sphere_side_right.vertices.size, sphere_side_right.indeces.data, sphere_side_right.indeces.size, STRING("sphere_side_right"));
+        drawable_mesh_init(&drawable_sphere_front, sphere_side_front.vertices.data, sphere_side_front.vertices.size, sphere_side_front.indeces.data, sphere_side_front.indeces.size, STRING("sphere_side_front"));
+        drawable_mesh_init(&drawable_sphere_back, sphere_side_back.vertices.data, sphere_side_back.vertices.size, sphere_side_back.indeces.data, sphere_side_back.indeces.size, STRING("sphere_side_back"));
+    
 
         window_process_input(window, first_run);
         if(game_state->window_framebuffer_width != game_state->window_framebuffer_width_prev 
@@ -887,18 +963,18 @@ void run_func(void* context)
             Vec3 direction_right = vec3_norm(vec3_cross(direction_forward, game_state->camera.up_dir));
             
             Vec3 move_dir = {0};
-            move_dir = vec3_add(move_dir, vec3_scale(game_state->controls.values[CONTROL_MOVE_FORWARD], direction_forward));
-            move_dir = vec3_add(move_dir, vec3_scale(game_state->controls.values[CONTROL_MOVE_UP], direction_up));
-            move_dir = vec3_add(move_dir, vec3_scale(game_state->controls.values[CONTROL_MOVE_RIGHT], direction_right));
+            move_dir = vec3_add(move_dir, vec3_scale(direction_forward, game_state->controls.values[CONTROL_MOVE_FORWARD]));
+            move_dir = vec3_add(move_dir, vec3_scale(direction_up, game_state->controls.values[CONTROL_MOVE_UP]));
+            move_dir = vec3_add(move_dir, vec3_scale(direction_right, game_state->controls.values[CONTROL_MOVE_RIGHT]));
             
-            move_dir = vec3_add(move_dir, vec3_scale(-game_state->controls.values[CONTROL_MOVE_BACKWARD], direction_forward));
-            move_dir = vec3_add(move_dir, vec3_scale(-game_state->controls.values[CONTROL_MOVE_DOWN], direction_up));
-            move_dir = vec3_add(move_dir, vec3_scale(-game_state->controls.values[CONTROL_MOVE_LEFT], direction_right));
+            move_dir = vec3_add(move_dir, vec3_scale(direction_forward, -game_state->controls.values[CONTROL_MOVE_BACKWARD]));
+            move_dir = vec3_add(move_dir, vec3_scale(direction_up, -game_state->controls.values[CONTROL_MOVE_DOWN]));
+            move_dir = vec3_add(move_dir, vec3_scale(direction_right, -game_state->controls.values[CONTROL_MOVE_LEFT]));
 
             if(vec3_len(move_dir) != 0.0f)
                 move_dir = vec3_norm(move_dir);
 
-            Vec3 move_ammount = vec3_scale(move_speed * (f32) game_state->delta_time, move_dir);
+            Vec3 move_ammount = vec3_scale(move_dir, move_speed * (f32) game_state->delta_time);
             game_state->camera.pos = vec3_add(game_state->camera.pos, move_ammount);
         }
 
@@ -937,8 +1013,7 @@ void run_func(void* context)
         }
         #endif
 
-        //@TODO: sphere mesh finish
-        //       zoom 
+        //@TODO: zoom 
         //       skybox
         //       PBR rendering - make function requiring all inputs to shader
         //       drawable_mesh_pbr_render(...)
@@ -957,43 +1032,43 @@ void run_func(void* context)
         glClearColor(0.0f, 0.4f, 0.4f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-        for(isize i = 0; i < 20; i++)
-        {
             glEnable(GL_DEPTH_TEST);
-            glEnable(GL_CULL_FACE);
+            //glEnable(GL_CULL_FACE);
             glCullFace(GL_FRONT); 
             glFrontFace(GL_CW); 
-        
-            Mat4 model = mat4_rotate(mat4_translate(mat4_identity(), VEC3(10, 0, 0)), VEC3(0, 1, 0), 2*PI/20*(f32)i);
-        
 
-            shader_use(solid_color_shader);
-            shader_set_vec3(solid_color_shader, "color", VEC3(1, 0, 0));
-            shader_set_mat4(solid_color_shader, "projection", projection);
-            shader_set_mat4(solid_color_shader, "view", view);
-            shader_set_mat4(solid_color_shader, "model", model);
-            drawable_mesh_draw(drawable_cube);
+        //if(0)
+        {
+            Mat4 model = mat4_rotation(VEC3(2, 1, 3), (f32) clock_s());
+            //Mat4 model = mat4_identity();
+            drawable_mesh_draw_using_depth_color(drawable_sphere_up, solid_color_shader, projection, view, model, VEC3(0, 1, 0));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_down, solid_color_shader, projection, view, model, VEC3(1, 0, 1));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_left, solid_color_shader, projection, view, model, VEC3(1, 1, 0));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_right, solid_color_shader, projection, view, model, VEC3(0, 0, 1));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_front, solid_color_shader, projection, view, model, VEC3(1, 0, 0));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_back, solid_color_shader, projection, view, model, VEC3(0, 1, 1));
+        }
+
+        for(isize i = 0; i < 20; i++)
+        {
+        
+            Mat4 model = mat4_rotate(mat4_translation(VEC3(10, 0, 0)), VEC3(0, 1, 0), 2*PI/20*(f32)i);
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(1, 1, 1));
         }
 
         {
-            Mat4 model = mat4_translate(mat4_identity(), VEC3(3, 0, 0));
-            shader_set_vec3(solid_color_shader, "color", VEC3(1, 0, 0));
-            shader_set_mat4(solid_color_shader, "model", model);
-            drawable_mesh_draw(drawable_cube);
+            Mat4 model = mat4_scale_aniso(mat4_translation(VEC3(3, 0, 0)), vec3_of(0.3f));
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(1, 0, 0));
         }
         
         {
-            Mat4 model = mat4_translate(mat4_identity(), VEC3(0, 3, 0));
-            shader_set_vec3(solid_color_shader, "color", VEC3(0, 1, 0));
-            shader_set_mat4(solid_color_shader, "model", model);
-            drawable_mesh_draw(drawable_cube);
+            Mat4 model = mat4_scale_aniso(mat4_translation(VEC3(0, 3, 0)), vec3_of(0.3f));
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(0, 1, 0));
         }
         
         {
-            Mat4 model = mat4_translate(mat4_identity(), VEC3(0, 0, 3));
-            shader_set_vec3(solid_color_shader, "color", VEC3(0, 0, 1));
-            shader_set_mat4(solid_color_shader, "model", model);
-            drawable_mesh_draw(drawable_cube);
+            Mat4 model = mat4_scale_aniso(mat4_translation(VEC3(0, 0, 3)), vec3_of(0.3f));
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(0, 0, 1));
         }
 
         glBindVertexArray(0);
@@ -1015,7 +1090,7 @@ void run_func(void* context)
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, screen_buffers.color_buff);
             
-                drawable_mesh_draw(drawable_quad);
+                drawable_mesh_draw(drawable_screen_quad);
             }
         }
 
@@ -1032,5 +1107,23 @@ void run_func(void* context)
         glfwSwapBuffers(window);
         
     }
+
+    
+    shape_deinit(&sphere_side_up);
+    shape_deinit(&sphere_side_left);
+    shape_deinit(&sphere_side_front);
+    shape_deinit(&sphere_side_down);
+    shape_deinit(&sphere_side_right);
+    shape_deinit(&sphere_side_back);
+        
+    drawable_mesh_deinit(&drawable_sphere_up);
+    drawable_mesh_deinit(&drawable_sphere_down);
+    drawable_mesh_deinit(&drawable_sphere_left);
+    drawable_mesh_deinit(&drawable_sphere_right);
+    drawable_mesh_deinit(&drawable_sphere_front);
+    drawable_mesh_deinit(&drawable_sphere_back);
+
+    //@TODO: deinit!
+
     LOG_INFO("APP", "run_func exit");
 }

@@ -38,7 +38,7 @@ static void test_vec3_identities(Vec3 a, Vec3 b)
     TEST_NEAR_FLOAT(vec3_len(VEC3(0, 0, 0)), 0, "size of zero vector must be 0");
     TEST_NEAR_FLOAT(vec3_len(vec3_sub(a, a)), 0, "Cancelation should produce correct lentgh");
 
-    TEST_NEAR_VEC3(vec3_cross(a, b), vec3_scale(-1, vec3_cross(b, a)), "Cross product is antisymtric");
+    TEST_NEAR_VEC3(vec3_cross(a, b), vec3_scale(vec3_cross(b, a), -1), "Cross product is antisymtric");
 
     const Vec3 n = vec3_norm(a);
     const Vec3 u = vec3_norm(vec3_cross(a, b));
@@ -65,14 +65,14 @@ static void test_vec3_identities(Vec3 a, Vec3 b)
     const float b_len = vec3_len(b);
     {
         const float angle_l = vec3_angle_between(a, b);
-        const float angle_r = vec3_angle_between(vec3_scale(b_len*b_len, a), b);
+        const float angle_r = vec3_angle_between(vec3_scale(a, b_len*b_len), b);
         (void) angle_l, angle_r;
 
-        TEST_NEAR_FLOAT(vec3_angle_between(a, b), vec3_angle_between(vec3_scale(b_len*b_len, a), b), "Angle should be size independent");
+        TEST_NEAR_FLOAT(vec3_angle_between(a, b), vec3_angle_between(vec3_scale(a, b_len*b_len), b), "Angle should be size independent");
     }
 
-    const Vec3 scaled_n = vec3_scale(a_len, n);
-    const Vec3 scaled_u = vec3_scale(b_len*2, u);
+    const Vec3 scaled_n = vec3_scale(n, a_len);
+    const Vec3 scaled_u = vec3_scale(u, b_len*2);
 
     const float n_len = vec3_len(scaled_n);
     const float u_len = vec3_len(scaled_u);

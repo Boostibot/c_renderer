@@ -159,9 +159,9 @@ JMAPI Vec2 vec2_sub(Vec2 a, Vec2 b) { Vec2 out = {a.x - b.x, a.y - b.y}; return 
 JMAPI Vec3 vec3_sub(Vec3 a, Vec3 b) { Vec3 out = {a.x - b.x, a.y - b.y, a.z - b.z}; return out; }
 JMAPI Vec4 vec4_sub(Vec4 a, Vec4 b) { Vec4 out = {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w}; return out; }
 
-JMAPI Vec2 vec2_scale(float scalar, Vec2 a) { Vec2 out = {scalar * a.x, scalar * a.y}; return out; }
-JMAPI Vec3 vec3_scale(float scalar, Vec3 a) { Vec3 out = {scalar * a.x, scalar * a.y, scalar * a.z}; return out; }
-JMAPI Vec4 vec4_scale(float scalar, Vec4 a) { Vec4 out = {scalar * a.x, scalar * a.y, scalar * a.z, scalar * a.w}; return out; }
+JMAPI Vec2 vec2_scale(Vec2 a, float scalar) { Vec2 out = {scalar * a.x, scalar * a.y}; return out; }
+JMAPI Vec3 vec3_scale(Vec3 a, float scalar) { Vec3 out = {scalar * a.x, scalar * a.y, scalar * a.z}; return out; }
+JMAPI Vec4 vec4_scale(Vec4 a, float scalar) { Vec4 out = {scalar * a.x, scalar * a.y, scalar * a.z, scalar * a.w}; return out; }
 
 JMAPI float vec2_dot(Vec2 a, Vec2 b) { return a.x*b.x + a.y*b.y; }
 JMAPI float vec3_dot(Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
@@ -175,9 +175,9 @@ JMAPI bool vec2_is_equal(Vec2 a, Vec2 b) { return memcmp(&a, &b, sizeof a) == 0;
 JMAPI bool vec3_is_equal(Vec3 a, Vec3 b) { return memcmp(&a, &b, sizeof a) == 0; }
 JMAPI bool vec4_is_equal(Vec4 a, Vec4 b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-JMAPI Vec2 vec2_norm(Vec2 a) { ASSERT(vec2_len(a) > 0.0f); return vec2_scale(1.0f/vec2_len(a), a); }
-JMAPI Vec3 vec3_norm(Vec3 a) { ASSERT(vec3_len(a) > 0.0f); return vec3_scale(1.0f/vec3_len(a), a); }
-JMAPI Vec4 vec4_norm(Vec4 a) { ASSERT(vec4_len(a) > 0.0f); return vec4_scale(1.0f/vec4_len(a), a); }
+JMAPI Vec2 vec2_norm(Vec2 a) { float len = vec2_len(a); ASSERT(len > 0.0f); return vec2_scale(a, 1.0f/len); }
+JMAPI Vec3 vec3_norm(Vec3 a) { float len = vec3_len(a); ASSERT(len > 0.0f); return vec3_scale(a, 1.0f/len); }
+JMAPI Vec4 vec4_norm(Vec4 a) { float len = vec4_len(a); ASSERT(len > 0.0f); return vec4_scale(a, 1.0f/len); }
 
 JMAPI bool vec2_is_near(Vec2 a, Vec2 b, float epsilon) 
 {
@@ -222,7 +222,9 @@ JMAPI bool vec4_is_near_scaled(Vec4 a, Vec4 b, float epsilon)
 }
 
 //For homogenous coords
+JMAPI Vec3 vec3_from_vec4(Vec4 a)       { Vec3 out = {a.x, a.y, a.z}; return out; }
 JMAPI Vec4 vec4_from_vec3(Vec3 a)       { Vec4 out = {a.x, a.y, a.z, 0}; return out; }
+
 JMAPI Vec4 vec4_from_homo_vec3(Vec3 a)  { Vec4 out = {a.x, a.y, a.z, 1}; return out; }
 JMAPI Vec4 vec4_add3(Vec3 a, Vec3 b)    { Vec4 out = {a.x + b.x, a.y + b.y, a.z + b.z, 1}; return out; } 
 JMAPI Vec4 vec4_sub3(Vec3 a, Vec3 b)    { Vec4 out = {a.x - b.x, a.y - b.y, a.z - b.z, 1}; return out; }
@@ -265,19 +267,19 @@ JMAPI Vec4 vec4_pairwise_clamp(Vec4 clamped, Vec4 low, Vec4 high)
 
 JMAPI Vec2 vec2_lerp(Vec2 a, Vec2 b, float t)
 {
-    Vec2 result = vec2_add(vec2_scale(1.0f - t, a), vec2_scale(t, b)); 
+    Vec2 result = vec2_add(vec2_scale(a, 1.0f - t), vec2_scale(b, t)); 
     return result;
 }
 
 JMAPI Vec3 vec3_lerp(Vec3 a, Vec3 b, float t)
 {
-    Vec3 result = vec3_add(vec3_scale(1.0f - t, a), vec3_scale(t, b)); 
+    Vec3 result = vec3_add(vec3_scale(a, 1.0f - t), vec3_scale(b, t)); 
     return result;
 }
 
 JMAPI Vec4 vec4_lerp(Vec4 a, Vec4 b, float t)
 {
-    Vec4 result = vec4_add(vec4_scale(1.0f - t, a), vec4_scale(t, b)); 
+    Vec4 result = vec4_add(vec4_scale(a, 1.0f - t), vec4_scale(b, t)); 
     return result;
 }
 
@@ -333,6 +335,17 @@ JMAPI Vec4 mat4_mul_vec4(Mat4 mat, Vec4 vec)
     return result;
 }
 
+//interprets the Vec3 as vector of homogenous coordinates Vec4 
+//multiplies it with matrix and then returns back the result without w coordinate
+JMAPI Vec3 mat4_apply(Mat4 mat, Vec3 vec)
+{
+    Vec3 result = {0};
+    result.x = mat._11*vec.x + mat._12*vec.y + mat._13*vec.z + mat._14*1.0f;
+    result.y = mat._21*vec.x + mat._22*vec.y + mat._23*vec.z + mat._24*1.0f;
+    result.z = mat._31*vec.x + mat._32*vec.y + mat._33*vec.z + mat._34*1.0f;
+    return result;
+}
+
 JMAPI Vec4 mat4_col(Mat4 matrix, int64_t column_i) 
 { 
     return matrix.col[column_i]; 
@@ -370,10 +383,10 @@ JMAPI Mat4 mat4_sub(Mat4 a, Mat4 b)
 JMAPI Mat4 mat4_scale(float scalar, Mat4 mat)
 {
     Mat4 result = {0};
-    result.col[0] = vec4_scale(scalar, mat.col[0]);
-    result.col[1] = vec4_scale(scalar, mat.col[1]);
-    result.col[2] = vec4_scale(scalar, mat.col[2]);
-    result.col[3] = vec4_scale(scalar, mat.col[3]);
+    result.col[0] = vec4_scale(mat.col[0], scalar);
+    result.col[1] = vec4_scale(mat.col[1], scalar);
+    result.col[2] = vec4_scale(mat.col[2], scalar);
+    result.col[3] = vec4_scale(mat.col[3], scalar);
 
     return result;
 }
@@ -475,10 +488,16 @@ JMAPI Mat4 mat4_scaling(Vec3 vec)
 
 JMAPI Mat4 mat4_translation(Vec3 vec)
 {
+    
+    //Vec4 homo_offset = vec4_from_homo_vec3(offset);
+    //Vec4 last = mat4_mul_vec4(matrix, homo_offset);
+    //Mat4 result = matrix;
+    //result.col[3] = last;
+
     Mat4 result = mat4_identity();
-    result._41 = vec.x;
-    result._42 = vec.y;
-    result._43 = vec.z;
+    result._14 = vec.x;
+    result._24 = vec.y;
+    result._34 = vec.z;
     return result;
 }
 
@@ -488,7 +507,7 @@ JMAPI Mat4 mat4_rotation(Vec3 axis, float radians)
 	float s = sinf(radians);
 
 	Vec3 na = vec3_norm(axis);
-    Vec3 t = vec3_scale(1.0f - c, na);
+    Vec3 t = vec3_scale(na, 1.0f - c);
 
     Mat4 rotation = {0};
 	rotation._11 = c + t.x * na.x;
@@ -529,9 +548,9 @@ JMAPI Mat4 mat4_rotate(Mat4 mat, Vec3 axis, float radians)
 JMAPI Mat4 mat4_scale_aniso(Mat4 mat, Vec3 scale_by)
 {
     Mat4 result = {0};
-    result.col[0] = vec4_scale(scale_by.x, mat.col[0]);
-    result.col[1] = vec4_scale(scale_by.x, mat.col[1]);
-    result.col[2] = vec4_scale(scale_by.x, mat.col[2]);
+    result.col[0] = vec4_scale(mat.col[0], scale_by.x);
+    result.col[1] = vec4_scale(mat.col[1], scale_by.y);
+    result.col[2] = vec4_scale(mat.col[2], scale_by.z);
     result.col[3] = mat.col[3];
     return result;
 }
@@ -596,7 +615,7 @@ JMAPI Mat4 mat4_look_at(Vec3 camera_pos, Vec3 camera_target, Vec3 camera_up_dir)
 {
     const Vec3 front_dir = vec3_sub(camera_target, camera_pos);
     Mat4 m = mat4_just_look_at(front_dir, camera_up_dir);
-    Mat4 look_at = mat4_translate(m, vec3_scale(-1.0f, camera_pos));
+    Mat4 look_at = mat4_translate(m, vec3_scale(camera_pos, -1.0f));
 
     return look_at;
 }

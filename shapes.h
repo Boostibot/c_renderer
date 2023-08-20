@@ -116,7 +116,7 @@ const Vertex CUBE_VERTICES[] = {
     -E,  E, -E,  0.0f, 1.0f, // top-left
     -E,  E,  E,  0.0f, 0.0f  // bottom-left        
 };
-#undef E
+
 
 const Triangle_Indeces CUBE_INDECES[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
@@ -154,7 +154,7 @@ Shape shapes_make_cube()
 
 
 
-INTERNAL u32 _shape_assembly_add_vertex(Hash_Index* hash, Shape* mesh, Vertex vertex)
+INTERNAL u32 _shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
 {
     u64 hashed = vertex_hash64(vertex, 0);
 
@@ -164,11 +164,11 @@ INTERNAL u32 _shape_assembly_add_vertex(Hash_Index* hash, Shape* mesh, Vertex ve
     while(found != -1)
     {
         isize entry = hash->entries[found].value;
-        Vertex found_vertex = mesh->vertices.data[entry];
+        Vertex found_vertex = vertices->data[entry];
         bool is_equal = memcpy(&vertex, &found_vertex, sizeof found_vertex);
         if(is_equal)
         {
-            return (u32) found;
+            return (u32) entry;
         }
         else
         {
@@ -177,8 +177,10 @@ INTERNAL u32 _shape_assembly_add_vertex(Hash_Index* hash, Shape* mesh, Vertex ve
         }
     }
 
-    array_push(&mesh->vertices, vertex);
-    return (u32) (mesh->vertices.size - 1);
+    array_push(vertices, vertex);
+    u32 inserted_i = (u32) (vertices->size - 1);
+    hash_index_insert(hash, hashed, inserted_i);
+    return inserted_i;
 }
 
 Vertex vertex_lerp(Vertex low, Vertex high, f32 t)
@@ -189,55 +191,79 @@ Vertex vertex_lerp(Vertex low, Vertex high, f32 t)
     return out;
 }
 
-//returns the xz sixth of a sphere (curved upwards) properly uv mapped to [0, 1]^2. 
-Shape shapes_make_xz_sphere_side(isize iters, f32 radius)
+void shape_deinit(Shape* shape)
 {
-    Shape quad_shape = shapes_make_xz_quad();
+    array_deinit(&shape->vertices);
+    array_deinit(&shape->indeces);
+}
 
+Shape shape_duplicate(Shape from)
+{
+    Shape out = {0};
+    array_copy(&out.vertices, from.vertices);
+    array_copy(&out.indeces, from.indeces);
+    return out;
+}
+
+void shape_tranform(Shape* shape, Mat4 transform)
+{
+    for(isize i = 0; i < shape->vertices.size; i++)
+    {
+        Vertex* vertex = &shape->vertices.data[i];
+        vertex->pos = mat4_apply(transform, vertex->pos);
+    }
+}
+
+f32 vec3_p_len(Vec3 vec, f32 p)
+{
+    f32 x = powf(fabsf(vec.x), p);
+    f32 y = powf(fabsf(vec.y), p);
+    f32 z = powf(fabsf(vec.z), p);
+
+    f32 sum = x + y + z;
+    f32 result = powf(sum, 1.0f/p);
+
+    if(p == 2.0f)
+    {
+        f32 len = vec3_len(vec);
+        ASSERT(is_near_scaledf(len, result, EPSILON));
+    }
+
+    return result;
+}
+
+Vec3 vec3_p_norm(Vec3 vec, f32 p)
+{
+    f32 p_len = vec3_p_len(vec, p);
+    ASSERT(p_len != 0);
+
+    Vec3 result = vec3_scale(vec, 1.0f/p_len);
+    return result;
+}
+
+//returns the xz sixth of a sphere (curved upwards) properly uv mapped to [0, 1]^2. 
+Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
+{
     isize vertex_budget = 0;
     isize face_budget = 0;
     f32 face_size_budget = 0;
     (void) vertex_budget;
     (void) face_budget;
     (void) face_size_budget;
+    (void) radius;
 
-    f32 dist_to_corner = sqrtf(3.0f);
-    f32 corner_dist = 1.0f/dist_to_corner*radius;
-    f32 C = corner_dist;
-
-    Vertex upper_quad_vertices[] = {
-         C, C,  C, 1.0f, 1.0f,
-        -C, C,  C, 0.0f, 1.0f,
-         C, C, -C, 1.0f, 0.0f,
-        -C, C, -C, 0.0f, 0.0f,
-    };
-
-    Triangle_Indeces upper_quad_indeces[] = {
-        0, 1, 2, 
-        1, 2, 3
-    };
-    (void) upper_quad_vertices;
-    (void) upper_quad_indeces;
-    
-
-    for(isize i = 0; i < quad_shape.vertices.size; i++)
-    {
-        Vertex* vertex = &quad_shape.vertices.data[i];
-        vertex->pos.x *= corner_dist;
-        vertex->pos.y = corner_dist;
-        vertex->pos.z *= corner_dist;
-
-        ASSERT(vec3_len(vertex->pos) == radius);
-    }
-    
     const Triangle_Indeces* quad_indices = XZ_QUAD_INDECES;
     const Vertex* quad_vertices = XZ_QUAD_VERTICES;
     isize quad_indices_count = STATIC_ARRAY_SIZE(XZ_QUAD_INDECES);
-    //isize quad_vertices_count = STATIC_ARRAY_SIZE(XZ_QUAD_VERTICES);
     
+    //@TODO: refactor to use loops of 3
+
     //add the initial indeces
-    Shape out_shape = {0};
+    Vertex_Array vertices = {0};
+    Triangle_Indeces_Array indeces1 = {0};
+    Triangle_Indeces_Array indeces2 = {0};
     Hash_Index hash = {allocator_get_scratch()};
+    
     for(isize i = 0; i < quad_indices_count; i++)
     {
         Triangle_Indeces triangle = quad_indices[i];
@@ -250,57 +276,90 @@ Shape shapes_make_xz_sphere_side(isize iters, f32 radius)
         for(isize j = 0; j < 3; j++)
         {
             Vertex* vertex = &triangle_vertices[j];
-            vertex->pos.x *= corner_dist;
-            vertex->pos.y = corner_dist;
-            vertex->pos.z *= corner_dist;
-
-            ASSERT(vec3_len(vertex->pos) == radius);
+            vertex->pos.y = E;
+            vertex->pos = vec3_scale(vec3_p_norm(vertex->pos, p), radius);
         }
 
         Triangle_Indeces inserted_triangle = {0};
-        inserted_triangle.vertex_i[0] = _shape_assembly_add_vertex(&hash, &out_shape, triangle_vertices[0]);
-        inserted_triangle.vertex_i[1] = _shape_assembly_add_vertex(&hash, &out_shape, triangle_vertices[1]);
-        inserted_triangle.vertex_i[2] = _shape_assembly_add_vertex(&hash, &out_shape, triangle_vertices[2]);
+        inserted_triangle.vertex_i[0] = _shape_assembly_add_vertex(&hash, &vertices, triangle_vertices[0]);
+        inserted_triangle.vertex_i[1] = _shape_assembly_add_vertex(&hash, &vertices, triangle_vertices[1]);
+        inserted_triangle.vertex_i[2] = _shape_assembly_add_vertex(&hash, &vertices, triangle_vertices[2]);
 
-        array_push(&out_shape.indeces, inserted_triangle);
+        ASSERT(inserted_triangle.vertex_i[0] < vertices.size);
+        ASSERT(inserted_triangle.vertex_i[1] < vertices.size);
+        ASSERT(inserted_triangle.vertex_i[2] < vertices.size);
+
+        array_push(&indeces1, inserted_triangle);
     }
-
+    
+    Triangle_Indeces_Array* in_indeces = NULL;
+    Triangle_Indeces_Array* out_indeces = NULL;
     for(isize k = 0; k < iters; k++)
     {
-        
-        //isize size_before = quad_shape.indeces.size;
-        for(isize i = 0; i < quad_shape.indeces.size; i++)
+        if(k % 2 == 0)
         {
-            Triangle_Indeces triangle = quad_shape.indeces.data[i];
+            in_indeces = &indeces1;
+            out_indeces = &indeces2;
+        }
+        else
+        {
+            in_indeces = &indeces2;
+            out_indeces = &indeces1;
+        }
+        
+        array_clear(out_indeces);
+
+        isize size_before = in_indeces->size;
+        for(isize i = 0; i < size_before; i++)
+        {
+            Triangle_Indeces triangle = in_indeces->data[i];
             Vertex triangle_vertices[3] = {0};
 
-            triangle_vertices[0] = *array_get(quad_shape.vertices, triangle.vertex_i[0]);
-            triangle_vertices[1] = *array_get(quad_shape.vertices, triangle.vertex_i[1]);
-            triangle_vertices[2] = *array_get(quad_shape.vertices, triangle.vertex_i[2]);
+            triangle_vertices[0] = *array_get(vertices, triangle.vertex_i[0]);
+            triangle_vertices[1] = *array_get(vertices, triangle.vertex_i[1]);
+            triangle_vertices[2] = *array_get(vertices, triangle.vertex_i[2]);
 
             Vertex mids[3] = {0};
             mids[0] = vertex_lerp(triangle_vertices[0], triangle_vertices[1], 0.5f);
             mids[1] = vertex_lerp(triangle_vertices[1], triangle_vertices[2], 0.5f);
             mids[2] = vertex_lerp(triangle_vertices[2], triangle_vertices[0], 0.5f);
+             
+            mids[0].pos = vec3_scale(vec3_p_norm(mids[0].pos, p), radius);
+            mids[1].pos = vec3_scale(vec3_p_norm(mids[1].pos, p), radius);
+            mids[2].pos = vec3_scale(vec3_p_norm(mids[2].pos, p), radius);
+            
+            //mids[0].pos = vec3_norm(mids[0].pos);
+            //mids[1].pos = vec3_norm(mids[1].pos);
+            //mids[2].pos = vec3_norm(mids[2].pos);
 
-            u32 m0 = _shape_assembly_add_vertex(&hash, &out_shape, triangle_vertices[0]);
-            u32 m1 = _shape_assembly_add_vertex(&hash, &out_shape, triangle_vertices[1]);
-            u32 m2 = _shape_assembly_add_vertex(&hash, &out_shape, triangle_vertices[2]);
+            u32 m0 = _shape_assembly_add_vertex(&hash, &vertices, mids[0]);
+            u32 m1 = _shape_assembly_add_vertex(&hash, &vertices, mids[1]);
+            u32 m2 = _shape_assembly_add_vertex(&hash, &vertices, mids[2]);
 
             Triangle_Indeces corner1 = {triangle.vertex_i[0], m2, m0};
             Triangle_Indeces corner2 = {triangle.vertex_i[1], m0, m1};
             Triangle_Indeces corner3 = {triangle.vertex_i[2], m1, m2};
             Triangle_Indeces central = {m2, m1, m0};
 
-            array_push(&out_shape.indeces, corner1);
-            array_push(&out_shape.indeces, corner2);
-            array_push(&out_shape.indeces, corner3);
-            array_push(&out_shape.indeces, central);
+            array_push(out_indeces, corner1);
+            array_push(out_indeces, corner2);
+            array_push(out_indeces, corner3);
+            array_push(out_indeces, central);
         }
-    
+
+        ASSERT(size_before == in_indeces->size);
     }
+
+    array_deinit(in_indeces);
+    hash_index_deinit(&hash);
+
+    Shape out_shape = {0};
+    out_shape.indeces = *out_indeces;
+    out_shape.vertices = vertices;
     return out_shape;
 }
+
+//Shape shapes_make_sphere(isize iters, f32 radius);
 
 
 void shapes_make_icosahedron()
@@ -326,3 +385,4 @@ void shapes_make_icosahedron()
     #undef Z
     #undef N
 }
+#undef E

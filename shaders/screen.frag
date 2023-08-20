@@ -9,17 +9,11 @@ uniform float exposure;
 
 void main()
 { 
-    
-    //frag_color = texture(screen, uv_coords);
-    //return;
-
-    //float exposure_ = 2.0;
     float exposure_ = exposure;
 
     vec3 color = texture(screen, uv_coords).xyz;
     vec3 mapped = vec3(1.0) - exp(-color * exposure_);
     mapped = pow(mapped, vec3(1.0 / gamma));
-
+    //mapped *= 0.5;
     frag_color = vec4(mapped, 1.0);
-    //frag_color = vec4(1.0, .0, 1.0, 1.0);
 }
