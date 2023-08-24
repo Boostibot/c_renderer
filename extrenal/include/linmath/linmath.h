@@ -12,26 +12,26 @@
 #endif
 
 #define LINMATH_H_DEFINE_VEC(n) \
-typedef float vec##n[n]; \
-LINMATH_H_FUNC void _vec##n##_add(vec##n r, vec##n const a, vec##n const b) \
+typedef float _Vec##n[n]; \
+LINMATH_H_FUNC void _vec##n##_add(_Vec##n r, _Vec##n const a, _Vec##n const b) \
 { \
 	int i; \
 	for(i=0; i<n; ++i) \
 		r[i] = a[i] + b[i]; \
 } \
-LINMATH_H_FUNC void _vec##n##_sub(vec##n r, vec##n const a, vec##n const b) \
+LINMATH_H_FUNC void _vec##n##_sub(_Vec##n r, _Vec##n const a, _Vec##n const b) \
 { \
 	int i; \
 	for(i=0; i<n; ++i) \
 		r[i] = a[i] - b[i]; \
 } \
-LINMATH_H_FUNC void _vec##n##_scale(vec##n r, vec##n const v, float const s) \
+LINMATH_H_FUNC void _vec##n##_scale(_Vec##n r, _Vec##n const v, float const s) \
 { \
 	int i; \
 	for(i=0; i<n; ++i) \
 		r[i] = v[i] * s; \
 } \
-LINMATH_H_FUNC float _vec##n##_mul_inner(vec##n const a, vec##n const b) \
+LINMATH_H_FUNC float _vec##n##_mul_inner(_Vec##n const a, _Vec##n const b) \
 { \
 	float p = 0.f; \
 	int i; \
@@ -39,28 +39,28 @@ LINMATH_H_FUNC float _vec##n##_mul_inner(vec##n const a, vec##n const b) \
 		p += b[i]*a[i]; \
 	return p; \
 } \
-LINMATH_H_FUNC float _vec##n##_len(vec##n const v) \
+LINMATH_H_FUNC float _vec##n##_len(_Vec##n const v) \
 { \
 	return sqrtf(_vec##n##_mul_inner(v,v)); \
 } \
-LINMATH_H_FUNC void _vec##n##_norm(vec##n r, vec##n const v) \
+LINMATH_H_FUNC void _vec##n##_norm(_Vec##n r, _Vec##n const v) \
 { \
 	float k = 1.f / _vec##n##_len(v); \
 	_vec##n##_scale(r, v, k); \
 } \
-LINMATH_H_FUNC void _vec##n##_min(vec##n r, vec##n const a, vec##n const b) \
+LINMATH_H_FUNC void _vec##n##_min(_Vec##n r, _Vec##n const a, _Vec##n const b) \
 { \
 	int i; \
 	for(i=0; i<n; ++i) \
 		r[i] = a[i]<b[i] ? a[i] : b[i]; \
 } \
-LINMATH_H_FUNC void _vec##n##_max(vec##n r, vec##n const a, vec##n const b) \
+LINMATH_H_FUNC void _vec##n##_max(_Vec##n r, _Vec##n const a, _Vec##n const b) \
 { \
 	int i; \
 	for(i=0; i<n; ++i) \
 		r[i] = a[i]>b[i] ? a[i] : b[i]; \
 } \
-LINMATH_H_FUNC void _vec##n##_dup(vec##n r, vec##n const src) \
+LINMATH_H_FUNC void _vec##n##_dup(_Vec##n r, _Vec##n const src) \
 { \
 	int i; \
 	for(i=0; i<n; ++i) \
@@ -71,14 +71,14 @@ LINMATH_H_DEFINE_VEC(2)
 LINMATH_H_DEFINE_VEC(3)
 LINMATH_H_DEFINE_VEC(4)
 
-LINMATH_H_FUNC void _vec3_mul_cross(vec3 r, vec3 const a, vec3 const b)
+LINMATH_H_FUNC void _vec3_mul_cross(_Vec3 r, _Vec3 const a, _Vec3 const b)
 {
 	r[0] = a[1]*b[2] - a[2]*b[1];
 	r[1] = a[2]*b[0] - a[0]*b[2];
 	r[2] = a[0]*b[1] - a[1]*b[0];
 }
 
-LINMATH_H_FUNC void _vec3_reflect(vec3 r, vec3 const v, vec3 const n)
+LINMATH_H_FUNC void _vec3_reflect(_Vec3 r, _Vec3 const v, _Vec3 const n)
 {
 	float p = 2.f * _vec3_mul_inner(v, n);
 	int i;
@@ -86,7 +86,7 @@ LINMATH_H_FUNC void _vec3_reflect(vec3 r, vec3 const v, vec3 const n)
 		r[i] = v[i] - p*n[i];
 }
 
-LINMATH_H_FUNC void _vec4_mul_cross(vec4 r, vec4 const a, vec4 const b)
+LINMATH_H_FUNC void _vec4_mul_cross(_Vec4 r, _Vec4 const a, _Vec4 const b)
 {
 	r[0] = a[1]*b[2] - a[2]*b[1];
 	r[1] = a[2]*b[0] - a[0]*b[2];
@@ -94,7 +94,7 @@ LINMATH_H_FUNC void _vec4_mul_cross(vec4 r, vec4 const a, vec4 const b)
 	r[3] = 1.f;
 }
 
-LINMATH_H_FUNC void _vec4_reflect(vec4 r, vec4 const v, vec4 const n)
+LINMATH_H_FUNC void _vec4_reflect(_Vec4 r, _Vec4 const v, _Vec4 const n)
 {
 	float p  = 2.f*_vec4_mul_inner(v, n);
 	int i;
@@ -102,7 +102,7 @@ LINMATH_H_FUNC void _vec4_reflect(vec4 r, vec4 const v, vec4 const n)
 		r[i] = v[i] - p*n[i];
 }
 
-typedef vec4 mat4x4[4];
+typedef _Vec4 mat4x4[4];
 LINMATH_H_FUNC void _mat4x4_identity(mat4x4 M)
 {
 	int i, j;
@@ -116,13 +116,13 @@ LINMATH_H_FUNC void _mat4x4_dup(mat4x4 M, mat4x4 const N)
 	for(i=0; i<4; ++i)
 		_vec4_dup(M[i], N[i]);
 }
-LINMATH_H_FUNC void _mat4x4_row(vec4 r, mat4x4 const M, int i)
+LINMATH_H_FUNC void _mat4x4_row(_Vec4 r, mat4x4 const M, int i)
 {
 	int k;
 	for(k=0; k<4; ++k)
 		r[k] = M[k][i];
 }
-LINMATH_H_FUNC void _mat4x4_col(vec4 r, mat4x4 const M, int i)
+LINMATH_H_FUNC void _mat4x4_col(_Vec4 r, mat4x4 const M, int i)
 {
 	int k;
 	for(k=0; k<4; ++k)
@@ -173,7 +173,7 @@ LINMATH_H_FUNC void _mat4x4_mul(mat4x4 M, mat4x4 const a, mat4x4 const b)
 	}
 	_mat4x4_dup(M, temp);
 }
-LINMATH_H_FUNC void _mat4x4_mul_vec4(vec4 r, mat4x4 const M, vec4 const v)
+LINMATH_H_FUNC void _mat4x4_mul_vec4(_Vec4 r, mat4x4 const M, _Vec4 const v)
 {
 	int i, j;
 	for(j=0; j<4; ++j) {
@@ -191,15 +191,15 @@ LINMATH_H_FUNC void _mat4x4_translate(mat4x4 T, float x, float y, float z)
 }
 LINMATH_H_FUNC void _mat4x4_translate_in_place(mat4x4 M, float x, float y, float z)
 {
-	vec4 t = {x, y, z, 0};
-	vec4 r;
+	_Vec4 t = {x, y, z, 0};
+	_Vec4 r;
 	int i;
 	for (i = 0; i < 4; ++i) {
 		_mat4x4_row(r, M, i);
 		M[3][i] += _vec4_mul_inner(r, t);
 	}
 }
-LINMATH_H_FUNC void _mat4x4_from_vec3_mul_outer(mat4x4 M, vec3 const a, vec3 const b)
+LINMATH_H_FUNC void _mat4x4_from_vec3_mul_outer(mat4x4 M, _Vec3 const a, _Vec3 const b)
 {
 	int i, j;
 	for(i=0; i<4; ++i) for(j=0; j<4; ++j)
@@ -209,7 +209,7 @@ LINMATH_H_FUNC void _mat4x4_rotate(mat4x4 R, mat4x4 const M, float x, float y, f
 {
 	float s = sinf(angle);
 	float c = cosf(angle);
-	vec3 u = {x, y, z};
+	_Vec3 u = {x, y, z};
 
 	if(_vec3_len(u) > 1e-4) {
 		_vec3_norm(u, u);
@@ -320,7 +320,7 @@ LINMATH_H_FUNC void _mat4x4_orthonormalize(mat4x4 R, mat4x4 const M)
 {
 	_mat4x4_dup(R, M);
 	float s = 1.f;
-	vec3 h;
+	_Vec3 h;
 
 	_vec3_norm(R[2], R[2]);
 	
@@ -397,7 +397,7 @@ LINMATH_H_FUNC void _mat4x4_perspective(mat4x4 m, float y_fov, float aspect, flo
 	m[3][2] = -((2.f * f * n) / (f - n));
 	m[3][3] = 0.f;
 }
-LINMATH_H_FUNC void _mat4x4_look_at(mat4x4 m, vec3 const eye, vec3 const center, vec3 const up)
+LINMATH_H_FUNC void _mat4x4_look_at(mat4x4 m, _Vec3 const eye, _Vec3 const center, _Vec3 const up)
 {
 	/* Adapted from Android's OpenGL Matrix.java.                        */
 	/* See the OpenGL GLUT documentation for gluLookAt for a description */
@@ -405,15 +405,15 @@ LINMATH_H_FUNC void _mat4x4_look_at(mat4x4 m, vec3 const eye, vec3 const center,
 
 	/* TODO: The negation of of can be spared by swapping the order of
 	 *       operands in the following cross products in the right way. */
-	vec3 f;
+	_Vec3 f;
 	_vec3_sub(f, center, eye);	
 	_vec3_norm(f, f);	
 	
-	vec3 s;
+	_Vec3 s;
 	_vec3_mul_cross(s, f, up);
 	_vec3_norm(s, s);
 
-	vec3 t;
+	_Vec3 t;
 	_vec3_mul_cross(t, s, f);
 
 	m[0][0] =  s[0];
@@ -453,7 +453,7 @@ LINMATH_H_FUNC void _quat_identity(quat q)
 }
 LINMATH_H_FUNC void _quat_mul(quat r, quat const p, quat const q)
 {
-	vec3 w, tmp;
+	_Vec3 w, tmp;
 
 	_vec3_mul_cross(tmp, p, q);
 	_vec3_scale(w, p, q[3]);
@@ -471,24 +471,24 @@ LINMATH_H_FUNC void _quat_conj(quat r, quat const q)
 		r[i] = -q[i];
 	r[3] = q[3];
 }
-LINMATH_H_FUNC void _quat_rotate(quat r, float angle, vec3 const axis) {
-    vec3 axis_norm;
+LINMATH_H_FUNC void _quat_rotate(quat r, float angle, _Vec3 const axis) {
+    _Vec3 axis_norm;
     _vec3_norm(axis_norm, axis);
     float s = sinf(angle / 2);
     float c = cosf(angle / 2);
     _vec3_scale(r, axis_norm, s);
     r[3] = c;
 }
-LINMATH_H_FUNC void _quat_mul_vec3(vec3 r, quat const q, vec3 const v)
+LINMATH_H_FUNC void _quat_mul_vec3(_Vec3 r, quat const q, _Vec3 const v)
 {
 /*
  * Method by Fabian 'ryg' Giessen (of Farbrausch)
 t = 2 * cross(q.xyz, v)
 v' = v + q.w * t + cross(q.xyz, t)
  */
-	vec3 t;
-	vec3 q_xyz = {q[0], q[1], q[2]};
-	vec3 u = {q[0], q[1], q[2]};
+	_Vec3 t;
+	_Vec3 q_xyz = {q[0], q[1], q[2]};
+	_Vec3 u = {q[0], q[1], q[2]};
 
 	_vec3_mul_cross(t, q_xyz, v);
 	_vec3_scale(t, t, 2);
@@ -573,10 +573,10 @@ LINMATH_H_FUNC void _quat_from_mat4x4(quat q, mat4x4 const M)
 	q[3] = (M[p[2]][p[1]] - M[p[1]][p[2]])/(2.f*r);
 }
 
-LINMATH_H_FUNC void _mat4x4_arcball(mat4x4 R, mat4x4 const M, vec2 const _a, vec2 const _b, float s)
+LINMATH_H_FUNC void _mat4x4_arcball(mat4x4 R, mat4x4 const M, _Vec2 const _a, _Vec2 const _b, float s)
 {
-	vec2 a; memcpy(a, _a, sizeof(a));
-	vec2 b; memcpy(b, _b, sizeof(b));
+	_Vec2 a; memcpy(a, _a, sizeof(a));
+	_Vec2 b; memcpy(b, _b, sizeof(b));
 	
 	float z_a = 0.;
 	float z_b = 0.;
@@ -593,10 +593,10 @@ LINMATH_H_FUNC void _mat4x4_arcball(mat4x4 R, mat4x4 const M, vec2 const _a, vec
 		_vec2_norm(b, b);
 	}
 	
-	vec3 a_ = {a[0], a[1], z_a};
-	vec3 b_ = {b[0], b[1], z_b};
+	_Vec3 a_ = {a[0], a[1], z_a};
+	_Vec3 b_ = {b[0], b[1], z_b};
 
-	vec3 c_;
+	_Vec3 c_;
 	_vec3_mul_cross(c_, a_, b_);
 
 	float const angle = acos(_vec3_mul_inner(a_, b_)) * s;

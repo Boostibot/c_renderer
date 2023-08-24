@@ -9,7 +9,18 @@ typedef struct Vertex
 {
     Vec3 pos;
     Vec2 uv;
+    Vec3 norm;
 } Vertex;
+
+typedef struct Full_Vertex
+{
+    Vec3 pos;
+    Vec2 uv;
+    Vec3 norm;
+    Vec3 tan;
+    Vec3 bitan;
+    Vec3 color;
+} Full_Vertex;
 
 typedef struct Triangle_Indeces
 {
@@ -31,37 +42,34 @@ void mesh_deinit(Shape* mesh)
     array_deinit(&mesh->indeces);
 }
 
-
 #define E 1.0f
 const Vertex XZ_QUAD_VERTICES[] = {
-     E, 0.0f,  E, 1.0f, 1.0f,
-    -E, 0.0f,  E, 0.0f, 1.0f,
-    -E, 0.0f, -E, 0.0f, 0.0f,
-     E, 0.0f, -E, 1.0f, 0.0f,
-     E, 0.0f,  E, 1.0f, 1.0f,
-    -E, 0.0f, -E, 0.0f, 0.0f,
+     E, 0,  E, {1, 1}, {0, 1, 0},
+    -E, 0,  E, {0, 1}, {0, 1, 0}, 
+    -E, 0, -E, {0, 0}, {0, 1, 0},
+     E, 0, -E, {1, 0}, {0, 1, 0},
 };
 
 const Vertex XY_QUAD_VERTICES[] = { 
-     E,  E, 0.0f, 1.0f, 1.0f,
-    -E,  E, 0.0f, 0.0f, 1.0f,
-    -E, -E, 0.0f, 0.0f, 0.0f,
-     E, -E, 0.0f, 1.0f, 0.0f,
-     E,  E, 0.0f, 1.0f, 1.0f,
-    -E, -E, 0.0f, 0.0f, 0.0f,
+     E,  E, 0.0f, 1.0f, 1.0f, {0},
+    -E,  E, 0.0f, 0.0f, 1.0f, {0},
+    -E, -E, 0.0f, 0.0f, 0.0f, {0},
+     E, -E, 0.0f, 1.0f, 0.0f, {0},
+     E,  E, 0.0f, 1.0f, 1.0f, {0},
+    -E, -E, 0.0f, 0.0f, 0.0f, {0},
 };
 
 const Vertex YZ_QUAD_VERTICES[] = {
-    0.0f,  E,  E, 1.0f, 1.0f,
-    0.0f, -E,  E, 0.0f, 1.0f,
-    0.0f, -E, -E, 0.0f, 0.0f,
-    0.0f,  E, -E, 1.0f, 0.0f,
-    0.0f,  E,  E, 1.0f, 1.0f,
-    0.0f, -E, -E, 0.0f, 0.0f,
+    0.0f,  E,  E, 1.0f, 1.0f, {0},
+    0.0f, -E,  E, 0.0f, 1.0f, {0},
+    0.0f, -E, -E, 0.0f, 0.0f, {0},
+    0.0f,  E, -E, 1.0f, 0.0f, {0},
+    0.0f,  E,  E, 1.0f, 1.0f, {0},
+    0.0f, -E, -E, 0.0f, 0.0f, {0},
 };
 
 const Triangle_Indeces XZ_QUAD_INDECES[] = { 
-    0, 1, 2, 3, 4, 5
+    1, 0, 2, 0, 3, 2
 };
 
 const Triangle_Indeces XY_QUAD_INDECES[] = { 
@@ -74,47 +82,47 @@ const Triangle_Indeces YZ_QUAD_INDECES[] = {
 
 const Vertex CUBE_VERTICES[] = {
     // Back face
-    -E, -E, -E,  0.0f, 0.0f, // Bottom-left
-     E,  E, -E,  1.0f, 1.0f, // top-right
-     E, -E, -E,  1.0f, 0.0f, // bottom-right         
-     E,  E, -E,  1.0f, 1.0f, // top-right
-    -E, -E, -E,  0.0f, 0.0f, // bottom-left
-    -E,  E, -E,  0.0f, 1.0f, // top-left
+    -E, -E, -E,  0.0f, 0.0f, {0, 0, -1}, // Bottom-left
+     E,  E, -E,  1.0f, 1.0f, {0, 0, -1}, // top-right
+     E, -E, -E,  1.0f, 0.0f, {0, 0, -1}, // bottom-right         
+     E,  E, -E,  1.0f, 1.0f, {0, 0, -1}, // top-right
+    -E, -E, -E,  0.0f, 0.0f, {0, 0, -1}, // bottom-left
+    -E,  E, -E,  0.0f, 1.0f, {0, 0, -1}, // top-left
     // Front face
-    -E, -E,  E,  0.0f, 0.0f, // bottom-left
-     E, -E,  E,  1.0f, 0.0f, // bottom-right
-     E,  E,  E,  1.0f, 1.0f, // top-right
-     E,  E,  E,  1.0f, 1.0f, // top-right
-    -E,  E,  E,  0.0f, 1.0f, // top-left
-    -E, -E,  E,  0.0f, 0.0f, // bottom-left
+    -E, -E,  E,  0.0f, 0.0f, {0, 0, 1}, // bottom-left
+     E, -E,  E,  1.0f, 0.0f, {0, 0, 1}, // bottom-right
+     E,  E,  E,  1.0f, 1.0f, {0, 0, 1}, // top-right
+     E,  E,  E,  1.0f, 1.0f, {0, 0, 1}, // top-right
+    -E,  E,  E,  0.0f, 1.0f, {0, 0, 1}, // top-left
+    -E, -E,  E,  0.0f, 0.0f, {0, 0, 1}, // bottom-left
     // Left face
-    -E,  E,  E,  1.0f, 0.0f, // top-right
-    -E,  E, -E,  1.0f, 1.0f, // top-left
-    -E, -E, -E,  0.0f, 1.0f, // bottom-left
-    -E, -E, -E,  0.0f, 1.0f, // bottom-left
-    -E, -E,  E,  0.0f, 0.0f, // bottom-right
-    -E,  E,  E,  1.0f, 0.0f, // top-right
+    -E,  E,  E,  1.0f, 0.0f, {-1, 0, 0}, // top-right
+    -E,  E, -E,  1.0f, 1.0f, {-1, 0, 0}, // top-left
+    -E, -E, -E,  0.0f, 1.0f, {-1, 0, 0}, // bottom-left
+    -E, -E, -E,  0.0f, 1.0f, {-1, 0, 0}, // bottom-left
+    -E, -E,  E,  0.0f, 0.0f, {-1, 0, 0}, // bottom-right
+    -E,  E,  E,  1.0f, 0.0f, {-1, 0, 0}, // top-right
     // Right face
-     E,  E,  E,  1.0f, 0.0f, // top-left
-     E, -E, -E,  0.0f, 1.0f, // bottom-right
-     E,  E, -E,  1.0f, 1.0f, // top-right         
-     E, -E, -E,  0.0f, 1.0f, // bottom-right
-     E,  E,  E,  1.0f, 0.0f, // top-left
-     E, -E,  E,  0.0f, 0.0f, // bottom-left     
+     E,  E,  E,  1.0f, 0.0f, {1, 0, 0}, // top-left
+     E, -E, -E,  0.0f, 1.0f, {1, 0, 0}, // bottom-right
+     E,  E, -E,  1.0f, 1.0f, {1, 0, 0}, // top-right         
+     E, -E, -E,  0.0f, 1.0f, {1, 0, 0}, // bottom-right
+     E,  E,  E,  1.0f, 0.0f, {1, 0, 0}, // top-left
+     E, -E,  E,  0.0f, 0.0f, {1, 0, 0}, // bottom-left     
     // Bottom face
-    -E, -E, -E,  0.0f, 1.0f, // top-right
-     E, -E, -E,  1.0f, 1.0f, // top-left
-     E, -E,  E,  1.0f, 0.0f, // bottom-left
-     E, -E,  E,  1.0f, 0.0f, // bottom-left
-    -E, -E,  E,  0.0f, 0.0f, // bottom-right
-    -E, -E, -E,  0.0f, 1.0f, // top-right
+    -E, -E, -E,  0.0f, 1.0f, {0, -1, 0}, // top-right
+     E, -E, -E,  1.0f, 1.0f, {0, -1, 0}, // top-left
+     E, -E,  E,  1.0f, 0.0f, {0, -1, 0}, // bottom-left
+     E, -E,  E,  1.0f, 0.0f, {0, -1, 0}, // bottom-left
+    -E, -E,  E,  0.0f, 0.0f, {0, -1, 0}, // bottom-right
+    -E, -E, -E,  0.0f, 1.0f, {0, -1, 0}, // top-right
     // Top face
-    -E,  E, -E,  0.0f, 1.0f, // top-left
-     E,  E,  E,  1.0f, 0.0f, // bottom-right
-     E,  E, -E,  1.0f, 1.0f, // top-right     
-     E,  E,  E,  1.0f, 0.0f, // bottom-right
-    -E,  E, -E,  0.0f, 1.0f, // top-left
-    -E,  E,  E,  0.0f, 0.0f  // bottom-left        
+    -E,  E, -E,  0.0f, 1.0f, {0, 1, 0}, // top-left
+     E,  E,  E,  1.0f, 0.0f, {0, 1, 0}, // bottom-right
+     E,  E, -E,  1.0f, 1.0f, {0, 1, 0}, // top-right     
+     E,  E,  E,  1.0f, 0.0f, {0, 1, 0}, // bottom-right
+    -E,  E, -E,  0.0f, 1.0f, {0, 1, 0}, // top-left
+    -E,  E,  E,  0.0f, 0.0f, {0, 1, 0}  // bottom-left        
 };
 
 
@@ -151,8 +159,6 @@ Shape shapes_make_cube()
 
     return out;
 }
-
-
 
 INTERNAL u32 _shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
 {
@@ -207,28 +213,24 @@ Shape shape_duplicate(Shape from)
 
 void shape_tranform(Shape* shape, Mat4 transform)
 {
+    Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
+
     for(isize i = 0; i < shape->vertices.size; i++)
     {
         Vertex* vertex = &shape->vertices.data[i];
         vertex->pos = mat4_apply(transform, vertex->pos);
+        vertex->norm = mat4_apply(normal_matrix, vertex->norm);
     }
 }
 
 f32 vec3_p_len(Vec3 vec, f32 p)
 {
-    f32 x = powf(fabsf(vec.x), p);
-    f32 y = powf(fabsf(vec.y), p);
-    f32 z = powf(fabsf(vec.z), p);
-
-    f32 sum = x + y + z;
+    f32 x = fabsf(vec.x);
+    f32 y = fabsf(vec.y);
+    f32 z = fabsf(vec.z);
+    f32 sum = powf(x, p) + powf(y, p) + powf(z, p);
     f32 result = powf(sum, 1.0f/p);
-
-    if(p == 2.0f)
-    {
-        f32 len = vec3_len(vec);
-        ASSERT(is_near_scaledf(len, result, EPSILON));
-    }
-
+    
     return result;
 }
 
@@ -236,9 +238,36 @@ Vec3 vec3_p_norm(Vec3 vec, f32 p)
 {
     f32 p_len = vec3_p_len(vec, p);
     ASSERT(p_len != 0);
-
     Vec3 result = vec3_scale(vec, 1.0f/p_len);
     return result;
+}
+
+//true - CW
+//false - CCW
+bool check_winding_order(Vertex v1, Vertex v2, Vertex v3)
+{
+    Vec3 avg_norm = vec3_add(vec3_add(v1.norm, v2.norm), v3.norm);
+    avg_norm = vec3_norm(avg_norm);
+
+    Vec3 edge1 = vec3_sub(v2.pos, v1.pos);
+    Vec3 edge2 = vec3_sub(v3.pos, v1.pos);
+
+    Vec3 triangle_right_norm = vec3_cross(edge1, edge2);
+    f32 similarity = vec3_dot(avg_norm, triangle_right_norm);
+
+    if(similarity < 0)
+        return false;
+    else
+        return true;
+}
+
+bool check_winding_order_index(Vertex* vertices, Triangle_Indeces trinagle)
+{
+    Vertex v1 = vertices[trinagle.vertex_i[0]];
+    Vertex v2 = vertices[trinagle.vertex_i[1]];
+    Vertex v3 = vertices[trinagle.vertex_i[2]];
+
+    return check_winding_order(v1, v2, v3);
 }
 
 //returns the xz sixth of a sphere (curved upwards) properly uv mapped to [0, 1]^2. 
@@ -257,13 +286,26 @@ Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
     isize quad_indices_count = STATIC_ARRAY_SIZE(XZ_QUAD_INDECES);
     
     //@TODO: refactor to use loops of 3
+    Allocator* default_alloc = allocator_get_default();
+    Allocator* scratch_alloc = allocator_get_scratch();
 
     //add the initial indeces
-    Vertex_Array vertices = {0};
-    Triangle_Indeces_Array indeces1 = {0};
-    Triangle_Indeces_Array indeces2 = {0};
-    Hash_Index hash = {allocator_get_scratch()};
+    Vertex_Array vertices = {default_alloc};
+    Triangle_Indeces_Array indeces1 = {default_alloc};
+    Triangle_Indeces_Array indeces2 = {default_alloc};
+    Hash_Index hash = {scratch_alloc};
     
+    isize needed_vertices = 4;
+    isize needed_trinagles = 4;
+    for(isize k = 0; k < iters; k++)
+    {
+        needed_vertices *= 2;
+        needed_trinagles *= 4;
+    }
+    hash_index_reserve(&hash, needed_trinagles);
+    array_reserve(&indeces1, needed_vertices);
+    array_reserve(&indeces2, needed_vertices);
+
     for(isize i = 0; i < quad_indices_count; i++)
     {
         Triangle_Indeces triangle = quad_indices[i];
@@ -272,12 +314,15 @@ Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
         triangle_vertices[1] = quad_vertices[triangle.vertex_i[1]];
         triangle_vertices[2] = quad_vertices[triangle.vertex_i[2]];
 
+        ASSERT(check_winding_order(triangle_vertices[0], triangle_vertices[1], triangle_vertices[2]));
+
         //transform each vertex so that it lays on the unit sphere
         for(isize j = 0; j < 3; j++)
         {
             Vertex* vertex = &triangle_vertices[j];
             vertex->pos.y = E;
             vertex->pos = vec3_scale(vec3_p_norm(vertex->pos, p), radius);
+            vertex->norm = vertex->pos;
         }
 
         Triangle_Indeces inserted_triangle = {0};
@@ -292,8 +337,8 @@ Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
         array_push(&indeces1, inserted_triangle);
     }
     
-    Triangle_Indeces_Array* in_indeces = NULL;
-    Triangle_Indeces_Array* out_indeces = NULL;
+    Triangle_Indeces_Array* in_indeces = &indeces2;
+    Triangle_Indeces_Array* out_indeces = &indeces1;
     for(isize k = 0; k < iters; k++)
     {
         if(k % 2 == 0)
@@ -318,8 +363,11 @@ Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
             triangle_vertices[0] = *array_get(vertices, triangle.vertex_i[0]);
             triangle_vertices[1] = *array_get(vertices, triangle.vertex_i[1]);
             triangle_vertices[2] = *array_get(vertices, triangle.vertex_i[2]);
+            
+            ASSERT(check_winding_order(triangle_vertices[0], triangle_vertices[1], triangle_vertices[2]));
 
             Vertex mids[3] = {0};
+            //@TODO: maybe add norm to lerp?
             mids[0] = vertex_lerp(triangle_vertices[0], triangle_vertices[1], 0.5f);
             mids[1] = vertex_lerp(triangle_vertices[1], triangle_vertices[2], 0.5f);
             mids[2] = vertex_lerp(triangle_vertices[2], triangle_vertices[0], 0.5f);
@@ -327,19 +375,23 @@ Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
             mids[0].pos = vec3_scale(vec3_p_norm(mids[0].pos, p), radius);
             mids[1].pos = vec3_scale(vec3_p_norm(mids[1].pos, p), radius);
             mids[2].pos = vec3_scale(vec3_p_norm(mids[2].pos, p), radius);
-            
             //mids[0].pos = vec3_norm(mids[0].pos);
             //mids[1].pos = vec3_norm(mids[1].pos);
             //mids[2].pos = vec3_norm(mids[2].pos);
+            
+            mids[0].norm = mids[0].pos;
+            mids[1].norm = mids[1].pos;
+            mids[2].norm = mids[2].pos;
+
 
             u32 m0 = _shape_assembly_add_vertex(&hash, &vertices, mids[0]);
             u32 m1 = _shape_assembly_add_vertex(&hash, &vertices, mids[1]);
             u32 m2 = _shape_assembly_add_vertex(&hash, &vertices, mids[2]);
 
-            Triangle_Indeces corner1 = {triangle.vertex_i[0], m2, m0};
-            Triangle_Indeces corner2 = {triangle.vertex_i[1], m0, m1};
-            Triangle_Indeces corner3 = {triangle.vertex_i[2], m1, m2};
-            Triangle_Indeces central = {m2, m1, m0};
+            Triangle_Indeces corner1 = {triangle.vertex_i[0], m0, m2};
+            Triangle_Indeces corner2 = {triangle.vertex_i[1], m1, m0};
+            Triangle_Indeces corner3 = {triangle.vertex_i[2], m2, m1};
+            Triangle_Indeces central = {m0, m1, m2};
 
             array_push(out_indeces, corner1);
             array_push(out_indeces, corner2);

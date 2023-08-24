@@ -172,6 +172,7 @@ typedef struct Game_State
     bool is_in_mouse_mode;
     bool is_in_mouse_mode_prev;
     bool should_close;
+    bool is_in_uv_debug_mode;
 
     Controls controls;
     Controls controls_prev;
@@ -755,10 +756,12 @@ void drawable_mesh_init(Drawable_Mesh* mesh, const Vertex* vertices, isize verti
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indeces_count * sizeof(Triangle_Indeces), indeces, GL_STATIC_DRAW);
     
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
     
     glEnableVertexAttribArray(0);	
     glEnableVertexAttribArray(1);	
+    glEnableVertexAttribArray(2);	
 
     //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
     //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
@@ -812,6 +815,22 @@ void drawable_mesh_draw_using_depth_color(Drawable_Mesh mesh, GLuint solid_color
     shader_unuse();
 }
 
+
+void drawable_mesh_draw_using_uv_debug(Drawable_Mesh mesh, GLuint uv_debug_shader, Mat4 projection, Mat4 view, Mat4 model)
+{
+    shader_use(uv_debug_shader);
+    Mat4 inv = mat4_inverse_nonuniform_scale(model);
+    Mat3 normal_matrix = mat3_from_mat4(inv);
+    normal_matrix = mat3_from_mat4(model);
+
+    shader_set_mat4(uv_debug_shader, "projection", projection);
+    shader_set_mat4(uv_debug_shader, "view", view);
+    shader_set_mat4(uv_debug_shader, "model", model);
+    shader_set_mat3(uv_debug_shader, "normal_matrix", normal_matrix);
+    drawable_mesh_draw(mesh);
+    shader_unuse();
+}
+
 void run_func(void* context)
 {
     LOG_INFO("APP", "run_func enter");
@@ -821,9 +840,9 @@ void run_func(void* context)
     
     memset(game_state, 0, sizeof *game_state);
 
-    game_state->camera.pos        = VEC3(0.0f, 0.0f,  0.0f);
-    game_state->camera.looking_at = VEC3(1.0f, 0.0f,  0.0f);
-    game_state->camera.up_dir     = VEC3(0.0f, 1.0f,  0.0f);
+    game_state->camera.pos        = vec3(0.0f, 0.0f,  0.0f);
+    game_state->camera.looking_at = vec3(1.0f, 0.0f,  0.0f);
+    game_state->camera.up_dir     = vec3(0.0f, 1.0f,  0.0f);
     game_state->camera.is_position_relative = true;
 
     f32 CAMERA_yaw = -TAU/4;
@@ -870,13 +889,12 @@ void run_func(void* context)
 
     GLuint solid_color_shader = 0;
     GLuint screen_shader = 0;
+    GLuint debug_shader = 0;
     for(bool first_run = true; game_state->should_close == false; first_run = false)
     {
         f64 start_frame_time = clock_s();
         game_state->delta_time = start_frame_time - game_state->last_frame_timepoint; 
         game_state->last_frame_timepoint = start_frame_time; 
-
-
         
         {
             shape_deinit(&sphere_side_up);
@@ -888,26 +906,27 @@ void run_func(void* context)
 
             isize iters = 4;
             f32 radius = 1.0f;
-            f32 sin_time = sinf((f32) clock_s());
-            f32 p = sin_time*sin_time*3.0f + 0.3f;
+            f32 sin_time = sinf((f32) clock_s() / 2);
+            f32 p = sin_time*sin_time*3 + 0.3f;
+            //p = 2;
             sphere_side_up = shapes_make_xz_sphere_side(iters, radius, p);
             sphere_side_left = shape_duplicate(sphere_side_up);
             sphere_side_front = shape_duplicate(sphere_side_up);
+            sphere_side_down = shape_duplicate(sphere_side_up);
+            sphere_side_right = shape_duplicate(sphere_side_up);
+            sphere_side_back = shape_duplicate(sphere_side_up);
         
-            Mat4 rotate_left = mat4_rotation(VEC3(1, 0, 0), TAU/4);
-            Mat4 rotate_front = mat4_rotation(VEC3(0, 0, 1), TAU/4);
+            Mat4 rotate_left = mat4_rotation(vec3(1, 0, 0), -TAU/4);
+            Mat4 rotate_right = mat4_rotation(vec3(1, 0, 0), TAU/4);
+            Mat4 rotate_front = mat4_rotation(vec3(0, 0, 1), -TAU/4);
+            Mat4 rotate_back = mat4_rotation(vec3(0, 0, 1), TAU/4);
+            Mat4 rotate_down = mat4_rotation(vec3(0, 0, 1), TAU/2);
         
             shape_tranform(&sphere_side_left, rotate_left);
+            shape_tranform(&sphere_side_right, rotate_right);
             shape_tranform(&sphere_side_front, rotate_front);
-        
-            Mat4 negate = mat4_scaling(VEC3(-1, -1, -1));
-            sphere_side_down = shape_duplicate(sphere_side_up);
-            sphere_side_right = shape_duplicate(sphere_side_left);
-            sphere_side_back = shape_duplicate(sphere_side_front);
-        
-            shape_tranform(&sphere_side_down, negate);
-            shape_tranform(&sphere_side_right, negate);
-            shape_tranform(&sphere_side_back, negate);
+            shape_tranform(&sphere_side_back, rotate_back);
+            shape_tranform(&sphere_side_down, rotate_down);
         }
     
         drawable_mesh_deinit(&drawable_sphere_up);
@@ -945,6 +964,7 @@ void run_func(void* context)
             shader_unload(&screen_shader);
             solid_color_shader = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING("//prepended"), NULL);
             screen_shader = shader_load(STRING("shaders/screen.vert"), STRING("shaders/screen.frag"), STRING(""), STRING(""), NULL);
+            debug_shader = shader_load(STRING("shaders/uv_debug.vert"), STRING("shaders/uv_debug.frag"), STRING("shaders/uv_debug.geom"), STRING(""), NULL);
         }
         
         if(control_was_pressed(&game_state->controls, CONTROL_ESCAPE))
@@ -952,6 +972,10 @@ void run_func(void* context)
             game_state->is_in_mouse_mode = !game_state->is_in_mouse_mode;
         }
         
+        if(control_was_pressed(&game_state->controls, CONTROL_DEBUG_1))
+        {
+            game_state->is_in_uv_debug_mode = !game_state->is_in_uv_debug_mode;
+        }
         //Movement
         {
             f32 move_speed = game_state->settings.movement_speed;
@@ -1006,7 +1030,7 @@ void run_func(void* context)
                 direction.y = sinf(CAMERA_pitch);
                 direction.z = sinf(CAMERA_yaw) * cosf(CAMERA_pitch);
 
-                //game_state->camera.looking_at = VEC3(0, 0, 0);
+                //game_state->camera.looking_at = vec3(0, 0, 0);
                 game_state->camera.looking_at = vec3_norm(direction);
             }
         
@@ -1029,48 +1053,65 @@ void run_func(void* context)
         
         //================ FIRST PASS ==================
         glBindFramebuffer(GL_FRAMEBUFFER, screen_buffers.frame_buff); 
-        glClearColor(0.0f, 0.4f, 0.4f, 1.0f);
+        glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-            glEnable(GL_DEPTH_TEST);
-            //glEnable(GL_CULL_FACE);
-            glCullFace(GL_FRONT); 
-            glFrontFace(GL_CW); 
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT); 
+        glFrontFace(GL_CW); 
+        //glFrontFace(GL_CCW); 
 
         //if(0)
         {
-            Mat4 model = mat4_rotation(VEC3(2, 1, 3), (f32) clock_s());
+            Mat4 model = mat4_rotation(vec3(2, 1, 3), (f32) clock_s() / 8);
             //Mat4 model = mat4_identity();
-            drawable_mesh_draw_using_depth_color(drawable_sphere_up, solid_color_shader, projection, view, model, VEC3(0, 1, 0));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_down, solid_color_shader, projection, view, model, VEC3(1, 0, 1));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_left, solid_color_shader, projection, view, model, VEC3(1, 1, 0));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_right, solid_color_shader, projection, view, model, VEC3(0, 0, 1));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_front, solid_color_shader, projection, view, model, VEC3(1, 0, 0));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_back, solid_color_shader, projection, view, model, VEC3(0, 1, 1));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_up, solid_color_shader, projection, view, model, vec3(0, 1, 0));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_down, solid_color_shader, projection, view, model, vec3(1, 0, 1));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_left, solid_color_shader, projection, view, model, vec3(1, 1, 0));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_right, solid_color_shader, projection, view, model, vec3(0, 0, 1));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_front, solid_color_shader, projection, view, model, vec3(1, 0, 0));
+            drawable_mesh_draw_using_depth_color(drawable_sphere_back, solid_color_shader, projection, view, model, vec3(0, 1, 1));
+            
+            if(game_state->is_in_uv_debug_mode)
+            {
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_up, debug_shader, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_down, debug_shader, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_left, debug_shader, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_right, debug_shader, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_front, debug_shader, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_back, debug_shader, projection, view, model);
+            }
         }
 
+        
+        glFrontFace(GL_CW); 
         for(isize i = 0; i < 20; i++)
         {
         
-            Mat4 model = mat4_rotate(mat4_translation(VEC3(10, 0, 0)), VEC3(0, 1, 0), 2*PI/20*(f32)i);
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(1, 1, 1));
+            Mat4 model = mat4_rotate(mat4_translation(vec3(12, 0, 0)), vec3(0, 1, 0), 2*PI/20*(f32)i);
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(1, 1, 1));
+            
+            //if(game_state->is_in_uv_debug_mode)
+                //drawable_mesh_draw_using_uv_debug(drawable_cube, debug_shader, projection, view, model);
         }
 
+        #if 0
         {
-            Mat4 model = mat4_scale_aniso(mat4_translation(VEC3(3, 0, 0)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(1, 0, 0));
+            Mat4 model = mat4_scale_affine(mat4_translation(vec3(3, 0, 0)), vec3_of(0.3f));
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(1, 0, 0));
         }
         
         {
-            Mat4 model = mat4_scale_aniso(mat4_translation(VEC3(0, 3, 0)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(0, 1, 0));
+            Mat4 model = mat4_scale_affine(mat4_translation(vec3(0, 3, 0)), vec3_of(0.3f));
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(0, 1, 0));
         }
         
         {
-            Mat4 model = mat4_scale_aniso(mat4_translation(VEC3(0, 0, 3)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, VEC3(0, 0, 1));
+            Mat4 model = mat4_scale_affine(mat4_translation(vec3(0, 0, 3)), vec3_of(0.3f));
+            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(0, 0, 1));
         }
-
+        #endif
         glBindVertexArray(0);
 
         //if(0)

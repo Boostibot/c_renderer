@@ -115,16 +115,19 @@
     <None Include="shaders\screen.vert">
       <Filter>Resource Files\shaders</Filter>
     </None>
-    <None Include="shaders\solid_color.frag">
-      <Filter>Resource Files\shaders</Filter>
-    </None>
-    <None Include="shaders\solid_color.vert">
-      <Filter>Resource Files\shaders</Filter>
-    </None>
     <None Include="shaders\depth_color.frag">
       <Filter>Resource Files\shaders</Filter>
     </None>
     <None Include="shaders\depth_color.vert">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.frag">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.geom">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.vert">
       <Filter>Resource Files\shaders</Filter>
     </None>
   </ItemGroup>

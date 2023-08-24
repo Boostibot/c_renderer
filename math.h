@@ -63,10 +63,12 @@ typedef struct Quat
 typedef union Mat2
 {
     Vec2 col[2];
+    
+    float m[2][2];
 
     struct {
-        float _11, _21;
-        float _12, _22;
+        float m11, m21;
+        float m12, m22;
     };
 } Mat2;
 
@@ -74,10 +76,12 @@ typedef union Mat3
 {
     Vec3 col[3];
 
+    float m[3][3];
+
     struct {
-        float _11, _21, _31;
-        float _12, _22, _32;
-        float _13, _23, _33;
+        float m11, m21, m31;
+        float m12, m22, m32;
+        float m13, m23, m33;
     };
 } Mat3;
 
@@ -85,32 +89,26 @@ typedef union Mat4
 {
     Vec4 col[4];
 
+    float m[4][4];
+
     struct {
-        float _11, _21, _31, _41;
-        float _12, _22, _32, _42;
-        float _13, _23, _33, _43;
-        float _14, _24, _34, _44;
+        float m11, m21, m31, m41;
+        float m12, m22, m32, m42;
+        float m13, m23, m33, m43;
+        float m14, m24, m34, m44;
     };
 } Mat4;
 
 
-#ifndef __cplusplus
-    #define VEC2(a, b) ((Vec2){a, b})
-    #define VEC3(a, b, c) ((Vec3){a, b, c})
-    #define VEC4(a, b, c, d) ((Vec4){a, b, c, d})
-#else
-    #define VEC2(a, b) (Vec2{a, b})
-    #define VEC3(a, b, c) (Vec3{a, b, c})
-    #define VEC4(a, b, c, d) (Vec4{a, b, c, d})
-#endif
+#define AS_FLOATS(vector)       ((float*) (void*) &(vector))
 
-JMAPI float radiansf(float degrees)
+JMAPI float to_radiansf(float degrees)
 {
     float radians = degrees / 180.0f * PI;
     return radians;
 }
 
-JMAPI float degreesf(float radians)
+JMAPI float to_degreesf(float radians)
 {
     float degrees = radians * 180.0f / PI;
     return degrees;
@@ -132,36 +130,34 @@ JMAPI bool is_nearf(float a, float b, float epsilon)
     return fabsf(a - b) <= epsilon;
 }
 
-JMAPI float epsilon_factorf(float x, float y)
-{
-    float factor = 0.5f + fmaxf(fabsf(x), fabsf(y));
-    return factor;
-}
-
+//Returns true if x and y are within epsilon distance of each other.
+//If |x| and |y| are less than 1 uses epsilon directly
+//else scales epsilon to account for growing floating point inaccuracy
 JMAPI bool is_near_scaledf(float x, float y, float epsilon)
 {
-    float factor = epsilon_factorf(x, y);
+    float factor = fmaxf(1.0f, fmaxf(fabsf(x), fabsf(y)));
     return is_nearf(x, y, factor*epsilon);
 }
 
-#define AS_FLOATS(vector)       (float*) (void*) &(vector)
-#define AS_CONST_FLOATS(vector) (const float*) (void*) &(vector)
+JMAPI Vec2 vec2(float x, float y)                   { Vec2 out = {x, y}; return out; }
+JMAPI Vec3 vec3(float x, float y, float z)          { Vec3 out = {x, y, z}; return out; }
+JMAPI Vec4 vec4(float x, float y, float z, float w) { Vec4 out = {x, y, z, w}; return out; }
 
-JMAPI Vec2 vec2_of(float scalar) { Vec2 out = {scalar, scalar}; return out; }
-JMAPI Vec3 vec3_of(float scalar) { Vec3 out = {scalar, scalar, scalar}; return out; }
-JMAPI Vec4 vec4_of(float scalar) { Vec4 out = {scalar, scalar, scalar, scalar}; return out; }
+JMAPI Vec2 vec2_of(float s) { return vec2(s, s); }
+JMAPI Vec3 vec3_of(float s) { return vec3(s, s, s); }
+JMAPI Vec4 vec4_of(float s) { return vec4(s, s, s, s); }
 
-JMAPI Vec2 vec2_add(Vec2 a, Vec2 b) { Vec2 out = {a.x + b.x, a.y + b.y}; return out; }
-JMAPI Vec3 vec3_add(Vec3 a, Vec3 b) { Vec3 out = {a.x + b.x, a.y + b.y, a.z + b.z}; return out; }
-JMAPI Vec4 vec4_add(Vec4 a, Vec4 b) { Vec4 out = {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w}; return out; }
+JMAPI Vec2 vec2_add(Vec2 a, Vec2 b) { return vec2(a.x + b.x, a.y + b.y); }
+JMAPI Vec3 vec3_add(Vec3 a, Vec3 b) { return vec3(a.x + b.x, a.y + b.y, a.z + b.z); }
+JMAPI Vec4 vec4_add(Vec4 a, Vec4 b) { return vec4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w); }
 
-JMAPI Vec2 vec2_sub(Vec2 a, Vec2 b) { Vec2 out = {a.x - b.x, a.y - b.y}; return out; }
-JMAPI Vec3 vec3_sub(Vec3 a, Vec3 b) { Vec3 out = {a.x - b.x, a.y - b.y, a.z - b.z}; return out; }
-JMAPI Vec4 vec4_sub(Vec4 a, Vec4 b) { Vec4 out = {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w}; return out; }
+JMAPI Vec2 vec2_sub(Vec2 a, Vec2 b) { return vec2(a.x - b.x, a.y - b.y); }
+JMAPI Vec3 vec3_sub(Vec3 a, Vec3 b) { return vec3(a.x - b.x, a.y - b.y, a.z - b.z); }
+JMAPI Vec4 vec4_sub(Vec4 a, Vec4 b) { return vec4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
 
-JMAPI Vec2 vec2_scale(Vec2 a, float scalar) { Vec2 out = {scalar * a.x, scalar * a.y}; return out; }
-JMAPI Vec3 vec3_scale(Vec3 a, float scalar) { Vec3 out = {scalar * a.x, scalar * a.y, scalar * a.z}; return out; }
-JMAPI Vec4 vec4_scale(Vec4 a, float scalar) { Vec4 out = {scalar * a.x, scalar * a.y, scalar * a.z, scalar * a.w}; return out; }
+JMAPI Vec2 vec2_scale(Vec2 a, float s) { return vec2(s * a.x, s * a.y); }
+JMAPI Vec3 vec3_scale(Vec3 a, float s) { return vec3(s * a.x, s * a.y, s * a.z); }
+JMAPI Vec4 vec4_scale(Vec4 a, float s) { return vec4(s * a.x, s * a.y, s * a.z, s * a.w); }
 
 JMAPI float vec2_dot(Vec2 a, Vec2 b) { return a.x*b.x + a.y*b.y; }
 JMAPI float vec3_dot(Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
@@ -171,13 +167,13 @@ JMAPI float vec2_len(Vec2 a) { return sqrtf(vec2_dot(a, a)); }
 JMAPI float vec3_len(Vec3 a) { return sqrtf(vec3_dot(a, a)); }
 JMAPI float vec4_len(Vec4 a) { return sqrtf(vec4_dot(a, a)); }
 
+JMAPI Vec2 vec2_norm(Vec2 a) { float len = vec2_len(a); return len > 0 ? vec2_scale(a, 1/len) : vec2_of(0); }
+JMAPI Vec3 vec3_norm(Vec3 a) { float len = vec3_len(a); return len > 0 ? vec3_scale(a, 1.0f/len) : vec3_of(0); }
+JMAPI Vec4 vec4_norm(Vec4 a) { float len = vec4_len(a); return len > 0 ? vec4_scale(a, 1.0f/len) : vec4_of(0); }
+
 JMAPI bool vec2_is_equal(Vec2 a, Vec2 b) { return memcmp(&a, &b, sizeof a) == 0; }
 JMAPI bool vec3_is_equal(Vec3 a, Vec3 b) { return memcmp(&a, &b, sizeof a) == 0; }
 JMAPI bool vec4_is_equal(Vec4 a, Vec4 b) { return memcmp(&a, &b, sizeof a) == 0; }
-
-JMAPI Vec2 vec2_norm(Vec2 a) { float len = vec2_len(a); ASSERT(len > 0.0f); return vec2_scale(a, 1.0f/len); }
-JMAPI Vec3 vec3_norm(Vec3 a) { float len = vec3_len(a); ASSERT(len > 0.0f); return vec3_scale(a, 1.0f/len); }
-JMAPI Vec4 vec4_norm(Vec4 a) { float len = vec4_len(a); ASSERT(len > 0.0f); return vec4_scale(a, 1.0f/len); }
 
 JMAPI bool vec2_is_near(Vec2 a, Vec2 b, float epsilon) 
 {
@@ -221,29 +217,39 @@ JMAPI bool vec4_is_near_scaled(Vec4 a, Vec4 b, float epsilon)
         && is_near_scaledf(a.w, b.w, epsilon);
 }
 
-//For homogenous coords
-JMAPI Vec3 vec3_from_vec4(Vec4 a)       { Vec3 out = {a.x, a.y, a.z}; return out; }
-JMAPI Vec4 vec4_from_vec3(Vec3 a)       { Vec4 out = {a.x, a.y, a.z, 0}; return out; }
+//Conversions
+JMAPI Vec2 vec2_from_vec3(Vec3 a)       { return vec2(a.x, a.y); }
+JMAPI Vec3 vec3_from_vec2(Vec2 a)       { return vec3(a.x, a.y, 0); }
 
-JMAPI Vec4 vec4_from_homo_vec3(Vec3 a)  { Vec4 out = {a.x, a.y, a.z, 1}; return out; }
-JMAPI Vec4 vec4_add3(Vec3 a, Vec3 b)    { Vec4 out = {a.x + b.x, a.y + b.y, a.z + b.z, 1}; return out; } 
-JMAPI Vec4 vec4_sub3(Vec3 a, Vec3 b)    { Vec4 out = {a.x - b.x, a.y - b.y, a.z - b.z, 1}; return out; }
+JMAPI Vec2 vec2_from_vec4(Vec4 a)       { return vec2(a.x, a.y); }
+JMAPI Vec4 vec4_from_vec2(Vec2 a)       { return vec4(a.x, a.y, 0, 0); }
+
+JMAPI Vec3 vec3_from_vec4(Vec4 a)       { return vec3(a.x, a.y, a.z); }
+JMAPI Vec4 vec4_from_vec3(Vec3 a)       { return vec4(a.x, a.y, a.z, 0); }
+
+//For homogenous coords
+JMAPI Vec4 vec4_homo_from_vec3(Vec3 a)  { return vec4(a.x, a.y, a.z, 1); }
+JMAPI Vec3 vec3_from_vec4_homo(Vec4 a)  { return vec3(a.x/a.w, a.y/a.w, a.z/a.w); }
 
 //Pairwise
 #define m(a, b) a < b ? a : b
 #define M(a, b) a < b ? a : b
 
-JMAPI Vec2 vec2_pairwise_mul(Vec2 a, Vec2 b) { Vec2 out = {a.x * b.x, a.y * b.y};                               return out; }
-JMAPI Vec3 vec3_pairwise_mul(Vec3 a, Vec3 b) { Vec3 out = {a.x * b.x, a.y * b.y, a.z * b.z};                    return out; }
-JMAPI Vec4 vec4_pairwise_mul(Vec4 a, Vec4 b) { Vec4 out = {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};         return out; }
+JMAPI Vec2 vec2_pairwise_mul(Vec2 a, Vec2 b) { return vec2(a.x * b.x, a.y * b.y);                                }
+JMAPI Vec3 vec3_pairwise_mul(Vec3 a, Vec3 b) { return vec3(a.x * b.x, a.y * b.y, a.z * b.z);                     }
+JMAPI Vec4 vec4_pairwise_mul(Vec4 a, Vec4 b) { return vec4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w);          }
 
-JMAPI Vec2 vec2_pairwise_min(Vec2 a, Vec2 b) { Vec2 out = {m(a.x, b.x), m(a.y, b.y)};                           return out; }
-JMAPI Vec3 vec3_pairwise_min(Vec3 a, Vec3 b) { Vec3 out = {m(a.x, b.x), m(a.y, b.y), m(a.z, b.z)};              return out; }
-JMAPI Vec4 vec4_pairwise_min(Vec4 a, Vec4 b) { Vec4 out = {m(a.x, b.x), m(a.y, b.y), m(a.z, b.z), m(a.w, b.w)}; return out; }
+JMAPI Vec2 vec2_pairwise_div(Vec2 a, Vec2 b) { return vec2(a.x / b.x, a.y / b.y);                                }
+JMAPI Vec3 vec3_pairwise_div(Vec3 a, Vec3 b) { return vec3(a.x / b.x, a.y / b.y, a.z / b.z);                     }
+JMAPI Vec4 vec4_pairwise_div(Vec4 a, Vec4 b) { return vec4(a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w);          }
 
-JMAPI Vec2 vec2_pairwise_max(Vec2 a, Vec2 b) { Vec2 out = {M(a.x, b.x), M(a.y, b.y)};                           return out; }
-JMAPI Vec3 vec3_pairwise_max(Vec3 a, Vec3 b) { Vec3 out = {M(a.x, b.x), M(a.y, b.y), M(a.z, b.z)};              return out; }
-JMAPI Vec4 vec4_pairwise_max(Vec4 a, Vec4 b) { Vec4 out = {M(a.x, b.x), M(a.y, b.y), M(a.z, b.z), M(a.w, b.w)}; return out; }
+JMAPI Vec2 vec2_pairwise_min(Vec2 a, Vec2 b) { return vec2(m(a.x, b.x), m(a.y, b.y));                            }
+JMAPI Vec3 vec3_pairwise_min(Vec3 a, Vec3 b) { return vec3(m(a.x, b.x), m(a.y, b.y), m(a.z, b.z));               }
+JMAPI Vec4 vec4_pairwise_min(Vec4 a, Vec4 b) { return vec4(m(a.x, b.x), m(a.y, b.y), m(a.z, b.z), m(a.w, b.w));  }
+
+JMAPI Vec2 vec2_pairwise_max(Vec2 a, Vec2 b) { return vec2(M(a.x, b.x), M(a.y, b.y));                            }
+JMAPI Vec3 vec3_pairwise_max(Vec3 a, Vec3 b) { return vec3(M(a.x, b.x), M(a.y, b.y), M(a.z, b.z));               }
+JMAPI Vec4 vec4_pairwise_max(Vec4 a, Vec4 b) { return vec4(M(a.x, b.x), M(a.y, b.y), M(a.z, b.z), M(a.w, b.w));  }
 
 #undef m
 #undef M
@@ -289,6 +295,7 @@ JMAPI Vec3 vec3_cross(Vec3 a, Vec3 b)
     return result;
 }
 
+
 JMAPI float vec2_angle_between(Vec2 a, Vec2 b)
 {
     float len2a = vec2_dot(a, a);
@@ -325,24 +332,63 @@ JMAPI float vec3_angle_between(Vec3 a, Vec3 b)
 }
 #endif
 
+//Constructs a mat4 by entries in writing order
+//Calling this function as mat4(1, 2, 3, 4, ...)
+//result in the first row from the matrix being 1, 2, 3, 4
+//while doint Mat4 mat = {1, 2, 3, 4} reuslts in the first 
+//column being 1, 2, 3, 4
+JMAPI Mat4 mat4(
+        float m11, float m12, float m13, float m14,
+        float m21, float m22, float m23, float m24,
+        float m31, float m32, float m33, float m34,
+        float m41, float m42, float m43, float m44)
+{
+    Mat4 mat = {
+        m11, m21, m31, m41,
+        m12, m22, m32, m42,
+        m13, m23, m33, m43,
+        m14, m24, m34, m44,
+    };        
+
+    return mat;
+}
+
+JMAPI Mat4 mat4_from_mat3(Mat3 m)
+{
+    Mat4 r = {0};
+    r.m11 = m.m11; r.m12 = m.m12; r.m13 = m.m13; 
+    r.m21 = m.m21; r.m22 = m.m22; r.m23 = m.m23; 
+    r.m31 = m.m31; r.m32 = m.m32; r.m33 = m.m33; 
+    return r;
+}
+
+JMAPI Mat3 mat3_from_mat4(Mat4 m)
+{
+    Mat3 r = {0};
+    r.m11 = m.m11; r.m12 = m.m12; r.m13 = m.m13; 
+    r.m21 = m.m21; r.m22 = m.m22; r.m23 = m.m23; 
+    r.m31 = m.m31; r.m32 = m.m32; r.m33 = m.m33; 
+    return r;
+}
+
 JMAPI Vec4 mat4_mul_vec4(Mat4 mat, Vec4 vec)
 {
     Vec4 result = {0};
-    result.x = mat._11*vec.x + mat._12*vec.y + mat._13*vec.z + mat._14*vec.w;
-    result.y = mat._21*vec.x + mat._22*vec.y + mat._23*vec.z + mat._24*vec.w;
-    result.z = mat._31*vec.x + mat._32*vec.y + mat._33*vec.z + mat._34*vec.w;
-    result.w = mat._41*vec.x + mat._42*vec.y + mat._43*vec.z + mat._44*vec.w;
+    result.x = mat.m11*vec.x + mat.m12*vec.y + mat.m13*vec.z + mat.m14*vec.w;
+    result.y = mat.m21*vec.x + mat.m22*vec.y + mat.m23*vec.z + mat.m24*vec.w;
+    result.z = mat.m31*vec.x + mat.m32*vec.y + mat.m33*vec.z + mat.m34*vec.w;
+    result.w = mat.m41*vec.x + mat.m42*vec.y + mat.m43*vec.z + mat.m44*vec.w;
     return result;
 }
 
 //interprets the Vec3 as vector of homogenous coordinates Vec4 
-//multiplies it with matrix and then returns back the result without w coordinate
+//multiplies it with matrix and then returns back the homogenous cordinates normalized result
+//as Vec3
 JMAPI Vec3 mat4_apply(Mat4 mat, Vec3 vec)
 {
-    Vec3 result = {0};
-    result.x = mat._11*vec.x + mat._12*vec.y + mat._13*vec.z + mat._14*1.0f;
-    result.y = mat._21*vec.x + mat._22*vec.y + mat._23*vec.z + mat._24*1.0f;
-    result.z = mat._31*vec.x + mat._32*vec.y + mat._33*vec.z + mat._34*1.0f;
+    Vec4 homo = vec4_homo_from_vec3(vec);
+    Vec4 muled = mat4_mul_vec4(mat, homo);
+    Vec3 result = vec3_from_vec4_homo(muled);
     return result;
 }
 
@@ -353,8 +399,7 @@ JMAPI Vec4 mat4_col(Mat4 matrix, int64_t column_i)
 
 JMAPI Vec4 mat4_row(Mat4 matrix, int64_t row_i) 
 { 
-    float* ptr = (&matrix._11) + row_i;
-    Vec4 result = {ptr[0], ptr[4], ptr[8], ptr[12]};
+    Vec4 result = {matrix.m[0][row_i], matrix.m[1][row_i], matrix.m[2][row_i], matrix.m[3][row_i]};
     return result;
 }
 
@@ -412,10 +457,8 @@ JMAPI bool mat4_is_near(Mat4 a, Mat4 b, float epsilon)
     const float* a_ptr = AS_FLOATS(a);
     const float* b_ptr = AS_FLOATS(b);
     for(int i = 0; i < 4*4; i++)
-    {
         if(is_nearf(a_ptr[i], b_ptr[i], epsilon) == false)
             return false;
-    }
 
     return true;
 }
@@ -425,10 +468,8 @@ JMAPI bool mat4_is_near_scaled(Mat4 a, Mat4 b, float epsilon)
     const float* a_ptr = AS_FLOATS(a);
     const float* b_ptr = AS_FLOATS(b);
     for(int i = 0; i < 4*4; i++)
-    {
         if(is_near_scaledf(a_ptr[i], b_ptr[i], epsilon) == false)
             return false;
-    }
 
     return true;
 }
@@ -441,88 +482,211 @@ JMAPI Mat4 mat4_cols(Vec4 col1, Vec4 col2, Vec4 col3, Vec4 col4)
 
 JMAPI Mat4 mat4_rows(Vec4 row1, Vec4 row2, Vec4 row3, Vec4 row4)
 {
-    Mat4 result = {0};
-    result._11 = row1.x;
-    result._12 = row1.y;
-    result._13 = row1.z;
-    result._14 = row1.w;
-    
-    result._21 = row2.x;
-    result._22 = row2.y;
-    result._23 = row2.z;
-    result._24 = row2.w;
-    
-    result._31 = row3.x;
-    result._32 = row3.y;
-    result._33 = row3.z;
-    result._34 = row3.w;
-    
-    result._41 = row4.x;
-    result._42 = row4.y;
-    result._43 = row4.z;
-    result._44 = row4.w;
+    Mat4 result = mat4(
+        row1.x, row1.y, row1.z, row1.w, 
+        row2.x, row2.y, row2.z, row2.w, 
+        row3.x, row3.y, row3.z, row3.w, 
+        row4.x, row4.y, row4.z, row4.w
+    );
+
     return result;
+}
+
+JMAPI Mat4 mat4_inverse(Mat4 matrix)
+{
+    float M[4][4] = {0};
+    float s[6] = {0};
+	float c[6] = {0};
+    
+    ASSERT(sizeof(M) == sizeof(matrix));
+    memcpy(M, &matrix, sizeof(matrix));
+
+	s[0] = M[0][0]*M[1][1] - M[1][0]*M[0][1];
+	s[1] = M[0][0]*M[1][2] - M[1][0]*M[0][2];
+	s[2] = M[0][0]*M[1][3] - M[1][0]*M[0][3];
+	s[3] = M[0][1]*M[1][2] - M[1][1]*M[0][2];
+	s[4] = M[0][1]*M[1][3] - M[1][1]*M[0][3];
+	s[5] = M[0][2]*M[1][3] - M[1][2]*M[0][3];
+
+	c[0] = M[2][0]*M[3][1] - M[3][0]*M[2][1];
+	c[1] = M[2][0]*M[3][2] - M[3][0]*M[2][2];
+	c[2] = M[2][0]*M[3][3] - M[3][0]*M[2][3];
+	c[3] = M[2][1]*M[3][2] - M[3][1]*M[2][2];
+	c[4] = M[2][1]*M[3][3] - M[3][1]*M[2][3];
+	c[5] = M[2][2]*M[3][3] - M[3][2]*M[2][3];
+	
+    float determinant = s[0]*c[5]-s[1]*c[4]+s[2]*c[3]+s[3]*c[2]-s[4]*c[1]+s[5]*c[0];
+    if(determinant == 0)
+    {
+        Mat4 null = {0};
+        return null;
+    }
+
+    ASSERT(determinant > 0 && "determinant must not be 0!");
+	float invdet = 1.0f/determinant;
+	
+    Mat4 result = {0};
+	result.m[0][0] = ( M[1][1] * c[5] - M[1][2] * c[4] + M[1][3] * c[3]) * invdet;
+	result.m[0][1] = (-M[0][1] * c[5] + M[0][2] * c[4] - M[0][3] * c[3]) * invdet;
+	result.m[0][2] = ( M[3][1] * s[5] - M[3][2] * s[4] + M[3][3] * s[3]) * invdet;
+	result.m[0][3] = (-M[2][1] * s[5] + M[2][2] * s[4] - M[2][3] * s[3]) * invdet;
+
+	result.m[1][0] = (-M[1][0] * c[5] + M[1][2] * c[2] - M[1][3] * c[1]) * invdet;
+	result.m[1][1] = ( M[0][0] * c[5] - M[0][2] * c[2] + M[0][3] * c[1]) * invdet;
+	result.m[1][2] = (-M[3][0] * s[5] + M[3][2] * s[2] - M[3][3] * s[1]) * invdet;
+	result.m[1][3] = ( M[2][0] * s[5] - M[2][2] * s[2] + M[2][3] * s[1]) * invdet;
+
+	result.m[2][0] = ( M[1][0] * c[4] - M[1][1] * c[2] + M[1][3] * c[0]) * invdet;
+	result.m[2][1] = (-M[0][0] * c[4] + M[0][1] * c[2] - M[0][3] * c[0]) * invdet;
+	result.m[2][2] = ( M[3][0] * s[4] - M[3][1] * s[2] + M[3][3] * s[0]) * invdet;
+	result.m[2][3] = (-M[2][0] * s[4] + M[2][1] * s[2] - M[2][3] * s[0]) * invdet;
+
+	result.m[3][0] = (-M[1][0] * c[3] + M[1][1] * c[1] - M[1][2] * c[0]) * invdet;
+	result.m[3][1] = ( M[0][0] * c[3] - M[0][1] * c[1] + M[0][2] * c[0]) * invdet;
+	result.m[3][2] = (-M[3][0] * s[3] + M[3][1] * s[1] - M[3][2] * s[0]) * invdet;
+	result.m[3][3] = ( M[2][0] * s[3] - M[2][1] * s[1] + M[2][2] * s[0]) * invdet;
+
+    return result;
+}
+
+JMAPI Mat3 mat3_inverse(Mat3 matrix) 
+{
+    float M[3][3] = {0};
+    ASSERT(sizeof(M) == sizeof(matrix));
+    memcpy(M, &matrix, sizeof(matrix));
+
+	float determinant = +M[0][0] * (M[1][1] * M[2][2] -M[2][1] * M[1][2])
+                        -M[0][1] * (M[1][0] * M[2][2] -M[1][2] * M[2][0])
+                        +M[0][2] * (M[1][0] * M[2][1] -M[1][1] * M[2][0]);
+
+    if(determinant == 0)
+    {
+        Mat3 null = {0};
+        return null;
+    }
+    float invdet = 1/determinant;
+    Mat3 result = {0};
+    result.m[0][0] =  (M[1][1] * M[2][2] - M[2][1] * M[1][2]) * invdet;
+    result.m[1][0] = -(M[0][1] * M[2][2] - M[0][2] * M[2][1]) * invdet;
+    result.m[2][0] =  (M[0][1] * M[1][2] - M[0][2] * M[1][1]) * invdet;
+    result.m[0][1] = -(M[1][0] * M[2][2] - M[1][2] * M[2][0]) * invdet;
+    result.m[1][1] =  (M[0][0] * M[2][2] - M[0][2] * M[2][0]) * invdet;
+    result.m[2][1] = -(M[0][0] * M[1][2] - M[1][0] * M[0][2]) * invdet;
+    result.m[0][2] =  (M[1][0] * M[2][1] - M[2][0] * M[1][1]) * invdet;
+    result.m[1][2] = -(M[0][0] * M[2][1] - M[2][0] * M[0][1]) * invdet;
+    result.m[2][2] =  (M[0][0] * M[1][1] - M[1][0] * M[0][1]) * invdet;
+    
+    return result;
+}
+
+
+JMAPI Mat4 mat4_identity() 
+{
+	return mat4(
+		 1,  0,  0,  0,
+		 0,  1,  0,  0,
+		 0,  0,  1,  0,
+		 0,  0,  0,  1
+	);
 }
 
 JMAPI Mat4 mat4_diagonal(Vec4 vec)
 {
-    Mat4 result = {0};
-    result._11 = vec.x;
-    result._22 = vec.y;
-    result._33 = vec.z;
-    result._44 = vec.w;
-    return result;
+	float x = vec.x;
+    float y = vec.y;
+    float z = vec.z;
+    float w = vec.w;
+	return mat4(
+		 x,  0,  0,  0,
+		 0,  y,  0,  0,
+		 0,  0,  z,  0,
+		 0,  0,  0,  w
+	);
 }
 
-JMAPI Mat4 mat4_identity()
+JMAPI Mat4 mat4_scaling(Vec3 scale) 
 {
-    Vec4 diagonal = {1, 1, 1, 1};
-    return mat4_diagonal(diagonal);
+	float x = scale.x;
+    float y = scale.y;
+    float z = scale.z;
+	return mat4(
+		 x,  0,  0,  0,
+		 0,  y,  0,  0,
+		 0,  0,  z,  0,
+		 0,  0,  0,  1
+	);
 }
 
-JMAPI Mat4 mat4_scaling(Vec3 vec)
+JMAPI Mat4 mat4_translation(Vec3 offset) 
 {
-    Vec4 diag = {vec.x, vec.y, vec.z, 1.0f};
-    return mat4_diagonal(diag);
+	return mat4(
+		 1,  0,  0,  offset.x,
+		 0,  1,  0,  offset.y,
+		 0,  0,  1,  offset.z,
+		 0,  0,  0,  1
+	);
 }
 
-JMAPI Mat4 mat4_translation(Vec3 vec)
+
+JMAPI Mat4 mat4_rotation_x(float angle_in_rad) 
 {
-    
-    //Vec4 homo_offset = vec4_from_homo_vec3(offset);
-    //Vec4 last = mat4_mul_vec4(matrix, homo_offset);
-    //Mat4 result = matrix;
-    //result.col[3] = last;
-
-    Mat4 result = mat4_identity();
-    result._14 = vec.x;
-    result._24 = vec.y;
-    result._34 = vec.z;
-    return result;
+	float s = sinf(angle_in_rad);
+    float c = cosf(angle_in_rad);
+	return mat4(
+		1,  0,  0,  0,
+		0,  c, -s,  0,
+		0,  s,  c,  0,
+		0,  0,  0,  1
+	);
 }
+
+JMAPI Mat4 mat4_rotation_y(float angle_in_rad) 
+{
+	float s = sinf(angle_in_rad);
+    float c = cosf(angle_in_rad);
+	return mat4(
+		 c,  0,  s,  0,
+		 0,  1,  0,  0,
+		-s,  0,  c,  0,
+		 0,  0,  0,  1
+	);
+}
+
+JMAPI Mat4 mat4_rotation_z(float angle_in_rad) 
+{
+	float s = sinf(angle_in_rad);
+    float c = cosf(angle_in_rad);
+	return mat4(
+		 c, -s,  0,  0,
+		 s,  c,  0,  0,
+		 0,  0,  1,  0,
+		 0,  0,  0,  1
+	);
+}
+
+JMAPI Mat4 mat4_transpose(Mat4 matrix) 
+{
+	return mat4(
+        matrix.m11, matrix.m21, matrix.m31, matrix.m41,
+        matrix.m12, matrix.m22, matrix.m32, matrix.m42,
+        matrix.m13, matrix.m23, matrix.m33, matrix.m43,
+        matrix.m14, matrix.m24, matrix.m34, matrix.m44
+	);
+}
+
 
 JMAPI Mat4 mat4_rotation(Vec3 axis, float radians)
 {
-	float c = cosf(radians);
-	float s = sinf(radians);
-
-	Vec3 na = vec3_norm(axis);
-    Vec3 t = vec3_scale(na, 1.0f - c);
-
-    Mat4 rotation = {0};
-	rotation._11 = c + t.x * na.x;
-	rotation._12 = t.x * na.y + s*na.z;
-	rotation._13 = t.x * na.z - s*na.y;
-
-	rotation._21 = t.y * na.x - s*na.z;
-	rotation._22 = c + t.y * na.y;
-	rotation._23 = t.y * na.z + s*na.x;
-
-	rotation._31 = t.z * na.x + s*na.y;
-	rotation._32 = t.z * na.y - s*na.x;
-	rotation._33 = c + t.z * na.z;
-    rotation._44 = 1.0f;
-    return rotation;
+	Vec3 normalized_axis = vec3_norm(axis);
+	float x = normalized_axis.x, y = normalized_axis.y, z = normalized_axis.z;
+	float c = cosf(radians), s = sinf(radians);
+	
+	return mat4(
+		c + x*x*(1-c),            x*y*(1-c) - z*s,      x*z*(1-c) + y*s,  0,
+		    y*x*(1-c) + z*s,  c + y*y*(1-c),            y*z*(1-c) - x*s,  0,
+		    z*x*(1-c) - y*s,      z*y*(1-c) + x*s,  c + z*z*(1-c),        0,
+		    0,                        0,                    0,            1
+	);
 }
 
 //@NOTE: the application order is reverse from glm!
@@ -531,7 +695,7 @@ JMAPI Mat4 mat4_rotation(Vec3 axis, float radians)
 // here: first translates and then rotatets!
 JMAPI Mat4 mat4_translate(Mat4 matrix, Vec3 offset)
 {
-    Vec4 homo_offset = vec4_from_homo_vec3(offset);
+    Vec4 homo_offset = vec4_homo_from_vec3(offset);
     Vec4 last = mat4_mul_vec4(matrix, homo_offset);
     Mat4 result = matrix;
     result.col[3] = last;
@@ -545,7 +709,7 @@ JMAPI Mat4 mat4_rotate(Mat4 mat, Vec3 axis, float radians)
     return result;
 }
 
-JMAPI Mat4 mat4_scale_aniso(Mat4 mat, Vec3 scale_by)
+JMAPI Mat4 mat4_scale_affine(Mat4 mat, Vec3 scale_by)
 {
     Mat4 result = {0};
     result.col[0] = vec4_scale(mat.col[0], scale_by.x);
@@ -555,60 +719,110 @@ JMAPI Mat4 mat4_scale_aniso(Mat4 mat, Vec3 scale_by)
     return result;
 }
 
+JMAPI Mat4 mat4_inverse_affine(Mat4 matrix) 
+{
+    //taken from: https://github.com/arkanis/single-header-file-c-libs/blob/master/math_3d.h#L235
+
+	// Create shorthands to access matrix members
+	float m00 = matrix.m11,  m10 = matrix.m21,  m20 = matrix.m31,  m30 = matrix.m41;
+	float m01 = matrix.m12,  m11 = matrix.m22,  m21 = matrix.m32,  m31 = matrix.m42;
+	float m02 = matrix.m13,  m12 = matrix.m23,  m22 = matrix.m33,  m32 = matrix.m43;
+	
+	// Invert 3x3 part of the 4x4 matrix that contains the rotation, etc.
+	// That part is called R from here on.
+		
+		// Calculate cofactor matrix of R
+		float c00 =   m11*m22 - m12*m21,   c10 = -(m01*m22 - m02*m21),  c20 =   m01*m12 - m02*m11;
+		float c01 = -(m10*m22 - m12*m20),  c11 =   m00*m22 - m02*m20,   c21 = -(m00*m12 - m02*m10);
+		float c02 =   m10*m21 - m11*m20,   c12 = -(m00*m21 - m01*m20),  c22 =   m00*m11 - m01*m10;
+		
+		// Caclculate the determinant by using the already calculated determinants
+		// in the cofactor matrix.
+		// Second sign is already minus from the cofactor matrix.
+		float det = m00*c00 + m10*c10 + m20 * c20;
+		if (det == 0)
+			return mat4_identity();
+		
+		// Calcuate inverse of R by dividing the transposed cofactor matrix by the
+		// determinant.
+		float i00 = c00 / det,  i10 = c01 / det,  i20 = c02 / det;
+		float i01 = c10 / det,  i11 = c11 / det,  i21 = c12 / det;
+		float i02 = c20 / det,  i12 = c21 / det,  i22 = c22 / det;
+	
+	// Combine the inverted R with the inverted translation
+	return mat4(
+		i00, i10, i20,  -(i00*m30 + i10*m31 + i20*m32),
+		i01, i11, i21,  -(i01*m30 + i11*m31 + i21*m32),
+		i02, i12, i22,  -(i02*m30 + i12*m31 + i22*m32),
+		0,   0,   0,      1
+	);
+}
+
+JMAPI Mat4 mat4_inverse_nonuniform_scale(Mat4 mat)
+{
+    Mat4 upper = mat4(
+        mat.m11, mat.m12, mat.m13, 0, 
+        mat.m21, mat.m22, mat.m23, 0, 
+        mat.m31, mat.m32, mat.m33, 0, 
+        0,       0,       0,       1
+    );
+
+    Mat4 inv_upper = mat4_inverse(upper);
+    Mat4 normal_matrix = mat4_transpose(inv_upper);
+    return normal_matrix;
+}
+
 //Makes a perspective projection matrix so that the output is in ranage [-1, 1] in all dimensions (OpenGL standard)
-JMAPI Mat4 mat4_perspective_projection(float fov, float aspect_ratio, float near, float far) 
+JMAPI Mat4 mat4_perspective_projection(float fov_radians, float aspect_ratio, float near, float far) 
 { 
-    ASSERT(fov != 0);
+    ASSERT(fov_radians != 0);
     ASSERT(near != far);
     ASSERT(aspect_ratio != 0);
 
     //https://ogldev.org/www/tutorial12/tutorial12.html
-    const float tan_half_fov = tanf(fov / 2.0f);
-
-    Mat4 result = {0};
-    result._11 = 1.0f / (tan_half_fov * aspect_ratio);
-    result._22 = 1.0f / tan_half_fov;
-    result._33 = (-near - far) / (near - far);
-    result._34 = 2.0f * far * near / (near - far);
-    result._43 = 1.0f;
+	float fo = 1.0f / tanf(fov_radians / 2.0f);
+	float ar = aspect_ratio, n = near, f = far;
+	Mat4 result = mat4(
+		 fo / ar,     0,           0,            0,
+		 0,           fo,          0,            0,
+		 0,           0,           (-f-n)/(n-f), (2*f*n)/(n-f),
+		 0,           0,           1,            0
+	);
     return result;
 } 
 
-JMAPI Mat4 mat4_ortographic_projection(float bot, float top, float left, float righ, float near, float far) 
+JMAPI Mat4 mat4_ortographic_projection(float bottom, float top, float left, float right, float near, float far) 
 {
-    Mat4 result = {0};
-    ASSERT(bot != top);
-    ASSERT(left != righ);
+    ASSERT(bottom != top);
+    ASSERT(left != right);
     ASSERT(near != far);
 
-    result._11 = 2.0f / (righ - left); 
- 
-    result._22 = 2.0f / (top - bot); 
- 
-    result._33 = -2.0f / (far - near); 
- 
-    result._41 = -(righ + left) / (righ - left); 
-    result._42 = -(top + bot) / (top - bot); 
-    result._43 = -(far + near) / (far - near); 
-    result._44 = 1; 
+    float l = left, r = right, b = bottom, t = top, n = near, f = far;
+	float tx = -(r + l) / (r - l);
+	float ty = -(t + b) / (t - b);
+	float tz = -(f + n) / (f - n);
+	Mat4 result = mat4(
+		 2 / (r - l),  0,            0,            tx,
+		 0,            2 / (t - b),  0,            ty,
+		 0,            0,            2 / (f - n),  tz,
+		 0,            0,            0,            1
+	);
+
     return result;
 }
 
 JMAPI Mat4 mat4_just_look_at(Vec3 front_dir, Vec3 up_dir)
 {
-    //front_dir = vec3_scale(-1, front_dir);
-
     const Vec3 n = vec3_norm(front_dir);
     const Vec3 u = vec3_norm(vec3_cross(front_dir, up_dir));
     const Vec3 v = vec3_cross(u, n);
 
-    Mat4 m = {0};
-    m._11 = u.x;  m._12 = u.y;  m._13 = u.z;  m._14 = 0.0f; 
-    m._21 = v.x;  m._22 = v.y;  m._23 = v.z;  m._24 = 0.0f; 
-    m._31 = n.x;  m._32 = n.y;  m._33 = n.z;  m._34 = 0.0f; 
-    m._41 = 0.0f; m._42 = 0.0f; m._43 = 0.0f; m._44 = 1.0f; 
-
-    return m;
+    return mat4(
+        u.x, u.y, u.z, 0, 
+        v.x, v.y, v.z, 0, 
+        n.x, n.y, n.z, 0, 
+        0,   0,   0,   1
+    );
 }
 
 JMAPI Mat4 mat4_look_at(Vec3 camera_pos, Vec3 camera_target, Vec3 camera_up_dir)

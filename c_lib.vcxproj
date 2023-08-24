@@ -184,8 +184,9 @@
     <None Include="shaders\depth_color.vert" />
     <None Include="shaders\screen.frag" />
     <None Include="shaders\screen.vert" />
-    <None Include="shaders\solid_color.frag" />
-    <None Include="shaders\solid_color.vert" />
+    <None Include="shaders\uv_debug.frag" />
+    <None Include="shaders\uv_debug.geom" />
+    <None Include="shaders\uv_debug.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -323,11 +323,8 @@ EXPORT void debug_allocator_panic_func(Debug_Allocator* allocator, Debug_Allocat
     (void) penetration;
     const char* reason_str = debug_allocator_panic_reason_to_string(reason);
 
-    //if(allocator->do_printing)
-    {
-        LOG_FATAL("MEMORY", "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
-        debug_allocator_print_alive_allocations(*allocator, 0);
-    }
+    LOG_FATAL("MEMORY", "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
+    debug_allocator_print_alive_allocations(*allocator, 0);
     
     log_flush_all();
     platform_trap();

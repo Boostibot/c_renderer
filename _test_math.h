@@ -35,7 +35,7 @@ static void test_vec3_identities(Vec3 a, Vec3 b)
     TEST_NEAR_FLOAT(vec3_dot(a, a), vec3_len(a)*vec3_len(a), "Length should be correct");
 
     TEST_NEAR_FLOAT(vec3_len(vec3_norm(a)), 1, "size of normalized vector must be 1");
-    TEST_NEAR_FLOAT(vec3_len(VEC3(0, 0, 0)), 0, "size of zero vector must be 0");
+    TEST_NEAR_FLOAT(vec3_len(vec3(0, 0, 0)), 0, "size of zero vector must be 0");
     TEST_NEAR_FLOAT(vec3_len(vec3_sub(a, a)), 0, "Cancelation should produce correct lentgh");
 
     TEST_NEAR_VEC3(vec3_cross(a, b), vec3_scale(vec3_cross(b, a), -1), "Cross product is antisymtric");
@@ -113,13 +113,13 @@ static void test_mat4_render_utils(Vec3 cam, Vec3 cam_front, Vec3 cam_up, float 
     //       we trust linmath library. In fututure it would be ideal to have these tests freestanding
 
     #define TO_LINMATH(vec) {vec.x, vec.y, vec.z}
-    vec3 _cam = TO_LINMATH(cam);
-    vec3 _cam_front = TO_LINMATH(cam_front);
-    vec3 _cam_up = TO_LINMATH(cam_up);
-    //vec3 _axis = TO_LINMATH(axis);
-    //vec3 _point1 = TO_LINMATH(point1);
-    //vec3 _point2 = TO_LINMATH(point2);
-    //vec3 _point3 = TO_LINMATH(point3);
+    _Vec3 _cam = TO_LINMATH(cam);
+    _Vec3 _cam_front = TO_LINMATH(cam_front);
+    _Vec3 _cam_up = TO_LINMATH(cam_up);
+    //_Vec3 _axis = TO_LINMATH(axis);
+    //_Vec3 _point1 = TO_LINMATH(point1);
+    //_Vec3 _point2 = TO_LINMATH(point2);
+    //_Vec3 _point3 = TO_LINMATH(point3);
     #undef TO_LINMATH
 
     (void) aspect;
@@ -171,7 +171,7 @@ static float _test_math_random_big_f()
 
 static void test_math(double max_seconds)
 {
-    test_mat4_render_utils(VEC3(1, 1, 1), VEC3(2, 1, 2), VEC3(0, 1, 0), 16.0f/9.0f, VEC3(0, 1, 0), PI/4, VEC3(1, 0, 0), VEC3(0, 0, 0), VEC3(11351, 54, -52));
+    test_mat4_render_utils(vec3(1, 1, 1), vec3(2, 1, 2), vec3(0, 1, 0), 16.0f/9.0f, vec3(0, 1, 0), PI/4, vec3(1, 0, 0), vec3(0, 0, 0), vec3(11351, 54, -52));
 
     srand(clock());
     double start = (double) clock() / (double) CLOCKS_PER_SEC;
