@@ -273,13 +273,15 @@ bool check_winding_order_index(Vertex* vertices, Triangle_Indeces trinagle)
 //returns the xz sixth of a sphere (curved upwards) properly uv mapped to [0, 1]^2. 
 Shape shapes_make_xz_sphere_side(isize iters, f32 radius, f32 p)
 {
+    ASSERT(radius > 0);
+    ASSERT(p > 0);
+
     isize vertex_budget = 0;
     isize face_budget = 0;
     f32 face_size_budget = 0;
     (void) vertex_budget;
     (void) face_budget;
     (void) face_size_budget;
-    (void) radius;
 
     const Triangle_Indeces* quad_indices = XZ_QUAD_INDECES;
     const Vertex* quad_vertices = XZ_QUAD_VERTICES;

@@ -1,6 +1,7 @@
 #define LIB_ALL_IMPL
 #define LIB_MEM_DEBUG
 #define GLAD_GL_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 
 #include "platform.h"
 #include "string.h"
@@ -16,6 +17,7 @@
 #include "gl_debug_output.h"
 #include "shapes.h"
 
+#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
 
 
@@ -691,6 +693,15 @@ void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
 }
 
 
+#define VEC2_FMT "{%f, %f}"
+#define VEC2_PRINT(vec) (vec).x, (vec).y
+
+#define VEC3_FMT "{%f, %f, %f}"
+#define VEC3_PRINT(vec) (vec).x, (vec).y, (vec).z
+
+#define VEC4_FMT "{%f, %f, %f, %f}"
+#define VEC4_PRINT(vec) (vec).x, (vec).y, (vec).z, (vec).w
+
 #if 0
 typedef struct Shader_Params
 {
@@ -731,14 +742,104 @@ typedef struct Drawable_Mesh
     GLuint index_count;
 } Drawable_Mesh;
 
-#define VEC2_FMT "{%f, %f}"
-#define VEC2_PRINT(vec) (vec).x, (vec).y
+typedef struct Drawable_Texture
+{
+    GLuint texture;
+    isize width;
+    isize height;
+} Drawable_Texture;
 
-#define VEC3_FMT "{%f, %f, %f}"
-#define VEC3_PRINT(vec) (vec).x, (vec).y, (vec).z
+typedef struct Drawable_Cubemap
+{
+    GLuint texture;
+    isize width;
+    isize height;
+} Drawable_Cubemap;
 
-#define VEC4_FMT "{%f, %f, %f, %f}"
-#define VEC4_PRINT(vec) (vec).x, (vec).y, (vec).z, (vec).w
+void drawable_texture_deinit(Drawable_Texture* drawable);
+void drawable_texture_init(Drawable_Texture* drawable, u8* data, isize width, isize height, GLuint pixel_format)
+{
+    drawable_texture_deinit(drawable);
+    drawable->height = height;
+    drawable->width = width;
+    glGenTextures(1, &drawable->texture);
+    glBindTexture(GL_TEXTURE_2D, drawable->texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, (GLsizei) width, (GLsizei) height, 0, pixel_format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+} 
+
+void drawable_texture_use(Drawable_Texture* drawable, isize slot)
+{
+    glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
+    glBindTexture(GL_TEXTURE_2D, drawable->texture);
+}
+
+void drawable_texture_unuse(Drawable_Texture* drawable)
+{
+    (void) drawable;
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void drawable_texture_deinit(Drawable_Texture* drawable)
+{
+    glDeleteTextures(1, &drawable->texture);
+    memset(&drawable, 0, sizeof(drawable));
+}
+
+bool drawable_texture_init_from_disk(Drawable_Texture* tetxure, String path)
+{
+    String_Builder escaped = {0};
+    array_init_backed(&escaped, allocator_get_scratch(), 256);
+    builder_append(&escaped, path);
+
+    // load and generate the texture
+    int width = 0;
+    int height = 0;
+    int nrChannels = 0;
+    unsigned char *data = stbi_load(cstring_from_builder(escaped), &width, &height, &nrChannels, 0);
+
+    bool state = false;
+    if(data)
+    {
+        GLenum format = GL_RGB;
+        switch(nrChannels)
+        {
+            case 1: format = GL_R; break;
+            case 2: format = GL_RG; break;
+            case 3: format = GL_RGB; break;
+            case 4: format = GL_RGBA; break;
+            default: format = GL_RGB; break;
+        }
+
+        drawable_texture_init(tetxure, data, width, height, format);
+        state = true;
+    }
+    else
+    {
+        LOG_ERROR("ASSET", "Failed to open a file: \"" STRING_FMT "\"", path);
+        ASSERT(false);
+        state = false;
+    }
+
+    stbi_image_free(data);
+    return state;
+}
+
+
+bool shader_set_texture(GLuint program, const char* name, Drawable_Texture texture)
+{
+    int location = _get_shader_uniform_location(program, name);
+    if(location == -1)
+        return false;
+
+    glUniform1i(location, texture.texture);
+    return true;
+}
 
 void drawable_mesh_init(Drawable_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Indeces* indeces, isize indeces_count, String name)
 {
@@ -804,30 +905,70 @@ void drawable_mesh_draw(Drawable_Mesh mesh)
     glBindVertexArray(0);
 }
 
-void drawable_mesh_draw_using_depth_color(Drawable_Mesh mesh, GLuint solid_color_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+void drawable_mesh_draw_using_depth_color(Drawable_Mesh mesh, GLuint shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
 {
-    shader_use(solid_color_shader);
-    shader_set_vec3(solid_color_shader, "color", color);
-    shader_set_mat4(solid_color_shader, "projection", projection);
-    shader_set_mat4(solid_color_shader, "view", view);
-    shader_set_mat4(solid_color_shader, "model", model);
+    shader_use(shader_depth_color);
+    shader_set_vec3(shader_depth_color, "color", color);
+    shader_set_mat4(shader_depth_color, "projection", projection);
+    shader_set_mat4(shader_depth_color, "view", view);
+    shader_set_mat4(shader_depth_color, "model", model);
     drawable_mesh_draw(mesh);
     shader_unuse();
 }
 
-
-void drawable_mesh_draw_using_uv_debug(Drawable_Mesh mesh, GLuint uv_debug_shader, Mat4 projection, Mat4 view, Mat4 model)
+void drawable_mesh_draw_using_uv_debug(Drawable_Mesh mesh, GLuint uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
 {
-    shader_use(uv_debug_shader);
+    shader_use(uv_shader_debug);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
     Mat3 normal_matrix = mat3_from_mat4(inv);
     normal_matrix = mat3_from_mat4(model);
 
-    shader_set_mat4(uv_debug_shader, "projection", projection);
-    shader_set_mat4(uv_debug_shader, "view", view);
-    shader_set_mat4(uv_debug_shader, "model", model);
-    shader_set_mat3(uv_debug_shader, "normal_matrix", normal_matrix);
+    shader_set_mat4(uv_shader_debug, "projection", projection);
+    shader_set_mat4(uv_shader_debug, "view", view);
+    shader_set_mat4(uv_shader_debug, "model", model);
+    shader_set_mat3(uv_shader_debug, "normal_matrix", normal_matrix);
     drawable_mesh_draw(mesh);
+    shader_unuse();
+}
+
+typedef struct Blinn_Phong_Params
+{
+    f32 light_ambient_strength;
+    f32 light_specular_strength;
+    f32 light_specular_sharpness;
+    f32 light_linear_attentuation;
+    f32 light_quadratic_attentuation;
+    f32 light_specular_effect;
+} Blinn_Phong_Params;
+
+void drawable_mesh_draw_using_blinn_phong(Drawable_Mesh mesh, GLuint blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Drawable_Texture diffuse)
+{
+    shader_use(blin_phong_shader);
+    Mat4 inv = mat4_inverse_nonuniform_scale(model);
+    Mat3 normal_matrix = mat3_from_mat4(inv);
+    normal_matrix = mat3_from_mat4(model);
+
+    shader_set_mat4(blin_phong_shader, "projection", projection);
+    shader_set_mat4(blin_phong_shader, "view", view);
+    shader_set_mat4(blin_phong_shader, "model", model);
+    shader_set_mat3(blin_phong_shader, "normal_matrix", normal_matrix);
+
+    shader_set_vec3(blin_phong_shader, "view_pos", view_pos);
+    shader_set_vec3(blin_phong_shader, "light_pos", light_pos);
+    shader_set_vec3(blin_phong_shader, "light_color", light_color);
+    
+    shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
+    shader_set_f32(blin_phong_shader, "light_specular_strength", params.light_specular_strength);
+    shader_set_f32(blin_phong_shader, "light_specular_sharpness", params.light_specular_sharpness);
+    shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
+    shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
+    shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
+
+    drawable_texture_use(&diffuse, 0);
+    shader_set_i32(blin_phong_shader, "texture_diffuse", 0);
+    
+    drawable_mesh_draw(mesh);
+    drawable_texture_unuse(&diffuse);
     shader_unuse();
 }
 
@@ -882,14 +1023,18 @@ void run_func(void* context)
     Shape sphere_side_right = {0};
     Shape sphere_side_back = {0};
 
+    Drawable_Texture texture_diffuse = {0};
+    
 
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
     String_Builder fps_display = {0};
 
-    GLuint solid_color_shader = 0;
-    GLuint screen_shader = 0;
-    GLuint debug_shader = 0;
+    GLuint shader_depth_color = 0;
+    //GLuint shader_solid_color = 0;
+    GLuint shader_screen = 0;
+    GLuint shader_debug = 0;
+    GLuint shader_blinn_phong = 0;
     for(bool first_run = true; game_state->should_close == false; first_run = false)
     {
         f64 start_frame_time = clock_s();
@@ -908,7 +1053,7 @@ void run_func(void* context)
             f32 radius = 1.0f;
             f32 sin_time = sinf((f32) clock_s() / 2);
             f32 p = sin_time*sin_time*3 + 0.3f;
-            //p = 2;
+            p = 2;
             sphere_side_up = shapes_make_xz_sphere_side(iters, radius, p);
             sphere_side_left = shape_duplicate(sphere_side_up);
             sphere_side_front = shape_duplicate(sphere_side_up);
@@ -960,11 +1105,23 @@ void run_func(void* context)
             || first_run)
         {
             LOG_INFO("APP", "Refreshing shaders");
-            shader_unload(&solid_color_shader);
-            shader_unload(&screen_shader);
-            solid_color_shader = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING("//prepended"), NULL);
-            screen_shader = shader_load(STRING("shaders/screen.vert"), STRING("shaders/screen.frag"), STRING(""), STRING(""), NULL);
-            debug_shader = shader_load(STRING("shaders/uv_debug.vert"), STRING("shaders/uv_debug.frag"), STRING("shaders/uv_debug.geom"), STRING(""), NULL);
+            shader_unload(&shader_depth_color);
+            shader_unload(&shader_screen);
+            shader_unload(&shader_debug);
+            shader_unload(&shader_blinn_phong);
+
+            shader_depth_color = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING("//prepended"), NULL);
+            shader_screen = shader_load(STRING("shaders/screen.vert"), STRING("shaders/screen.frag"), STRING(""), STRING(""), NULL);
+            shader_debug = shader_load(STRING("shaders/uv_debug.vert"), STRING("shaders/uv_debug.frag"), STRING("shaders/uv_debug.geom"), STRING(""), NULL);
+            shader_blinn_phong = shader_load(STRING("shaders/blinn_phong.vert"), STRING("shaders/blinn_phong.frag"), STRING(""), STRING(""), NULL);
+        }
+        
+        if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&game_state->controls, CONTROL_REFRESH_ART)
+            || first_run)
+        {
+            bool load_okay = drawable_texture_init_from_disk(&texture_diffuse, STRING("resources/floor.jpg"));
+            ASSERT(load_okay);
         }
         
         if(control_was_pressed(&game_state->controls, CONTROL_ESCAPE))
@@ -1037,10 +1194,12 @@ void run_func(void* context)
         }
         #endif
 
-        //@TODO: zoom 
+        //@TODO: add bling phong texture gamma inverse normalization
+        //       fix sphere using UV mixed with cubemap renorm
+        //       add back solid color shader (used for gismos lights etc)
+        //       zoom 
         //       skybox
-        //       PBR rendering - make function requiring all inputs to shader
-        //       drawable_mesh_pbr_render(...)
+        //       PBR rendering
 
         game_state->camera.fov = game_state->settings.fov;
         game_state->camera.near = 0.1f;
@@ -1060,59 +1219,78 @@ void run_func(void* context)
         glEnable(GL_CULL_FACE);
         glCullFace(GL_FRONT); 
         glFrontFace(GL_CW); 
-        //glFrontFace(GL_CCW); 
+        
+        Blinn_Phong_Params blinn_phong_params = {0};
+        blinn_phong_params.light_ambient_strength = 0.01f;
+        blinn_phong_params.light_specular_strength = 0.4f;
+        blinn_phong_params.light_linear_attentuation = 0;
+        blinn_phong_params.light_quadratic_attentuation = 0.00f;
+        blinn_phong_params.light_specular_sharpness = 32;
+        blinn_phong_params.light_specular_effect = 0.4f; 
+
+        Vec3 light_pos = vec3(10*sinf(clock_sf()), 10*cosf(clock_sf()), 0);
+        light_pos = vec3(4, 4, 0);
+        Vec3 light_color = vec3(1, 1, 0.9f);
 
         //if(0)
         {
-            Mat4 model = mat4_rotation(vec3(2, 1, 3), (f32) clock_s() / 8);
-            //Mat4 model = mat4_identity();
-            drawable_mesh_draw_using_depth_color(drawable_sphere_up, solid_color_shader, projection, view, model, vec3(0, 1, 0));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_down, solid_color_shader, projection, view, model, vec3(1, 0, 1));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_left, solid_color_shader, projection, view, model, vec3(1, 1, 0));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_right, solid_color_shader, projection, view, model, vec3(0, 0, 1));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_front, solid_color_shader, projection, view, model, vec3(1, 0, 0));
-            drawable_mesh_draw_using_depth_color(drawable_sphere_back, solid_color_shader, projection, view, model, vec3(0, 1, 1));
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            //Mat4 model = mat4_rotation(vec3(2, 1, 3), (f32) clock_s() / 8);
+            Mat4 model = mat4_identity();
+            if(1)
+            {
+                drawable_mesh_draw_using_depth_color(drawable_sphere_up, shader_depth_color, projection, view, model, vec3(0, 1, 0));
+                drawable_mesh_draw_using_depth_color(drawable_sphere_down, shader_depth_color, projection, view, model, vec3(1, 0, 1));
+                drawable_mesh_draw_using_depth_color(drawable_sphere_left, shader_depth_color, projection, view, model, vec3(1, 1, 0));
+                drawable_mesh_draw_using_depth_color(drawable_sphere_right, shader_depth_color, projection, view, model, vec3(0, 0, 1));
+                drawable_mesh_draw_using_depth_color(drawable_sphere_front, shader_depth_color, projection, view, model, vec3(1, 0, 0));
+                drawable_mesh_draw_using_depth_color(drawable_sphere_back, shader_depth_color, projection, view, model, vec3(0, 1, 1));
+            }
+            else
+            {
+                drawable_mesh_draw_using_blinn_phong(drawable_sphere_up, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+                drawable_mesh_draw_using_blinn_phong(drawable_sphere_down, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+                drawable_mesh_draw_using_blinn_phong(drawable_sphere_left, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+                drawable_mesh_draw_using_blinn_phong(drawable_sphere_right, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+                drawable_mesh_draw_using_blinn_phong(drawable_sphere_front, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+                drawable_mesh_draw_using_blinn_phong(drawable_sphere_back, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+            }
+            
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
             
             if(game_state->is_in_uv_debug_mode)
             {
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_up, debug_shader, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_down, debug_shader, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_left, debug_shader, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_right, debug_shader, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_front, debug_shader, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_back, debug_shader, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_up, shader_debug, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_down, shader_debug, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_left, shader_debug, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_right, shader_debug, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_front, shader_debug, projection, view, model);
+                drawable_mesh_draw_using_uv_debug(drawable_sphere_back, shader_debug, projection, view, model);
             }
         }
 
-        
-        glFrontFace(GL_CW); 
         for(isize i = 0; i < 20; i++)
         {
         
             Mat4 model = mat4_rotate(mat4_translation(vec3(12, 0, 0)), vec3(0, 1, 0), 2*PI/20*(f32)i);
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(1, 1, 1));
-            
-            //if(game_state->is_in_uv_debug_mode)
-                //drawable_mesh_draw_using_uv_debug(drawable_cube, debug_shader, projection, view, model);
+            //drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(1, 1, 1));
+            drawable_mesh_draw_using_blinn_phong(drawable_cube, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
         }
 
-        #if 0
         {
             Mat4 model = mat4_scale_affine(mat4_translation(vec3(3, 0, 0)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(1, 0, 0));
+            drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(1, 0, 0));
         }
         
         {
             Mat4 model = mat4_scale_affine(mat4_translation(vec3(0, 3, 0)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(0, 1, 0));
+            drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(0, 1, 0));
         }
         
         {
             Mat4 model = mat4_scale_affine(mat4_translation(vec3(0, 0, 3)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, solid_color_shader, projection, view, model, vec3(0, 0, 1));
+            drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(0, 0, 1));
         }
-        #endif
-        glBindVertexArray(0);
 
         //if(0)
         {
@@ -1123,10 +1301,10 @@ void run_func(void* context)
 
             //@TODO: drawable_mesh_draw_postprocess(...);
             {
-                shader_use(screen_shader);
-                shader_set_i32(screen_shader, "screen", 0);
-                shader_set_f32(screen_shader, "gamma", game_state->settings.screen_gamma);
-                shader_set_f32(screen_shader, "exposure", game_state->settings.screen_exposure);
+                shader_use(shader_screen);
+                shader_set_i32(shader_screen, "screen", 0);
+                shader_set_f32(shader_screen, "gamma", game_state->settings.screen_gamma);
+                shader_set_f32(shader_screen, "exposure", game_state->settings.screen_exposure);
 
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, screen_buffers.color_buff);

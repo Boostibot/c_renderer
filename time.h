@@ -35,6 +35,13 @@ static inline double clock_s()
     return counter / freq;
 }
 
+static inline float clock_sf()
+{
+    float freq = (float) platform_perf_counter_frequency_d();
+    float counter = (float) (platform_perf_counter() - platform_perf_counter_startup());
+    return counter / freq;
+}
+
 //@NOTE:
 //We might be rightfully scared that after some ammount of time the clock_s() will get sufficiently large and
 // we will start loosing pression. This is however not a problem. If we assume the perf_counter_frequency is equal to 

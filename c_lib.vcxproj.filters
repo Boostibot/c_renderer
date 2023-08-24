@@ -130,5 +130,11 @@
     <None Include="shaders\uv_debug.vert">
       <Filter>Resource Files\shaders</Filter>
     </None>
+    <None Include="shaders\blinn_phong.frag">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="shaders\blinn_phong.vert">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

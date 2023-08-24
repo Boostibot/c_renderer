@@ -180,6 +180,8 @@
     <ClInclude Include="_test_random.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\blinn_phong.frag" />
+    <None Include="shaders\blinn_phong.vert" />
     <None Include="shaders\depth_color.frag" />
     <None Include="shaders\depth_color.vert" />
     <None Include="shaders\screen.frag" />
