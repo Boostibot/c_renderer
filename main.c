@@ -939,6 +939,7 @@ typedef struct Blinn_Phong_Params
     f32 light_linear_attentuation;
     f32 light_quadratic_attentuation;
     f32 light_specular_effect;
+    f32 gamma;
 } Blinn_Phong_Params;
 
 void drawable_mesh_draw_using_blinn_phong(Drawable_Mesh mesh, GLuint blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Drawable_Texture diffuse)
@@ -963,6 +964,7 @@ void drawable_mesh_draw_using_blinn_phong(Drawable_Mesh mesh, GLuint blin_phong_
     shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
     shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
     shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
+    shader_set_f32(blin_phong_shader, "gamma", params.gamma);
 
     drawable_texture_use(&diffuse, 0);
     shader_set_i32(blin_phong_shader, "texture_diffuse", 0);
@@ -975,10 +977,12 @@ void drawable_mesh_draw_using_blinn_phong(Drawable_Mesh mesh, GLuint blin_phong_
 void run_func(void* context)
 {
     LOG_INFO("APP", "run_func enter");
+    
+    Debug_Allocator debug_alloc = {0};
+    debug_allocator_init_use(&debug_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
 
     GLFWwindow* window = (GLFWwindow*) context;
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    
     memset(game_state, 0, sizeof *game_state);
 
     game_state->camera.pos        = vec3(0.0f, 0.0f,  0.0f);
@@ -1000,94 +1004,33 @@ void run_func(void* context)
 
     mapping_make_default(game_state->control_mappings);
     
+
     Screen_Frame_Buffers screen_buffers = {0};
+
+    Shape uv_sphere = {0};
+    Shape cube_sphere = {0};
+
+    Drawable_Mesh drawable_uv_sphere = {0};
+    Drawable_Mesh drawable_cube_sphere = {0};
     Drawable_Mesh drawable_cube = {0};
     Drawable_Mesh drawable_screen_quad = {0};
-    drawable_mesh_init(&drawable_screen_quad, XY_QUAD_VERTICES, STATIC_ARRAY_SIZE(XY_QUAD_VERTICES), XY_QUAD_INDECES, STATIC_ARRAY_SIZE(XY_QUAD_INDECES), STRING("screen_quad"));
-    drawable_mesh_init(&drawable_cube, CUBE_VERTICES, STATIC_ARRAY_SIZE(CUBE_VERTICES), CUBE_INDECES, STATIC_ARRAY_SIZE(CUBE_INDECES), STRING("cube"));
-
-    Debug_Allocator debug_alloc = {0};
-    debug_allocator_init_use(&debug_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
-
-    Drawable_Mesh drawable_sphere_up = {0};
-    Drawable_Mesh drawable_sphere_down = {0};
-    Drawable_Mesh drawable_sphere_left = {0};
-    Drawable_Mesh drawable_sphere_right = {0};
-    Drawable_Mesh drawable_sphere_front = {0};
-    Drawable_Mesh drawable_sphere_back = {0};
     
-    Shape sphere_side_up = {0};
-    Shape sphere_side_left = {0};
-    Shape sphere_side_front = {0};
-    Shape sphere_side_down = {0};
-    Shape sphere_side_right = {0};
-    Shape sphere_side_back = {0};
-
     Drawable_Texture texture_diffuse = {0};
-    
-
-    f64 fps_display_frequency = 4;
-    f64 fps_display_last_update = 0;
-    String_Builder fps_display = {0};
 
     GLuint shader_depth_color = 0;
     //GLuint shader_solid_color = 0;
     GLuint shader_screen = 0;
     GLuint shader_debug = 0;
     GLuint shader_blinn_phong = 0;
+    
+    f64 fps_display_frequency = 4;
+    f64 fps_display_last_update = 0;
+    String_Builder fps_display = {0};
     for(bool first_run = true; game_state->should_close == false; first_run = false)
     {
         f64 start_frame_time = clock_s();
         game_state->delta_time = start_frame_time - game_state->last_frame_timepoint; 
         game_state->last_frame_timepoint = start_frame_time; 
-        
-        {
-            shape_deinit(&sphere_side_up);
-            shape_deinit(&sphere_side_left);
-            shape_deinit(&sphere_side_front);
-            shape_deinit(&sphere_side_down);
-            shape_deinit(&sphere_side_right);
-            shape_deinit(&sphere_side_back);
-
-            isize iters = 4;
-            f32 radius = 1.0f;
-            f32 sin_time = sinf((f32) clock_s() / 2);
-            f32 p = sin_time*sin_time*3 + 0.3f;
-            p = 2;
-            sphere_side_up = shapes_make_xz_sphere_side(iters, radius, p);
-            sphere_side_left = shape_duplicate(sphere_side_up);
-            sphere_side_front = shape_duplicate(sphere_side_up);
-            sphere_side_down = shape_duplicate(sphere_side_up);
-            sphere_side_right = shape_duplicate(sphere_side_up);
-            sphere_side_back = shape_duplicate(sphere_side_up);
-        
-            Mat4 rotate_left = mat4_rotation(vec3(1, 0, 0), -TAU/4);
-            Mat4 rotate_right = mat4_rotation(vec3(1, 0, 0), TAU/4);
-            Mat4 rotate_front = mat4_rotation(vec3(0, 0, 1), -TAU/4);
-            Mat4 rotate_back = mat4_rotation(vec3(0, 0, 1), TAU/4);
-            Mat4 rotate_down = mat4_rotation(vec3(0, 0, 1), TAU/2);
-        
-            shape_tranform(&sphere_side_left, rotate_left);
-            shape_tranform(&sphere_side_right, rotate_right);
-            shape_tranform(&sphere_side_front, rotate_front);
-            shape_tranform(&sphere_side_back, rotate_back);
-            shape_tranform(&sphere_side_down, rotate_down);
-        }
-    
-        drawable_mesh_deinit(&drawable_sphere_up);
-        drawable_mesh_deinit(&drawable_sphere_down);
-        drawable_mesh_deinit(&drawable_sphere_left);
-        drawable_mesh_deinit(&drawable_sphere_right);
-        drawable_mesh_deinit(&drawable_sphere_front);
-        drawable_mesh_deinit(&drawable_sphere_back);
-
-        drawable_mesh_init(&drawable_sphere_up, sphere_side_up.vertices.data, sphere_side_up.vertices.size, sphere_side_up.indeces.data, sphere_side_up.indeces.size, STRING("sphere_side_up"));
-        drawable_mesh_init(&drawable_sphere_down, sphere_side_down.vertices.data, sphere_side_down.vertices.size, sphere_side_down.indeces.data, sphere_side_down.indeces.size, STRING("sphere_side_down"));
-        drawable_mesh_init(&drawable_sphere_left, sphere_side_left.vertices.data, sphere_side_left.vertices.size, sphere_side_left.indeces.data, sphere_side_left.indeces.size, STRING("sphere_side_left"));
-        drawable_mesh_init(&drawable_sphere_right, sphere_side_right.vertices.data, sphere_side_right.vertices.size, sphere_side_right.indeces.data, sphere_side_right.indeces.size, STRING("sphere_side_right"));
-        drawable_mesh_init(&drawable_sphere_front, sphere_side_front.vertices.data, sphere_side_front.vertices.size, sphere_side_front.indeces.data, sphere_side_front.indeces.size, STRING("sphere_side_front"));
-        drawable_mesh_init(&drawable_sphere_back, sphere_side_back.vertices.data, sphere_side_back.vertices.size, sphere_side_back.indeces.data, sphere_side_back.indeces.size, STRING("sphere_side_back"));
-    
 
         window_process_input(window, first_run);
         if(game_state->window_framebuffer_width != game_state->window_framebuffer_width_prev 
@@ -1120,6 +1063,25 @@ void run_func(void* context)
             || control_was_pressed(&game_state->controls, CONTROL_REFRESH_ART)
             || first_run)
         {
+            
+            LOG_INFO("APP", "Refreshing art");
+            drawable_mesh_deinit(&drawable_uv_sphere);
+            drawable_mesh_deinit(&drawable_cube_sphere);
+            drawable_mesh_deinit(&drawable_screen_quad);
+            drawable_mesh_deinit(&drawable_cube);
+
+            shape_deinit(&uv_sphere);
+            shape_deinit(&cube_sphere);
+
+            uv_sphere = shapes_make_uv_sphere(40, 1);
+            cube_sphere = shapes_make_cube_sphere(40, 1);
+    
+            drawable_mesh_init(&drawable_uv_sphere, uv_sphere.vertices.data, uv_sphere.vertices.size, uv_sphere.indeces.data, uv_sphere.indeces.size, STRING("uv_sphere"));
+            drawable_mesh_init(&drawable_cube_sphere, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.indeces.data, cube_sphere.indeces.size, STRING("cube_sphere"));
+            
+            drawable_mesh_init(&drawable_screen_quad, XY_QUAD_VERTICES, STATIC_ARRAY_SIZE(XY_QUAD_VERTICES), XY_QUAD_INDECES, STATIC_ARRAY_SIZE(XY_QUAD_INDECES), STRING("screen_quad"));
+            drawable_mesh_init(&drawable_cube, CUBE_VERTICES, STATIC_ARRAY_SIZE(CUBE_VERTICES), CUBE_INDECES, STATIC_ARRAY_SIZE(CUBE_INDECES), STRING("cube"));
+
             bool load_okay = drawable_texture_init_from_disk(&texture_diffuse, STRING("resources/floor.jpg"));
             ASSERT(load_okay);
         }
@@ -1159,7 +1121,6 @@ void run_func(void* context)
             game_state->camera.pos = vec3_add(game_state->camera.pos, move_ammount);
         }
 
-        #if 1
         //Camera rotation
         if(game_state->is_in_mouse_mode == false)
         {
@@ -1192,11 +1153,8 @@ void run_func(void* context)
             }
         
         }
-        #endif
 
-        //@TODO: add bling phong texture gamma inverse normalization
-        //       fix sphere using UV mixed with cubemap renorm
-        //       add back solid color shader (used for gismos lights etc)
+        //@TODO: add back solid color shader (used for gismos lights etc)
         //       zoom 
         //       skybox
         //       PBR rendering
@@ -1227,6 +1185,8 @@ void run_func(void* context)
         blinn_phong_params.light_quadratic_attentuation = 0.00f;
         blinn_phong_params.light_specular_sharpness = 32;
         blinn_phong_params.light_specular_effect = 0.4f; 
+        //blinn_phong_params.gamma = game_state->settings.screen_gamma;
+        blinn_phong_params.gamma = 1.3f; //looks better on the wood texture
 
         Vec3 light_pos = vec3(10*sinf(clock_sf()), 10*cosf(clock_sf()), 0);
         light_pos = vec3(4, 4, 0);
@@ -1234,39 +1194,12 @@ void run_func(void* context)
 
         //if(0)
         {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            //Mat4 model = mat4_rotation(vec3(2, 1, 3), (f32) clock_s() / 8);
-            Mat4 model = mat4_identity();
-            if(1)
-            {
-                drawable_mesh_draw_using_depth_color(drawable_sphere_up, shader_depth_color, projection, view, model, vec3(0, 1, 0));
-                drawable_mesh_draw_using_depth_color(drawable_sphere_down, shader_depth_color, projection, view, model, vec3(1, 0, 1));
-                drawable_mesh_draw_using_depth_color(drawable_sphere_left, shader_depth_color, projection, view, model, vec3(1, 1, 0));
-                drawable_mesh_draw_using_depth_color(drawable_sphere_right, shader_depth_color, projection, view, model, vec3(0, 0, 1));
-                drawable_mesh_draw_using_depth_color(drawable_sphere_front, shader_depth_color, projection, view, model, vec3(1, 0, 0));
-                drawable_mesh_draw_using_depth_color(drawable_sphere_back, shader_depth_color, projection, view, model, vec3(0, 1, 1));
-            }
-            else
-            {
-                drawable_mesh_draw_using_blinn_phong(drawable_sphere_up, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
-                drawable_mesh_draw_using_blinn_phong(drawable_sphere_down, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
-                drawable_mesh_draw_using_blinn_phong(drawable_sphere_left, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
-                drawable_mesh_draw_using_blinn_phong(drawable_sphere_right, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
-                drawable_mesh_draw_using_blinn_phong(drawable_sphere_front, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
-                drawable_mesh_draw_using_blinn_phong(drawable_sphere_back, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
-            }
-            
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            Mat4 model = mat4_rotation(vec3(2, 1, 3), clock_sf() / 8);
+            //Mat4 model = mat4_identity();
+            drawable_mesh_draw_using_blinn_phong(drawable_cube_sphere, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
             
             if(game_state->is_in_uv_debug_mode)
-            {
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_up, shader_debug, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_down, shader_debug, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_left, shader_debug, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_right, shader_debug, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_front, shader_debug, projection, view, model);
-                drawable_mesh_draw_using_uv_debug(drawable_sphere_back, shader_debug, projection, view, model);
-            }
+                drawable_mesh_draw_using_uv_debug(drawable_cube_sphere, shader_debug, projection, view, model);
         }
 
         for(isize i = 0; i < 20; i++)
@@ -1326,21 +1259,6 @@ void run_func(void* context)
         glfwSwapBuffers(window);
         
     }
-
-    
-    shape_deinit(&sphere_side_up);
-    shape_deinit(&sphere_side_left);
-    shape_deinit(&sphere_side_front);
-    shape_deinit(&sphere_side_down);
-    shape_deinit(&sphere_side_right);
-    shape_deinit(&sphere_side_back);
-        
-    drawable_mesh_deinit(&drawable_sphere_up);
-    drawable_mesh_deinit(&drawable_sphere_down);
-    drawable_mesh_deinit(&drawable_sphere_left);
-    drawable_mesh_deinit(&drawable_sphere_right);
-    drawable_mesh_deinit(&drawable_sphere_front);
-    drawable_mesh_deinit(&drawable_sphere_back);
 
     //@TODO: deinit!
 

@@ -296,6 +296,7 @@ JMAPI Vec3 vec3_cross(Vec3 a, Vec3 b)
 }
 
 
+
 JMAPI float vec2_angle_between(Vec2 a, Vec2 b)
 {
     float len2a = vec2_dot(a, a);
@@ -331,6 +332,29 @@ JMAPI float vec3_angle_between(Vec3 a, Vec3 b)
     return result;
 }
 #endif
+
+float slerpf_coeficient(float t, float arc_angle)
+{
+    float coef = sinf(t*arc_angle)/sinf(arc_angle);
+    return coef;
+}
+
+Vec3 vec3_slerp(Vec3 from, Vec3 to, float arc_angle, float t)
+{
+    Vec3 from_portion = vec3_scale(from, slerpf_coeficient(1.0f - t, arc_angle));
+    Vec3 to_portion = vec3_scale(to, slerpf_coeficient(t, arc_angle));
+    Vec3 result = vec3_add(from_portion, to_portion);
+    return result;
+}
+
+Vec3 vec3_slerp_around(Vec3 from, Vec3 to, Vec3 center, float t)
+{
+    Vec3 from_center = vec3_sub(from, center);
+    Vec3 to_center = vec3_sub(to, center);
+    float arc_angle = vec3_angle_between(from_center, to_center);
+    Vec3 result = vec3_slerp(from, to, arc_angle, t);
+    return result;
+}
 
 //Constructs a mat4 by entries in writing order
 //Calling this function as mat4(1, 2, 3, 4, ...)
@@ -378,6 +402,15 @@ JMAPI Vec4 mat4_mul_vec4(Mat4 mat, Vec4 vec)
     result.y = mat.m21*vec.x + mat.m22*vec.y + mat.m23*vec.z + mat.m24*vec.w;
     result.z = mat.m31*vec.x + mat.m32*vec.y + mat.m33*vec.z + mat.m34*vec.w;
     result.w = mat.m41*vec.x + mat.m42*vec.y + mat.m43*vec.z + mat.m44*vec.w;
+    return result;
+}
+
+JMAPI Vec3 mat4_mul_vec3(Mat4 mat, Vec3 vec)
+{
+    Vec3 result = {0};
+    result.x = mat.m11*vec.x + mat.m12*vec.y + mat.m13*vec.z;
+    result.y = mat.m21*vec.x + mat.m22*vec.y + mat.m23*vec.z;
+    result.z = mat.m31*vec.x + mat.m32*vec.y + mat.m33*vec.z;
     return result;
 }
 
@@ -811,27 +844,35 @@ JMAPI Mat4 mat4_ortographic_projection(float bottom, float top, float left, floa
     return result;
 }
 
-JMAPI Mat4 mat4_just_look_at(Vec3 front_dir, Vec3 up_dir)
+Mat4 mat4_local_matrix(Vec3 x_dir, Vec3 y_dir, Vec3 position)
 {
-    const Vec3 n = vec3_norm(front_dir);
-    const Vec3 u = vec3_norm(vec3_cross(front_dir, up_dir));
-    const Vec3 v = vec3_cross(u, n);
+    Vec3 X = vec3_norm(x_dir);
+    Vec3 Z = vec3_norm(vec3_cross(x_dir, y_dir));
+    Vec3 Y = vec3_cross(Z, X);
 
-    return mat4(
-        u.x, u.y, u.z, 0, 
-        v.x, v.y, v.z, 0, 
-        n.x, n.y, n.z, 0, 
+    Mat4 local = mat4(
+        X.x, Y.x, Z.x, position.x,
+        X.y, Y.y, Z.y, position.y,
+        X.z, Y.z, Z.z, position.z,
         0,   0,   0,   1
     );
+
+    return local;
 }
 
 JMAPI Mat4 mat4_look_at(Vec3 camera_pos, Vec3 camera_target, Vec3 camera_up_dir)
 {
     const Vec3 front_dir = vec3_sub(camera_target, camera_pos);
-    Mat4 m = mat4_just_look_at(front_dir, camera_up_dir);
-    Mat4 look_at = mat4_translate(m, vec3_scale(camera_pos, -1.0f));
+    const Vec3 n = vec3_norm(front_dir);
+    const Vec3 u = vec3_norm(vec3_cross(front_dir, camera_up_dir));
+    const Vec3 v = vec3_cross(u, n);
 
-    return look_at;
+    return mat4(
+        u.x, u.y, u.z, -vec3_dot(camera_pos, u), 
+        v.x, v.y, v.z, -vec3_dot(camera_pos, v), 
+        n.x, n.y, n.z, -vec3_dot(camera_pos, n), 
+        0,   0,   0,   1
+    );
 }
 
 #endif

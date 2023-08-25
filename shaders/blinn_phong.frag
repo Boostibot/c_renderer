@@ -18,13 +18,21 @@ uniform float light_specular_strength;
 uniform float light_specular_effect; //between 0 and 1. if 0 uses only light color for specular, if 1 uses only diffuse for specular
 uniform float light_linear_attentuation;
 uniform float light_quadratic_attentuation;
+uniform float gamma;
 
 uniform sampler2D texture_diffuse;
 
+vec3 gamma_correct(vec3 color, float gamma)
+{
+    return pow(color, vec3(1.0 / gamma));
+}
+
 void main()
 {
-    vec3 read_diffuse_color = texture(texture_diffuse, fs_in.uv_coord).rgb;
-    vec3 diffuse_color = read_diffuse_color * light_color;
+    vec3 texture_color = texture(texture_diffuse, fs_in.uv_coord).rgb;
+    vec3 corrected_texture_color = gamma_correct(texture_color, 1.0/gamma);
+
+    vec3 diffuse_color = corrected_texture_color * light_color;
     vec3 specular_color = mix(light_color, diffuse_color, light_specular_effect);
 
     vec3 light_dir = normalize(light_pos - fs_in.frag_pos);
@@ -58,6 +66,7 @@ void main()
     //result = light_dir;
     //result = diffuse_color;
     //result = vec3(fs_in.uv_coord, 0);
+    //result = normal;
     frag_color = vec4(result, 1.0);
     return;
 }

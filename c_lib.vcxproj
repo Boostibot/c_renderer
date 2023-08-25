@@ -170,6 +170,7 @@
     <ClInclude Include="gl_shader_util.h" />
     <ClInclude Include="shapes.h" />
     <ClInclude Include="string.h" />
+    <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />
     <ClInclude Include="_test.h" />
     <ClInclude Include="_test_array.h" />
