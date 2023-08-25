@@ -147,6 +147,8 @@ typedef struct Game_Settings
 
     f32 mouse_sensitivity;
     f32 mouse_wheel_sensitivity;
+
+    f32 zoom_adjust_time;
 } Game_Settings;
 
 #define CONTROL_MAPPING_SETS 3
@@ -154,12 +156,19 @@ typedef struct Game_State
 {
     Game_Settings settings;
     Camera camera;
+    
+    f32 camera_yaw;
+    f32 camera_pitch;
 
     Vec3 active_object_pos;
     Vec3 player_pos;
 
     f64 delta_time;
     f64 last_frame_timepoint;
+
+    f32 zoom_target_fov;
+    f64 zoom_target_time;
+    f32 zoom_change_per_sec;
 
     i32 window_screen_width_prev;
     i32 window_screen_height_prev;
@@ -267,6 +276,7 @@ void mapping_make_default(Control_Mapping mappings[CONTROL_MAPPING_SETS])
     control_mapping_add(mappings, CONTROL_LOOK_X,       MOUSE, GLFW_MOUSE_X);
     control_mapping_add(mappings, CONTROL_LOOK_Y,       MOUSE, GLFW_MOUSE_Y);
     control_mapping_add(mappings, CONTROL_SCROLL,       MOUSE, GLFW_MOUSE_SCROLL);
+    control_mapping_add(mappings, CONTROL_ZOOM,         MOUSE, GLFW_MOUSE_SCROLL);
     
     control_mapping_add(mappings, CONTROL_MOVE_FORWARD, KEY, GLFW_KEY_W);
     control_mapping_add(mappings, CONTROL_MOVE_BACKWARD,KEY, GLFW_KEY_S);
@@ -322,7 +332,7 @@ void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mo
 void glfw_mouse_button_func(GLFWwindow* window, int button, int action, int mods);
 void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset);
 
-void controls_effect_by_input(Game_State* game_state, Input_Type input_type, isize index, f32 value)
+void controls_set_control_by_input(Game_State* game_state, Input_Type input_type, isize index, f32 value, bool is_increment)
 {
     for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
     {
@@ -335,8 +345,11 @@ void controls_effect_by_input(Game_State* game_state, Input_Type input_type, isi
 
             if(*interactions < UINT8_MAX)
                 *interactions += 1;
-
-            *stored_value = value;
+    
+            if(is_increment)
+                *stored_value += value;
+            else
+                *stored_value = value;
         }
     }
 }
@@ -380,8 +393,8 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
     f64 new_mouse_x = 0;
     f64 new_mouse_y = 0;
     glfwGetCursorPos(window, &new_mouse_x, &new_mouse_y);
-    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_X, (f32) new_mouse_x);
-    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_Y, (f32) new_mouse_y);
+    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_X, (f32) new_mouse_x, false);
+    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_Y, (f32) new_mouse_y, false);
     
     if(game_state->is_in_mouse_mode_prev != game_state->is_in_mouse_mode || is_initial_call)
     {
@@ -421,7 +434,7 @@ void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mo
         return;
 
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    controls_effect_by_input(game_state, INPUT_TYPE_KEY, key, value);
+    controls_set_control_by_input(game_state, INPUT_TYPE_KEY, key, value, false);
     
 }
 
@@ -437,7 +450,7 @@ void glfw_mouse_button_func(GLFWwindow* window, int button, int action, int mods
         return;
 
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE_BUTTON, button, value);
+    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE_BUTTON, button, value, false);
 }
 
 void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset)
@@ -445,7 +458,7 @@ void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset)
     (void) xoffset;
     f32 value = (f32) yoffset;
     Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    controls_effect_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_SCROLL, value);
+    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_SCROLL, value, true);
 }
 
 const char* platform_sandbox_error_to_cstring(Platform_Sandox_Error error)
@@ -702,35 +715,7 @@ void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
 #define VEC4_FMT "{%f, %f, %f, %f}"
 #define VEC4_PRINT(vec) (vec).x, (vec).y, (vec).z, (vec).w
 
-#if 0
-typedef struct Shader_Params
-{
-    Vec3 view_pos;
-    Vec3 light_pos;
-    Vec3 light_color;
-
-    Mat4 model;
-    Mat4 view;
-    Mat4 projection;
-
-    f32 light_radius;
-    f32 light_linear_attentuation;
-    f32 light_quadratic_attentuation;
-    f32 ambient_strength;
-    i32 options;
-} Shader_Params;
-
-typedef struct Drawable_Vertex
-{
-    Vec3 pos;
-    Vec3 norm;
-    Vec3 tan;
-    Vec3 bitan;
-    Vec2 uv;
-} Drawable_Vertex;
-#endif
-
-typedef struct Drawable_Mesh
+typedef struct Render_Mesh
 {
     String_Builder name;
 
@@ -740,74 +725,110 @@ typedef struct Drawable_Mesh
 
     GLuint vertex_count;
     GLuint index_count;
-} Drawable_Mesh;
+} Render_Mesh;
 
-typedef struct Drawable_Texture
+typedef struct Bitmap_View
+{
+    u8* data;
+    i32 width;
+    i32 height;
+    u8 channels;
+
+    i32 from_x;
+    i32 to_x;
+    
+    i32 from_y;
+    i32 to_y;
+} Bitmap_View;
+
+typedef struct Render_Texture
 {
     GLuint texture;
     isize width;
     isize height;
-} Drawable_Texture;
+} Render_Texture;
 
-typedef struct Drawable_Cubemap
+typedef struct Render_Cubemap
 {
     GLuint texture;
-    isize width;
-    isize height;
-} Drawable_Cubemap;
 
-void drawable_texture_deinit(Drawable_Texture* drawable);
-void drawable_texture_init(Drawable_Texture* drawable, u8* data, isize width, isize height, GLuint pixel_format)
+    isize widths[6];
+    isize heights[6];
+} Render_Cubemap;
+
+void render_texture_deinit(Render_Texture* render);
+
+void render_texture_init(Render_Texture* render, Bitmap_View bitmap)
 {
-    drawable_texture_deinit(drawable);
-    drawable->height = height;
-    drawable->width = width;
-    glGenTextures(1, &drawable->texture);
-    glBindTexture(GL_TEXTURE_2D, drawable->texture);
+    GLenum format = GL_RGB;
+    switch(bitmap.channels)
+    {
+        case 1: format = GL_R; break;
+        case 2: format = GL_RG; break;
+        case 3: format = GL_RGB; break;
+        case 4: format = GL_RGBA; break;
+        default: format = GL_RGB; break;
+    }
+
+    render_texture_deinit(render);
+    render->height = bitmap.height;
+    render->width = bitmap.width;
+    glGenTextures(1, &render->texture);
+    glBindTexture(GL_TEXTURE_2D, render->texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, (GLsizei) width, (GLsizei) height, 0, pixel_format, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, GL_UNSIGNED_BYTE, bitmap.data);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
 } 
 
-void drawable_texture_use(Drawable_Texture* drawable, isize slot)
+
+void render_texture_use(Render_Texture* render, isize slot)
 {
     glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
-    glBindTexture(GL_TEXTURE_2D, drawable->texture);
+    glBindTexture(GL_TEXTURE_2D, render->texture);
 }
 
-void drawable_texture_unuse(Drawable_Texture* drawable)
+void render_texture_unuse(Render_Texture* render)
 {
-    (void) drawable;
+    (void) render;
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void drawable_texture_deinit(Drawable_Texture* drawable)
+void render_texture_deinit(Render_Texture* render)
 {
-    glDeleteTextures(1, &drawable->texture);
-    memset(&drawable, 0, sizeof(drawable));
+    glDeleteTextures(1, &render->texture);
+    memset(&render, 0, sizeof(render));
 }
 
-bool drawable_texture_init_from_disk(Drawable_Texture* tetxure, String path)
+void render_cubemap_deinit(Render_Cubemap* render)
 {
-    String_Builder escaped = {0};
-    array_init_backed(&escaped, allocator_get_scratch(), 256);
-    builder_append(&escaped, path);
+    glDeleteTextures(1, &render->texture);
+    memset(&render, 0, sizeof(render));
+}
 
-    // load and generate the texture
-    int width = 0;
-    int height = 0;
-    int nrChannels = 0;
-    unsigned char *data = stbi_load(cstring_from_builder(escaped), &width, &height, &nrChannels, 0);
+void render_cubemap_init(Render_Cubemap* render, const Bitmap_View bitmaps[6])
+{
+    for (isize i = 0; i < 6; i++)
+        ASSERT(bitmaps[i].data != NULL && "cannot miss data");
 
-    bool state = false;
-    if(data)
+    render_cubemap_deinit(render);
+    glGenTextures(1, &render->texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, render->texture);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    for (isize i = 0; i < 6; i++)
     {
+        Bitmap_View bitmap = bitmaps[i];
+        render->heights[i] = bitmap.height;
+        render->widths[i] = bitmap.width;
+
         GLenum format = GL_RGB;
-        switch(nrChannels)
+        switch(bitmap.channels)
         {
             case 1: format = GL_R; break;
             case 2: format = GL_RG; break;
@@ -815,23 +836,97 @@ bool drawable_texture_init_from_disk(Drawable_Texture* tetxure, String path)
             case 4: format = GL_RGBA; break;
             default: format = GL_RGB; break;
         }
+        
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + (GLenum) i, 0, format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, GL_UNSIGNED_BYTE, bitmap.data);
+    }
 
-        drawable_texture_init(tetxure, data, width, height, format);
-        state = true;
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+} 
+
+void render_cubemap_use(Render_Cubemap* render, isize slot)
+{
+    glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, render->texture);
+}
+
+void render_cubemap_unuse(Render_Cubemap* render)
+{
+    (void) render;
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+}
+
+void bitmap_deinit(Bitmap_View* bitmap)
+{
+    stbi_image_free(bitmap->data);
+    memset(bitmap, 0, sizeof *bitmap);
+}
+
+bool bitmap_init_from_disk(Bitmap_View* bitmap, String path, bool flip)
+{
+    bitmap_deinit(bitmap);
+
+    String_Builder escaped = {0};
+    array_init_backed(&escaped, allocator_get_scratch(), 256);
+    builder_append(&escaped, path);
+
+    // load and generate the texture
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(flip);
+    unsigned char *data = stbi_load(cstring_from_builder(escaped), &width, &height, &channels, 0);
+
+    if(data)
+    {
+        bitmap->data = data;
+        bitmap->width = width;
+        bitmap->height = height;
+        bitmap->channels = (u8) channels;
+
+        bitmap->to_x = width;
+        bitmap->to_y = height;
     }
     else
     {
         LOG_ERROR("ASSET", "Failed to open a file: \"" STRING_FMT "\"", path);
         ASSERT(false);
-        state = false;
     }
 
-    stbi_image_free(data);
+    array_deinit(&escaped);
+    return data != NULL;
+}
+
+bool render_texture_init_from_disk(Render_Texture* tetxure, String path)
+{
+    Bitmap_View bitmap = {0};
+    bool state = bitmap_init_from_disk(&bitmap, path, true);
+    render_texture_init(tetxure, bitmap);
+    bitmap_deinit(&bitmap);
+
     return state;
 }
 
+bool render_cubemap_init_from_disk(Render_Cubemap* render, String front, String back, String top, String bot, String right, String left)
+{
+    Bitmap_View face_bitmaps[6] = {0};
+    String face_paths[6] = {right, left, top, bot, front, back};
 
-bool shader_set_texture(GLuint program, const char* name, Drawable_Texture texture)
+    bool state = true;
+    for (isize i = 0; i < 6; i++)
+        state = state && bitmap_init_from_disk(&face_bitmaps[i], face_paths[i], false);
+
+    render_cubemap_init(render, face_bitmaps);
+    
+    for (isize i = 0; i < 6; i++)
+        bitmap_deinit(&face_bitmaps[i]);
+
+    return state;
+}
+
+bool shader_set_texture(GLuint program, const char* name, Render_Texture texture)
 {
     int location = _get_shader_uniform_location(program, name);
     if(location == -1)
@@ -841,7 +936,7 @@ bool shader_set_texture(GLuint program, const char* name, Drawable_Texture textu
     return true;
 }
 
-void drawable_mesh_init(Drawable_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Indeces* indeces, isize indeces_count, String name)
+void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Indeces* indeces, isize indeces_count, String name)
 {
     memset(mesh, 0, sizeof *mesh);
 
@@ -889,7 +984,7 @@ void drawable_mesh_init(Drawable_Mesh* mesh, const Vertex* vertices, isize verti
     mesh->vertex_count = (GLuint) vertices_count;
 }
 
-void drawable_mesh_deinit(Drawable_Mesh* mesh)
+void render_mesh_deinit(Render_Mesh* mesh)
 {
     array_deinit(&mesh->name);
     glDeleteVertexArrays(1, &mesh->vao);
@@ -898,25 +993,36 @@ void drawable_mesh_deinit(Drawable_Mesh* mesh)
     memset(mesh, 0, sizeof *mesh);
 }
 
-void drawable_mesh_draw(Drawable_Mesh mesh)
+void render_mesh_draw(Render_Mesh mesh)
 {
     glBindVertexArray(mesh.vao);
     glDrawElements(GL_TRIANGLES, mesh.index_count * 3, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 }
 
-void drawable_mesh_draw_using_depth_color(Drawable_Mesh mesh, GLuint shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+void render_mesh_draw_using_solid_color(Render_Mesh mesh, GLuint shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
 {
     shader_use(shader_depth_color);
     shader_set_vec3(shader_depth_color, "color", color);
     shader_set_mat4(shader_depth_color, "projection", projection);
     shader_set_mat4(shader_depth_color, "view", view);
     shader_set_mat4(shader_depth_color, "model", model);
-    drawable_mesh_draw(mesh);
+    render_mesh_draw(mesh);
     shader_unuse();
 }
 
-void drawable_mesh_draw_using_uv_debug(Drawable_Mesh mesh, GLuint uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
+void render_mesh_draw_using_depth_color(Render_Mesh mesh, GLuint shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+{
+    shader_use(shader_depth_color);
+    shader_set_vec3(shader_depth_color, "color", color);
+    shader_set_mat4(shader_depth_color, "projection", projection);
+    shader_set_mat4(shader_depth_color, "view", view);
+    shader_set_mat4(shader_depth_color, "model", model);
+    render_mesh_draw(mesh);
+    shader_unuse();
+}
+
+void render_mesh_draw_using_uv_debug(Render_Mesh mesh, GLuint uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
 {
     shader_use(uv_shader_debug);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
@@ -927,7 +1033,7 @@ void drawable_mesh_draw_using_uv_debug(Drawable_Mesh mesh, GLuint uv_shader_debu
     shader_set_mat4(uv_shader_debug, "view", view);
     shader_set_mat4(uv_shader_debug, "model", model);
     shader_set_mat3(uv_shader_debug, "normal_matrix", normal_matrix);
-    drawable_mesh_draw(mesh);
+    render_mesh_draw(mesh);
     shader_unuse();
 }
 
@@ -942,7 +1048,7 @@ typedef struct Blinn_Phong_Params
     f32 gamma;
 } Blinn_Phong_Params;
 
-void drawable_mesh_draw_using_blinn_phong(Drawable_Mesh mesh, GLuint blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Drawable_Texture diffuse)
+void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, GLuint blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Render_Texture diffuse)
 {
     shader_use(blin_phong_shader);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
@@ -966,12 +1072,31 @@ void drawable_mesh_draw_using_blinn_phong(Drawable_Mesh mesh, GLuint blin_phong_
     shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
     shader_set_f32(blin_phong_shader, "gamma", params.gamma);
 
-    drawable_texture_use(&diffuse, 0);
+    render_texture_use(&diffuse, 0);
     shader_set_i32(blin_phong_shader, "texture_diffuse", 0);
     
-    drawable_mesh_draw(mesh);
-    drawable_texture_unuse(&diffuse);
+    render_mesh_draw(mesh);
+    render_texture_unuse(&diffuse);
     shader_unuse();
+}
+
+void render_mesh_draw_using_skybox(Render_Mesh mesh, GLuint skybox_shader, Mat4 projection, Mat4 view, Mat4 model, f32 gamma, Render_Cubemap skybox)
+{
+    glDepthFunc(GL_LEQUAL);
+    shader_use(skybox_shader);
+    shader_set_mat4(skybox_shader, "projection", projection);
+    shader_set_mat4(skybox_shader, "view", view);
+    shader_set_mat4(skybox_shader, "model", model);
+    shader_set_f32(skybox_shader, "gamma", gamma);
+    render_mesh_draw(mesh);
+    
+    render_cubemap_use(&skybox, 0);
+    shader_set_i32(skybox_shader, "cubemap_diffuse", 0);
+    
+    render_mesh_draw(mesh);
+    render_cubemap_unuse(&skybox);
+    shader_unuse();
+    glDepthFunc(GL_LESS);
 }
 
 void run_func(void* context)
@@ -990,8 +1115,8 @@ void run_func(void* context)
     game_state->camera.up_dir     = vec3(0.0f, 1.0f,  0.0f);
     game_state->camera.is_position_relative = true;
 
-    f32 CAMERA_yaw = -TAU/4;
-    f32 CAMERA_pitch = 0.0;
+    game_state->camera_yaw = -TAU/4;
+    game_state->camera_pitch = 0.0;
 
     game_state->is_in_mouse_mode = false;
     game_state->settings.fov = TAU/4;
@@ -1000,29 +1125,37 @@ void run_func(void* context)
     game_state->settings.screen_gamma = 2.2f;
     game_state->settings.screen_exposure = 1.0;
     game_state->settings.mouse_sensitivity = 0.002f;
-    game_state->settings.mouse_wheel_sensitivity = 0.01f; // uwu
+    game_state->settings.mouse_wheel_sensitivity = 0.05f; // uwu
+    game_state->settings.zoom_adjust_time = 0.2f;
 
     mapping_make_default(game_state->control_mappings);
-    
 
     Screen_Frame_Buffers screen_buffers = {0};
 
     Shape uv_sphere = {0};
     Shape cube_sphere = {0};
+    Shape screen_quad = {0};
+    Shape unit_quad = {0};
+    Shape unit_cube = {0};
 
-    Drawable_Mesh drawable_uv_sphere = {0};
-    Drawable_Mesh drawable_cube_sphere = {0};
-    Drawable_Mesh drawable_cube = {0};
-    Drawable_Mesh drawable_screen_quad = {0};
+    Render_Mesh render_uv_sphere = {0};
+    Render_Mesh render_cube_sphere = {0};
+    Render_Mesh render_screen_quad = {0};
+    Render_Mesh render_cube = {0};
+    Render_Mesh render_quad = {0};
     
-    Drawable_Texture texture_diffuse = {0};
+    Render_Texture texture_floor = {0};
+    Render_Texture texture_debug = {0};
+
+    Render_Cubemap cubemap_skybox = {0};
 
     GLuint shader_depth_color = 0;
-    //GLuint shader_solid_color = 0;
+    GLuint shader_solid_color = 0;
     GLuint shader_screen = 0;
     GLuint shader_debug = 0;
     GLuint shader_blinn_phong = 0;
-    
+    GLuint shader_skybox = 0;
+
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
     String_Builder fps_display = {0};
@@ -1048,15 +1181,19 @@ void run_func(void* context)
             || first_run)
         {
             LOG_INFO("APP", "Refreshing shaders");
+            shader_unload(&shader_solid_color);
             shader_unload(&shader_depth_color);
             shader_unload(&shader_screen);
             shader_unload(&shader_debug);
             shader_unload(&shader_blinn_phong);
+            shader_unload(&shader_skybox);
 
-            shader_depth_color = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING("//prepended"), NULL);
+            shader_solid_color = shader_load(STRING("shaders/solid_color.vert"), STRING("shaders/solid_color.frag"), STRING(""), STRING(""), NULL);
+            shader_depth_color = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING(""), NULL);
             shader_screen = shader_load(STRING("shaders/screen.vert"), STRING("shaders/screen.frag"), STRING(""), STRING(""), NULL);
             shader_debug = shader_load(STRING("shaders/uv_debug.vert"), STRING("shaders/uv_debug.frag"), STRING("shaders/uv_debug.geom"), STRING(""), NULL);
             shader_blinn_phong = shader_load(STRING("shaders/blinn_phong.vert"), STRING("shaders/blinn_phong.frag"), STRING(""), STRING(""), NULL);
+            shader_skybox = shader_load(STRING("shaders/skybox.vert"), STRING("shaders/skybox.frag"), STRING(""), STRING(""), NULL);
         }
         
         if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
@@ -1065,24 +1202,45 @@ void run_func(void* context)
         {
             
             LOG_INFO("APP", "Refreshing art");
-            drawable_mesh_deinit(&drawable_uv_sphere);
-            drawable_mesh_deinit(&drawable_cube_sphere);
-            drawable_mesh_deinit(&drawable_screen_quad);
-            drawable_mesh_deinit(&drawable_cube);
 
             shape_deinit(&uv_sphere);
             shape_deinit(&cube_sphere);
+            shape_deinit(&screen_quad);
+            shape_deinit(&unit_cube);
+            shape_deinit(&unit_quad);
 
             uv_sphere = shapes_make_uv_sphere(40, 1);
             cube_sphere = shapes_make_cube_sphere(40, 1);
+            screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
+            unit_cube = shapes_make_unit_cube();
+            unit_quad = shapes_make_unit_quad();
     
-            drawable_mesh_init(&drawable_uv_sphere, uv_sphere.vertices.data, uv_sphere.vertices.size, uv_sphere.indeces.data, uv_sphere.indeces.size, STRING("uv_sphere"));
-            drawable_mesh_init(&drawable_cube_sphere, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.indeces.data, cube_sphere.indeces.size, STRING("cube_sphere"));
-            
-            drawable_mesh_init(&drawable_screen_quad, XY_QUAD_VERTICES, STATIC_ARRAY_SIZE(XY_QUAD_VERTICES), XY_QUAD_INDECES, STATIC_ARRAY_SIZE(XY_QUAD_INDECES), STRING("screen_quad"));
-            drawable_mesh_init(&drawable_cube, CUBE_VERTICES, STATIC_ARRAY_SIZE(CUBE_VERTICES), CUBE_INDECES, STATIC_ARRAY_SIZE(CUBE_INDECES), STRING("cube"));
+            render_mesh_deinit(&render_uv_sphere);
+            render_mesh_deinit(&render_cube_sphere);
+            render_mesh_deinit(&render_screen_quad);
+            render_mesh_deinit(&render_cube);
+            render_mesh_deinit(&render_quad);
 
-            bool load_okay = drawable_texture_init_from_disk(&texture_diffuse, STRING("resources/floor.jpg"));
+            render_mesh_init(&render_uv_sphere, uv_sphere.vertices.data, uv_sphere.vertices.size, uv_sphere.indeces.data, uv_sphere.indeces.size, STRING("uv_sphere"));
+            render_mesh_init(&render_cube_sphere, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.indeces.data, cube_sphere.indeces.size, STRING("cube_sphere"));
+            render_mesh_init(&render_screen_quad, screen_quad.vertices.data, screen_quad.vertices.size, screen_quad.indeces.data, screen_quad.indeces.size, STRING("screen_quad"));
+            render_mesh_init(&render_cube, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.indeces.data, unit_cube.indeces.size, STRING("unit_cube"));
+            render_mesh_init(&render_quad, unit_quad.vertices.data, unit_quad.vertices.size, unit_quad.indeces.data, unit_quad.indeces.size, STRING("unit_cube"));
+
+            render_texture_deinit(&texture_floor);
+            render_texture_deinit(&texture_debug);
+
+            bool load_okay = true;
+            load_okay = load_okay && render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"));
+            load_okay = load_okay && render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"));
+            load_okay = load_okay && render_cubemap_init_from_disk(&cubemap_skybox, 
+                STRING("resources/skybox_front.jpg"), 
+                STRING("resources/skybox_back.jpg"), 
+                STRING("resources/skybox_top.jpg"), 
+                STRING("resources/skybox_bottom.jpg"), 
+                STRING("resources/skybox_right.jpg"), 
+                STRING("resources/skybox_left.jpg"));
+
             ASSERT(load_okay);
         }
         
@@ -1095,74 +1253,108 @@ void run_func(void* context)
         {
             game_state->is_in_uv_debug_mode = !game_state->is_in_uv_debug_mode;
         }
-        //Movement
-        {
-            f32 move_speed = game_state->settings.movement_speed;
-            if(control_is_down(&game_state->controls, CONTROL_SPRINT))
-                move_speed *= game_state->settings.movement_sprint_mult;
 
-            Vec3 direction_forward = vec3_norm(camera_get_look_dir(game_state->camera));
-            Vec3 direction_up = vec3_norm(game_state->camera.up_dir);
-            Vec3 direction_right = vec3_norm(vec3_cross(direction_forward, game_state->camera.up_dir));
-            
-            Vec3 move_dir = {0};
-            move_dir = vec3_add(move_dir, vec3_scale(direction_forward, game_state->controls.values[CONTROL_MOVE_FORWARD]));
-            move_dir = vec3_add(move_dir, vec3_scale(direction_up, game_state->controls.values[CONTROL_MOVE_UP]));
-            move_dir = vec3_add(move_dir, vec3_scale(direction_right, game_state->controls.values[CONTROL_MOVE_RIGHT]));
-            
-            move_dir = vec3_add(move_dir, vec3_scale(direction_forward, -game_state->controls.values[CONTROL_MOVE_BACKWARD]));
-            move_dir = vec3_add(move_dir, vec3_scale(direction_up, -game_state->controls.values[CONTROL_MOVE_DOWN]));
-            move_dir = vec3_add(move_dir, vec3_scale(direction_right, -game_state->controls.values[CONTROL_MOVE_LEFT]));
-
-            if(vec3_len(move_dir) != 0.0f)
-                move_dir = vec3_norm(move_dir);
-
-            Vec3 move_ammount = vec3_scale(move_dir, move_speed * (f32) game_state->delta_time);
-            game_state->camera.pos = vec3_add(game_state->camera.pos, move_ammount);
-        }
-
-        //Camera rotation
         if(game_state->is_in_mouse_mode == false)
         {
-            f32 mousex_prev = game_state->controls_prev.values[CONTROL_LOOK_X];
-            f32 mousey_prev = game_state->controls_prev.values[CONTROL_LOOK_Y];
-
-            f32 mousex = game_state->controls.values[CONTROL_LOOK_X];
-            f32 mousey = game_state->controls.values[CONTROL_LOOK_Y];
-
-            if(mousex != mousex_prev || mousey != mousey_prev)
+            f32 fov_sens_modifier = sinf(game_state->zoom_target_fov);
+            //Movement
             {
-                f64 xoffset = mousex - mousex_prev;
-                f64 yoffset = mousey_prev - mousey; // reversed since y-coordinates range from bottom to top
+                f32 move_speed = game_state->settings.movement_speed;
+                if(control_is_down(&game_state->controls, CONTROL_SPRINT))
+                    move_speed *= game_state->settings.movement_sprint_mult;
 
-                xoffset *= game_state->settings.mouse_sensitivity;
-                yoffset *= game_state->settings.mouse_sensitivity;
-                f32 epsilon = 1e-5f;
+                Vec3 direction_forward = vec3_norm(camera_get_look_dir(game_state->camera));
+                Vec3 direction_up = vec3_norm(game_state->camera.up_dir);
+                Vec3 direction_right = vec3_norm(vec3_cross(direction_forward, game_state->camera.up_dir));
+            
+                Vec3 move_dir = {0};
+                move_dir = vec3_add(move_dir, vec3_scale(direction_forward, game_state->controls.values[CONTROL_MOVE_FORWARD]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_up, game_state->controls.values[CONTROL_MOVE_UP]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_right, game_state->controls.values[CONTROL_MOVE_RIGHT]));
+            
+                move_dir = vec3_add(move_dir, vec3_scale(direction_forward, -game_state->controls.values[CONTROL_MOVE_BACKWARD]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_up, -game_state->controls.values[CONTROL_MOVE_DOWN]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_right, -game_state->controls.values[CONTROL_MOVE_LEFT]));
 
-                CAMERA_yaw   += (f32) xoffset;
-                CAMERA_pitch += (f32) yoffset; 
-                CAMERA_pitch = CLAMP(CAMERA_pitch, -TAU/4.0f + epsilon, TAU/4.0f - epsilon);
+                if(vec3_len(move_dir) != 0.0f)
+                    move_dir = vec3_norm(move_dir);
+
+                Vec3 move_ammount = vec3_scale(move_dir, move_speed * (f32) game_state->delta_time);
+                game_state->camera.pos = vec3_add(game_state->camera.pos, move_ammount);
+            }
+
+            //Camera rotation
+            {
+                f32 mousex_prev = game_state->controls_prev.values[CONTROL_LOOK_X];
+                f32 mousey_prev = game_state->controls_prev.values[CONTROL_LOOK_Y];
+
+                f32 mousex = game_state->controls.values[CONTROL_LOOK_X];
+                f32 mousey = game_state->controls.values[CONTROL_LOOK_Y];
+            
+                if(mousex != mousex_prev || mousey != mousey_prev)
+                {
+                    f64 xoffset = mousex - mousex_prev;
+                    f64 yoffset = mousey_prev - mousey; // reversed since y-coordinates range from bottom to top
+
+                    xoffset *= game_state->settings.mouse_sensitivity * fov_sens_modifier;
+                    yoffset *= game_state->settings.mouse_sensitivity * fov_sens_modifier;
+                    f32 epsilon = 1e-5f;
+
+                    game_state->camera_yaw   += (f32) xoffset;
+                    game_state->camera_pitch += (f32) yoffset; 
+                    game_state->camera_pitch = CLAMP(game_state->camera_pitch, -TAU/4.0f + epsilon, TAU/4.0f - epsilon);
         
-                Vec3 direction = {0};
-                direction.x = cosf(CAMERA_yaw) * cosf(CAMERA_pitch);
-                direction.y = sinf(CAMERA_pitch);
-                direction.z = sinf(CAMERA_yaw) * cosf(CAMERA_pitch);
+                    Vec3 direction = {0};
+                    direction.x = cosf(game_state->camera_yaw) * cosf(game_state->camera_pitch);
+                    direction.y = sinf(game_state->camera_pitch);
+                    direction.z = sinf(game_state->camera_yaw) * cosf(game_state->camera_pitch);
 
-                //game_state->camera.looking_at = vec3(0, 0, 0);
-                game_state->camera.looking_at = vec3_norm(direction);
+                    game_state->camera.looking_at = vec3_norm(direction);
+                }
             }
         
+            //smooth zoom
+            {
+                //Works by setting a target fov, time to hit it and speed and then
+                //interpolates smoothly until the value is hit
+                if(game_state->zoom_target_fov == 0)
+                    game_state->zoom_target_fov = game_state->settings.fov;
+                
+                f32 zoom = game_state->controls.values[CONTROL_ZOOM];
+                f32 zoom_prev = game_state->controls_prev.values[CONTROL_ZOOM];
+                f32 zoom_delta = zoom_prev - zoom;
+                if(zoom_delta != 0)
+                {   
+                    f32 fov_delta = zoom_delta * game_state->settings.mouse_wheel_sensitivity * fov_sens_modifier;
+                
+                    game_state->zoom_target_fov = CLAMP(game_state->zoom_target_fov + fov_delta, 0, TAU/2);
+                    game_state->zoom_target_time = start_frame_time + game_state->settings.zoom_adjust_time;
+                    game_state->zoom_change_per_sec = (game_state->zoom_target_fov - game_state->settings.fov) / game_state->settings.zoom_adjust_time;
+                }
+            
+                if(start_frame_time < game_state->zoom_target_time)
+                {
+                    f32 fov_before = game_state->settings.fov;
+                    game_state->settings.fov += game_state->zoom_change_per_sec * (f32) game_state->delta_time;
+
+                    //if is already past the target snap to target
+                    if(fov_before < game_state->zoom_target_fov && game_state->settings.fov > game_state->zoom_target_fov)
+                        game_state->settings.fov = game_state->zoom_target_fov;
+                    if(fov_before > game_state->zoom_target_fov && game_state->settings.fov < game_state->zoom_target_fov)
+                        game_state->settings.fov = game_state->zoom_target_fov;
+                }
+                else
+                    game_state->settings.fov = game_state->zoom_target_fov;
+            }
         }
 
-        //@TODO: add back solid color shader (used for gismos lights etc)
-        //       zoom 
-        //       skybox
-        //       PBR rendering
+        //@TODO: PBR rendering
 
         game_state->camera.fov = game_state->settings.fov;
         game_state->camera.near = 0.1f;
         game_state->camera.far = 100.0f;
         game_state->camera.is_ortographic = false;
+        game_state->camera.is_position_relative = true;
         game_state->camera.aspect_ratio = (f32) game_state->window_framebuffer_width / (f32) game_state->window_framebuffer_height;
 
         Mat4 view = camera_make_view_matrix(game_state->camera);
@@ -1192,47 +1384,51 @@ void run_func(void* context)
         light_pos = vec3(4, 4, 0);
         Vec3 light_color = vec3(1, 1, 0.9f);
 
-        //if(0)
+        //render sphere
         {
-            Mat4 model = mat4_rotation(vec3(2, 1, 3), clock_sf() / 8);
-            //Mat4 model = mat4_identity();
-            drawable_mesh_draw_using_blinn_phong(drawable_cube_sphere, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+            Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_sf() / 8), vec3(5, 0, 5));
+            render_mesh_draw_using_blinn_phong(render_cube_sphere, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_floor);
             
             if(game_state->is_in_uv_debug_mode)
-                drawable_mesh_draw_using_uv_debug(drawable_cube_sphere, shader_debug, projection, view, model);
+                render_mesh_draw_using_uv_debug(render_cube_sphere, shader_debug, projection, view, model);
         }
 
-        for(isize i = 0; i < 20; i++)
+        //render light
         {
-        
-            Mat4 model = mat4_rotate(mat4_translation(vec3(12, 0, 0)), vec3(0, 1, 0), 2*PI/20*(f32)i);
-            //drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(1, 1, 1));
-            drawable_mesh_draw_using_blinn_phong(drawable_cube, shader_blinn_phong, projection, view, model, game_state->camera.pos, light_pos, light_color, blinn_phong_params, texture_diffuse);
+            Mat4 model = mat4_scale_affine(mat4_translation(light_pos), vec3_of(0.3f));
+            render_mesh_draw_using_solid_color(render_uv_sphere, shader_solid_color, projection, view, model, light_color);
         }
 
+        //render gismos
         {
-            Mat4 model = mat4_scale_affine(mat4_translation(vec3(3, 0, 0)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(1, 0, 0));
-        }
-        
-        {
-            Mat4 model = mat4_scale_affine(mat4_translation(vec3(0, 3, 0)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(0, 1, 0));
-        }
-        
-        {
-            Mat4 model = mat4_scale_affine(mat4_translation(vec3(0, 0, 3)), vec3_of(0.3f));
-            drawable_mesh_draw_using_depth_color(drawable_cube, shader_depth_color, projection, view, model, vec3(0, 0, 1));
+            f32 size = 0.05f;
+            f32 length = 1;
+            f32 offset = size + 0.3f + length/2;
+
+            Mat4 X = mat4_scale_affine(mat4_translation(vec3(offset, 0, 0)), vec3(length, size, size));
+            Mat4 Y = mat4_scale_affine(mat4_translation(vec3(0, offset, 0)), vec3(size, length, size));
+            Mat4 Z = mat4_scale_affine(mat4_translation(vec3(0, 0, offset)), vec3(size, size, length));
+            Mat4 MID = mat4_scaling(vec3(size, size, size));
+
+            render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, X, vec3(1, 0, 0));
+            render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, Y, vec3(0, 1, 0));
+            render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, Z, vec3(0, 0, 1));
+            render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, MID, vec3(1, 1, 1));
         }
 
-        //if(0)
+        //render skybox
+        {
+            Mat4 model = mat4_scaling(vec3_of(-1));
+            Mat4 stationary_view = mat4_from_mat3(mat3_from_mat4(view));
+            render_mesh_draw_using_skybox(render_cube, shader_skybox, projection, stationary_view, model, game_state->settings.screen_gamma, cubemap_skybox);
+        }
+
         {
             // ============== POST PROCESSING PASS ==================
             glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
 
-            //@TODO: drawable_mesh_draw_postprocess(...);
             {
                 shader_use(shader_screen);
                 shader_set_i32(shader_screen, "screen", 0);
@@ -1242,7 +1438,7 @@ void run_func(void* context)
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, screen_buffers.color_buff);
             
-                drawable_mesh_draw(drawable_screen_quad);
+                render_mesh_draw(render_screen_quad);
             }
         }
 

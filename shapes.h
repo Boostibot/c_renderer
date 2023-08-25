@@ -36,48 +36,43 @@ typedef struct Shape
     Triangle_Indeces_Array indeces;
 } Shape;
 
-void mesh_deinit(Shape* mesh)
+void shape_deinit(Shape* shape)
 {
-    array_deinit(&mesh->vertices);
-    array_deinit(&mesh->indeces);
+    array_deinit(&shape->vertices);
+    array_deinit(&shape->indeces);
 }
 
-#define E 1.0f
+Shape shape_duplicate(Shape from)
+{
+    Shape out = {0};
+    array_copy(&out.vertices, from.vertices);
+    array_copy(&out.indeces, from.indeces);
+    return out;
+}
+
+void shape_tranform(Shape* shape, Mat4 transform)
+{
+    Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
+
+    for(isize i = 0; i < shape->vertices.size; i++)
+    {
+        Vertex* vertex = &shape->vertices.data[i];
+        vertex->pos = mat4_apply(transform, vertex->pos);
+        vertex->norm = mat4_mul_vec3(normal_matrix, vertex->norm);
+    }
+}
+
+
+#define E 0.5f
 const Vertex XZ_QUAD_VERTICES[] = {
      E, 0,  E, {1, 1}, {0, 1, 0},
-    -E, 0,  E, {0, 1}, {0, 1, 0}, 
+    -E, 0,  E, {1, 0}, {0, 1, 0}, 
     -E, 0, -E, {0, 0}, {0, 1, 0},
-     E, 0, -E, {1, 0}, {0, 1, 0},
-};
-
-const Vertex XY_QUAD_VERTICES[] = { 
-     E,  E, 0.0f, 1.0f, 1.0f, {0},
-    -E,  E, 0.0f, 0.0f, 1.0f, {0},
-    -E, -E, 0.0f, 0.0f, 0.0f, {0},
-     E, -E, 0.0f, 1.0f, 0.0f, {0},
-     E,  E, 0.0f, 1.0f, 1.0f, {0},
-    -E, -E, 0.0f, 0.0f, 0.0f, {0},
-};
-
-const Vertex YZ_QUAD_VERTICES[] = {
-    0.0f,  E,  E, 1.0f, 1.0f, {0},
-    0.0f, -E,  E, 0.0f, 1.0f, {0},
-    0.0f, -E, -E, 0.0f, 0.0f, {0},
-    0.0f,  E, -E, 1.0f, 0.0f, {0},
-    0.0f,  E,  E, 1.0f, 1.0f, {0},
-    0.0f, -E, -E, 0.0f, 0.0f, {0},
+     E, 0, -E, {0, 1}, {0, 1, 0},
 };
 
 const Triangle_Indeces XZ_QUAD_INDECES[] = { 
     1, 0, 2, 0, 3, 2
-};
-
-const Triangle_Indeces XY_QUAD_INDECES[] = { 
-    0, 1, 2, 3, 4, 5
-};
-
-const Triangle_Indeces YZ_QUAD_INDECES[] = { 
-    0, 1, 2, 3, 4, 5
 };
 
 const Vertex CUBE_VERTICES[] = {
@@ -125,6 +120,7 @@ const Vertex CUBE_VERTICES[] = {
     -E,  E,  E,  0.0f, 0.0f, {0, 1, 0}  // bottom-left        
 };
 
+#undef E
 
 const Triangle_Indeces CUBE_INDECES[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
@@ -136,8 +132,7 @@ u64 vertex_hash64(Vertex vertex, u64 seed)
     return out;
 }
 
-//makes a quad in spanning x:[-0.5, 0.5] y:{0} z:[-0.5, 0.5] centered at origin
-Shape shapes_make_xz_quad()
+Shape shapes_make_unit_quad()
 {
     Shape out = {0};
     isize vertex_count = STATIC_ARRAY_SIZE(XZ_QUAD_VERTICES);
@@ -149,8 +144,9 @@ Shape shapes_make_xz_quad()
 }
 
 //makes a cube in spanning [-0.5, 0.5]^3 centered at origin
-Shape shapes_make_cube()
+Shape shapes_make_unit_cube()
 {
+    
     Shape out = {0};
     isize vertex_count = STATIC_ARRAY_SIZE(CUBE_VERTICES);
     isize index_count = STATIC_ARRAY_SIZE(CUBE_INDECES);
@@ -160,71 +156,24 @@ Shape shapes_make_cube()
     return out;
 }
 
-INTERNAL u32 _shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
+Shape shapes_make_cube(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset)
 {
-    u64 hashed = vertex_hash64(vertex, 0);
-
-    //try to exactly find it in the hash. will almost always iterate only once.
-    // the chance of hash colision are astronomically low.
-    isize found = hash_index_find(*hash, hashed);
-    while(found != -1)
-    {
-        isize entry = hash->entries[found].value;
-        Vertex found_vertex = vertices->data[entry];
-        bool is_equal = memcpy(&vertex, &found_vertex, sizeof found_vertex);
-        if(is_equal)
-        {
-            return (u32) entry;
-        }
-        else
-        {
-            isize finished_at = 0;
-            found = hash_index_find_next(*hash, hashed, found, &finished_at);
-        }
-    }
-
-    array_push(vertices, vertex);
-    u32 inserted_i = (u32) (vertices->size - 1);
-    hash_index_insert(hash, hashed, inserted_i);
-    return inserted_i;
+    Shape cube = shapes_make_unit_cube();
+    Mat4 transform = mat4_local_matrix(front_dir, up_dir, offset);
+    transform = mat4_scale_affine(transform, vec3_of(side_size));
+    shape_tranform(&cube, transform);
+    return cube;
 }
 
-Vertex vertex_lerp(Vertex low, Vertex high, f32 t)
+Shape shapes_make_quad(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset)
 {
-    Vertex out = {0};
-    out.pos = vec3_lerp(low.pos, high.pos, t);
-    out.uv = vec2_lerp(low.uv, high.uv, t);
-    return out;
+    Shape quad = shapes_make_unit_quad();
+    Mat4 transform = mat4_local_matrix(front_dir, up_dir, offset);
+    transform = mat4_scale_affine(transform, vec3_of(side_size));
+    shape_tranform(&quad, transform);
+    return quad;
 }
 
-void shape_deinit(Shape* shape)
-{
-    array_deinit(&shape->vertices);
-    array_deinit(&shape->indeces);
-}
-
-Shape shape_duplicate(Shape from)
-{
-    Shape out = {0};
-    array_copy(&out.vertices, from.vertices);
-    array_copy(&out.indeces, from.indeces);
-    return out;
-}
-
-void shape_tranform(Shape* shape, Mat4 transform)
-{
-    Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
-
-    for(isize i = 0; i < shape->vertices.size; i++)
-    {
-        Vertex* vertex = &shape->vertices.data[i];
-        vertex->pos = mat4_apply(transform, vertex->pos);
-        vertex->norm = mat4_apply(normal_matrix, vertex->norm);
-    }
-}
-
-//true - CW
-//false - CCW
 typedef enum Winding_Order
 {
     WINDING_ORDER_CLOCKWISE,
@@ -257,7 +206,7 @@ Winding_Order get_winding_order_index(Vertex* vertices, Triangle_Indeces trinagl
     return get_winding_order(v1, v2, v3);
 }
 
-void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side_norm, Vec3 side_tan, Vec3 offset)
+void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset)
 {
     if(iters <= 0)
         return;
@@ -279,7 +228,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
     array_reserve(&into->indeces, indeces_before + (iters) * (iters) * 2);
     array_reserve(&into->vertices, vertices_before + (iters + 1) * (iters + 1));
     
-    const Mat4 local_matrix = mat4_local_matrix(side_tan, side_norm, offset);
+    const Mat4 local_matrix = mat4_local_matrix(side_front, side_normal, offset);
     for(isize y = 0; y <= iters; y++)
     {
         f32 y_t = (f32) y / (f32) iters;
@@ -329,10 +278,10 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
     }
 }
 
-Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_norm, Vec3 side_tan, Vec3 offset)
+Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset)
 {
     Shape out = {0};
-    shapes_add_cube_sphere_side(&out, iters, radius, side_norm, side_tan, offset);
+    shapes_add_cube_sphere_side(&out, iters, radius, side_normal, side_front, offset);
     return out;
 }
 
@@ -455,4 +404,3 @@ void shapes_make_icosahedron()
     #undef Z
     #undef N
 }
-#undef E

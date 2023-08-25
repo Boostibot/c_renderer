@@ -458,7 +458,7 @@ JMAPI Mat4 mat4_sub(Mat4 a, Mat4 b)
     return result;
 }
 
-JMAPI Mat4 mat4_scale(float scalar, Mat4 mat)
+JMAPI Mat4 mat4_scale(Mat4 mat, float scalar)
 {
     Mat4 result = {0};
     result.col[0] = vec4_scale(mat.col[0], scalar);
@@ -728,17 +728,15 @@ JMAPI Mat4 mat4_rotation(Vec3 axis, float radians)
 // here: first translates and then rotatets!
 JMAPI Mat4 mat4_translate(Mat4 matrix, Vec3 offset)
 {
-    Vec4 homo_offset = vec4_homo_from_vec3(offset);
-    Vec4 last = mat4_mul_vec4(matrix, homo_offset);
-    Mat4 result = matrix;
-    result.col[3] = last;
+    Mat4 translation = mat4_translation(offset);
+    Mat4 result = mat4_mul(translation, matrix);
     return result;
 }
 
-JMAPI Mat4 mat4_rotate(Mat4 mat, Vec3 axis, float radians)
+JMAPI Mat4 mat4_rotate(Mat4 matrix, Vec3 axis, float radians)
 {
     Mat4 rotation = mat4_rotation(axis, radians);
-    Mat4 result = mat4_mul(rotation, mat);
+    Mat4 result = mat4_mul(rotation, matrix);
     return result;
 }
 
@@ -873,6 +871,35 @@ JMAPI Mat4 mat4_look_at(Vec3 camera_pos, Vec3 camera_target, Vec3 camera_up_dir)
         n.x, n.y, n.z, -vec3_dot(camera_pos, n), 
         0,   0,   0,   1
     );
+}
+
+//Represents a physics convention spehircal coordinates
+// where phi is rotation from X axis towards Z axis
+// and theta is rotation from the Y axis (up) to the hypot
+typedef struct Spherical_Vec
+{
+    f32 r;
+    f32 phi;
+    f32 theta;
+} Spherical_Vec;
+
+Spherical_Vec vec3_to_spherical(Vec3 vec)
+{
+    Spherical_Vec result = {0};
+    result.r = vec3_len(vec);
+    result.phi = atan2f(vec.x,vec.z);
+    result.theta = atan2f(vec.y, hypotf(vec.x,vec.z));
+    return result;
+}
+
+Vec3 vec3_from_spherical(Spherical_Vec spherical)
+{
+    Vec3 result = {0};
+    result.z = cosf(spherical.phi) * cosf(spherical.theta) * spherical.r;
+    result.y = sinf(spherical.theta) * spherical.r;
+    result.x = sinf(spherical.phi) * cosf(spherical.theta) * spherical.r;
+
+    return result;
 }
 
 #endif

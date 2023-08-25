@@ -67,6 +67,7 @@ void main()
     //result = diffuse_color;
     //result = vec3(fs_in.uv_coord, 0);
     //result = normal;
+    //result = texture_color;
     frag_color = vec4(result, 1.0);
     return;
 }

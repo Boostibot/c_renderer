@@ -3,31 +3,7 @@
 #include "math.h"
 #include "defines.h"
 
-typedef struct Spherical_Vec
-{
-    f32 r;
-    f32 phi;
-    f32 theta;
-} Spherical_Vec;
 
-Spherical_Vec vec3_to_spherical(Vec3 vec)
-{
-    Spherical_Vec result = {0};
-    result.r = vec3_len(vec);
-    result.phi = atan2f(vec.x,vec.z);
-    result.theta = atan2f(vec.y, hypotf(vec.x,vec.z));
-    return result;
-}
-
-Vec3 vec3_from_spherical(Spherical_Vec spherical)
-{
-    Vec3 result = {0};
-    result.z = cosf(spherical.phi) * cosf(spherical.theta) * spherical.r;
-    result.y = sinf(spherical.theta) * spherical.r;
-    result.x = sinf(spherical.phi) * cosf(spherical.theta) * spherical.r;
-
-    return result;
-}
 
 f32 vec3_p_len(Vec3 vec, f32 p)
 {
