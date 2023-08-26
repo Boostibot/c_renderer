@@ -151,5 +151,11 @@
     <None Include="shaders\skybox.vert">
       <Filter>Resource Files\shaders</Filter>
     </None>
+    <None Include="shaders\pbr.frag">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.vert">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

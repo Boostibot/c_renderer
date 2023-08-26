@@ -3,7 +3,7 @@
 #include "math.h"
 #include "defines.h"
 
-
+//useful: https://catlikecoding.com/unity/tutorials/
 
 f32 vec3_p_len(Vec3 vec, f32 p)
 {
