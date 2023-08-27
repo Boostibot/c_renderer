@@ -742,11 +742,8 @@ JMAPI Mat4 mat4_rotate(Mat4 matrix, Vec3 axis, float radians)
 
 JMAPI Mat4 mat4_scale_affine(Mat4 mat, Vec3 scale_by)
 {
-    Mat4 result = {0};
-    result.col[0] = vec4_scale(mat.col[0], scale_by.x);
-    result.col[1] = vec4_scale(mat.col[1], scale_by.y);
-    result.col[2] = vec4_scale(mat.col[2], scale_by.z);
-    result.col[3] = mat.col[3];
+    Mat4 scaling = mat4_scaling(scale_by);
+    Mat4 result = mat4_mul(scaling, mat);
     return result;
 }
 

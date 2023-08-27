@@ -901,18 +901,25 @@ typedef struct Render_Cubemap
     String_Builder name;
 } Render_Cubemap;
 
-void render_texture_deinit(Render_Texture* render);
+void render_texture_deinit(Render_Texture* render)
+{
+    if(render->texture != 0)
+        glDeleteTextures(1, &render->texture);
+    array_deinit(&render->name);
+    memset(&render, 0, sizeof(render));
+}
 
 void render_texture_init(Render_Texture* render, Bitmap bitmap, String name)
 {
     GLenum format = GL_RGB;
+    GLenum internal_format = GL_RGB;
     switch(bitmap.channels)
     {
-        case 1: format = GL_R; break;
-        case 2: format = GL_RG; break;
-        case 3: format = GL_RGB; break;
-        case 4: format = GL_RGBA; break;
-        default: format = GL_RGB; break;
+        case 1: format = GL_RED; internal_format = GL_R8; break;
+        case 2: format = GL_RG; internal_format = GL_RG8; break;
+        case 3: format = GL_RGB; internal_format = GL_RGB8; break;
+        case 4: format = GL_RGBA; internal_format = GL_RGBA8; break;
+        default: format = GL_RGB; internal_format = GL_RGB8; break;
     }
 
     render_texture_deinit(render);
@@ -925,33 +932,47 @@ void render_texture_init(Render_Texture* render, Bitmap bitmap, String name)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, GL_UNSIGNED_BYTE, bitmap.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, GL_UNSIGNED_BYTE, bitmap.data);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
 } 
 
-void render_texture_use(Render_Texture* render, isize slot)
+void render_texture_init_from_single_pixel(Render_Texture* render, Vec4 color, u8 channels, String name)
+{
+    Bitmap bitmap = {0};
+    u8 channel_values[4] = {
+        (u8) (255*CLAMP(color.x, 0, 1)), 
+        (u8) (255*CLAMP(color.y, 0, 1)), 
+        (u8) (255*CLAMP(color.z, 0, 1)), 
+        (u8) (255*CLAMP(color.w, 0, 1)), 
+    };
+
+    bitmap.data = channel_values;
+    bitmap.channels = channels;
+    bitmap.width = 1;
+    bitmap.height = 1;
+    bitmap.to_x = 1;
+    bitmap.to_y = 1;
+
+    render_texture_init(render, bitmap, name);
+}
+
+void render_texture_use(const Render_Texture* render, isize slot)
 {
     glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
     glBindTexture(GL_TEXTURE_2D, render->texture);
 }
 
-void render_texture_unuse(Render_Texture* render)
+void render_texture_unuse(const Render_Texture* render)
 {
     (void) render;
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void render_texture_deinit(Render_Texture* render)
-{
-    glDeleteTextures(1, &render->texture);
-    array_deinit(&render->name);
-    memset(&render, 0, sizeof(render));
-}
-
 void render_cubemap_deinit(Render_Cubemap* render)
 {
-    glDeleteTextures(1, &render->texture);
+    if(render->texture != 0)
+        glDeleteTextures(1, &render->texture);
     array_deinit(&render->name);
     memset(&render, 0, sizeof(render));
 }
@@ -995,13 +1016,13 @@ void render_cubemap_init(Render_Cubemap* render, const Bitmap bitmaps[6], String
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 } 
 
-void render_cubemap_use(Render_Cubemap* render, isize slot)
+void render_cubemap_use(const Render_Cubemap* render, isize slot)
 {
     glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
     glBindTexture(GL_TEXTURE_CUBE_MAP, render->texture);
 }
 
-void render_cubemap_unuse(Render_Cubemap* render)
+void render_cubemap_unuse(const Render_Cubemap* render)
 {
     (void) render;
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
@@ -1054,6 +1075,7 @@ bool render_texture_init_from_disk(Render_Texture* tetxure, String path, String 
 {
     Bitmap bitmap = {0};
     bool state = bitmap_init_from_disk(&bitmap, path, true);
+    ASSERT(state);
     render_texture_init(tetxure, bitmap, name);
     bitmap_deinit(&bitmap);
 
@@ -1240,63 +1262,117 @@ typedef struct PBR_Light
 typedef struct PBR_Params
 {
     PBR_Light lights[PBR_MAX_LIGHTS];
-
     Vec3 view_pos;
-    Vec3 albedo;
-    Vec3 reflection_at_zero_incidence;
-
-    f32 metallic;
-    f32 roughness;
-    f32 ao;
     f32 gamma;
+    f32 attentuation_strength;
 } PBR_Params;
 
-void render_mesh_draw_using_pbr(Render_Mesh mesh, GLuint blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, PBR_Params params)
+typedef struct Render_PBR_Material
 {
-    shader_use(blin_phong_shader);
+    Render_Texture texture_albedo;
+    Render_Texture texture_normal;
+    Render_Texture texture_metalic;
+    Render_Texture texture_roughness;
+    Render_Texture texture_ao;
+
+    Vec3 solid_albedo;
+    f32 solid_metallic;
+    f32 solid_roughness;
+    f32 solid_ao;
+    Vec3 reflection_at_zero_incidence;
+} Render_PBR_Material;
+
+void render_pbr_material_deinit(Render_PBR_Material* material)
+{
+    render_texture_deinit(&material->texture_albedo);
+    render_texture_deinit(&material->texture_normal);
+    render_texture_deinit(&material->texture_metalic);
+    render_texture_deinit(&material->texture_roughness);
+    render_texture_deinit(&material->texture_ao);
+    memset(material, 0, sizeof(*material));
+}
+
+void render_mesh_draw_using_pbr(Render_Mesh mesh, GLuint pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material)
+{
+    shader_use(pbr_shader);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
     Mat3 normal_matrix = mat3_from_mat4(inv);
     normal_matrix = mat3_from_mat4(model);
 
-    shader_set_mat4(blin_phong_shader, "projection", projection);
-    shader_set_mat4(blin_phong_shader, "view", view);
-    shader_set_mat4(blin_phong_shader, "model", model);
-    shader_set_mat3(blin_phong_shader, "normal_matrix", normal_matrix);
-
-    if(vec3_is_equal(params.reflection_at_zero_incidence, vec3_of(0)))
-        params.reflection_at_zero_incidence = vec3_of(0.04f);
-
-    shader_set_vec3(blin_phong_shader, "view_pos", params.view_pos);
+    //shader
+    shader_set_mat4(pbr_shader, "projection", projection);
+    shader_set_mat4(pbr_shader, "view", view);
+    shader_set_mat4(pbr_shader, "model", model);
+    shader_set_mat3(pbr_shader, "normal_matrix", normal_matrix);
 
     String_Builder name_str = {0};
     array_init_backed(&name_str, allocator_get_scratch(), 256);
     for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
     {
-        array_clear(&name_str);
         format_into(&name_str, "lights_pos[%d]", (i32)i);
-        shader_set_vec3(blin_phong_shader, cstring_from_builder(name_str), params.lights[i].pos);
+        shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].pos);
 
-        array_clear(&name_str);
         format_into(&name_str, "lights_color[%d]", (i32)i);
-        shader_set_vec3(blin_phong_shader, cstring_from_builder(name_str), params.lights[i].color);
+        shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].color);
         
-        array_clear(&name_str);
         format_into(&name_str, "lights_radius[%d]", (i32)i);
-        //shader_set_f32(blin_phong_shader, cstring_from_builder(name_str), params.lights[i].radius);
-        shader_set_f32(blin_phong_shader, cstring_from_builder(name_str), 1);
+        shader_set_f32(pbr_shader, cstring_from_builder(name_str), params->lights[i].radius);
     }
     array_deinit(&name_str);
-
-    shader_set_vec3(blin_phong_shader, "reflection_at_zero_incidence", params.reflection_at_zero_incidence);
-
-    shader_set_vec3(blin_phong_shader, "albedo", params.albedo);
     
-    shader_set_f32(blin_phong_shader, "metallic", params.metallic);
-    shader_set_f32(blin_phong_shader, "roughness", params.roughness);
-    shader_set_f32(blin_phong_shader, "ao", params.ao);
-    shader_set_f32(blin_phong_shader, "gamma", params.gamma);
+    shader_set_vec3(pbr_shader, "view_pos", params->view_pos);
+    shader_set_f32(pbr_shader, "gamma", params->gamma);
+    shader_set_f32(pbr_shader, "attentuation_strength", params->attentuation_strength);
 
+    //material
+    Vec3 reflection_at_zero_incidence = material->reflection_at_zero_incidence;
+    if(vec3_is_equal(reflection_at_zero_incidence, vec3_of(0)))
+        reflection_at_zero_incidence = vec3_of(0.04f);
+    shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
+
+    //Temp
+    bool use_textures = material->texture_albedo.texture 
+        || material->texture_normal.texture
+        || material->texture_metalic.texture
+        || material->texture_roughness.texture
+        || material->texture_ao.texture;
+    shader_set_i32(pbr_shader, "use_textures", use_textures);
+
+    if(use_textures)
+    {
+        render_texture_use(&material->texture_albedo, 0);
+        shader_set_i32(pbr_shader, "texture_albedo", 0);    
+        
+        render_texture_use(&material->texture_normal, 1);
+        shader_set_i32(pbr_shader, "texture_normal", 1);   
+        
+        render_texture_use(&material->texture_metalic, 2);
+        shader_set_i32(pbr_shader, "texture_metalic", 2);   
+        
+        render_texture_use(&material->texture_roughness, 3);
+        shader_set_i32(pbr_shader, "texture_roughness", 3);   
+        
+        render_texture_use(&material->texture_ao, 4);
+        shader_set_i32(pbr_shader, "texture_ao", 4);   
+    }
+    else
+    {
+        shader_set_vec3(pbr_shader, "solid_albedo", material->solid_albedo);
+        shader_set_f32(pbr_shader, "solid_metallic", material->solid_metallic);
+        shader_set_f32(pbr_shader, "solid_roughness", material->solid_roughness);
+        shader_set_f32(pbr_shader, "solid_ao", material->solid_ao);
+    }
+    
     render_mesh_draw(mesh);
+
+    if(use_textures)
+    {
+        render_texture_unuse(&material->texture_albedo);
+        render_texture_unuse(&material->texture_normal);
+        render_texture_unuse(&material->texture_metalic);
+        render_texture_unuse(&material->texture_roughness);
+        render_texture_unuse(&material->texture_ao);
+    }
     shader_unuse();
 }
 
@@ -1350,6 +1426,7 @@ void run_func(void* context)
     
     Render_Texture texture_floor = {0};
     Render_Texture texture_debug = {0};
+    Render_PBR_Material material_metal = {0};
 
     Render_Cubemap cubemap_skybox = {0};
 
@@ -1450,6 +1527,12 @@ void run_func(void* context)
                 STRING("resources/skybox_bottom.jpg"), 
                 STRING("resources/skybox_right.jpg"), 
                 STRING("resources/skybox_left.jpg"), STRING("skybox"));
+                
+            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
+            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_metalic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
+            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
+            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
+            render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(1), 1, STRING("rustediron2_ao"));
 
             ASSERT(load_okay);
         }
@@ -1621,16 +1704,13 @@ void run_func(void* context)
                     params.lights[i] = lights[i];
 
                 params.view_pos = game_state->camera.pos;
-                params.albedo = vec3(1, 1, 0.92f);
-
-                params.metallic = 0;
-                params.roughness = 0;
-                params.ao = 0;
                 params.gamma = game_state->settings.screen_gamma;
+                params.attentuation_strength = 0.0;
             
                 f32 spacing = 3;
+                f32 scale = 0.2f;
                 isize iters = 7;
-                Vec3 offset = {-10, 0, 10};
+                Vec3 offset = {-2/scale, 0/scale, 2/scale};
                 for(isize metalic_i = 0; metalic_i <= iters; metalic_i++)
                 {
                     for(isize rough_i = 0; rough_i <= iters; rough_i++)
@@ -1642,37 +1722,42 @@ void run_func(void* context)
                         }
 
                         f32 rough = (f32) rough_i / iters;
-                        f32 metalic = (f32) metalic_i / iters;
+                        f32 metallic = (f32) metalic_i / iters;
                     
-                        params.metallic = metalic;
-                        params.roughness = rough;
+                        Render_PBR_Material material = {0};
+                        material.solid_metallic = metallic;
+                        material.solid_roughness = rough;
+                        material.solid_albedo = vec3(1, 1, 0.92f);
+                        material.solid_ao = 0;
 
-                        Mat4 model = mat4_translation(vec3_add(offset, vec3(spacing * rough_i, spacing*metalic_i, 0)));
-                        Mat4 scaling = mat4_scaling(vec3_of(0.2f));
-                        model = mat4_mul(scaling, model);
-                        render_mesh_draw_using_pbr(render_cube_sphere, shader_pbr, projection, view, model, params);
+                        Vec3 pos = vec3(spacing * rough_i, spacing*metalic_i, 0);
+                        Mat4 model = mat4_scale_affine(mat4_translation(vec3_add(offset, pos)), vec3_of(scale));
+                        render_mesh_draw_using_pbr(render_cube_sphere, shader_pbr, projection, view, model, &params, &material);
                     }
                 }
 
+                Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.5f)), vec3(0, 2, 5));
+                render_mesh_draw_using_pbr(render_uv_sphere, shader_pbr, projection, view, model, &params, &material_metal);
             }
 
             //render light
             for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
             {
                 PBR_Light light = lights[i]; 
-                Mat4 model = mat4_scale_affine(mat4_translation(light.pos), vec3_of(light.radius));
+                Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
                 render_mesh_draw_using_solid_color(render_uv_sphere, shader_solid_color, projection, view, model, light.color);
             }
 
             //render gismos
             {
                 f32 size = 0.05f;
-                f32 length = 1;
-                f32 offset = size + 0.3f + length/2;
+                f32 length = 0.8f;
+                f32 gap = 0.2f;
+                f32 offset = gap + length/2;
 
-                Mat4 X = mat4_scale_affine(mat4_translation(vec3(offset, 0, 0)), vec3(length, size, size));
-                Mat4 Y = mat4_scale_affine(mat4_translation(vec3(0, offset, 0)), vec3(size, length, size));
-                Mat4 Z = mat4_scale_affine(mat4_translation(vec3(0, 0, offset)), vec3(size, size, length));
+                Mat4 X = mat4_translate(mat4_scaling(vec3(length, size, size)), vec3(offset, 0, 0));
+                Mat4 Y = mat4_translate(mat4_scaling(vec3(size, length, size)), vec3(0, offset, 0));
+                Mat4 Z = mat4_translate(mat4_scaling(vec3(size, size, length)), vec3(0, 0, offset));
                 Mat4 MID = mat4_scaling(vec3(size, size, size));
 
                 render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, X, vec3(1, 0, 0));
@@ -1714,7 +1799,6 @@ void run_func(void* context)
         if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
         {
             fps_display_last_update = end_frame_time;
-            array_clear(&fps_display);
             format_into(&fps_display, "Game %5d fps", (int) (1.0f/frame_time));
             glfwSetWindowTitle(window, cstring_from_builder(fps_display));
         }

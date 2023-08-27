@@ -5,7 +5,7 @@ out vec4 frag_color;
 in VS_OUT
 {
     vec3 frag_pos;
-    vec2 uv_coord;
+    vec2 uv;
     vec3 norm;
 } fs_in;
 
@@ -29,7 +29,7 @@ vec3 gamma_correct(vec3 color, float gamma)
 
 void main()
 {
-    vec3 texture_color = texture(texture_diffuse, fs_in.uv_coord).rgb;
+    vec3 texture_color = texture(texture_diffuse, fs_in.uv).rgb;
     vec3 corrected_texture_color = gamma_correct(texture_color, 1.0/gamma);
 
     vec3 diffuse_color = corrected_texture_color * light_color;
@@ -65,7 +65,7 @@ void main()
     //result = view_dir;
     //result = light_dir;
     //result = diffuse_color;
-    //result = vec3(fs_in.uv_coord, 0);
+    //result = vec3(fs_in.uv, 0);
     //result = normal;
     //result = texture_color;
     frag_color = vec4(result, 1.0);

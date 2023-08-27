@@ -4,11 +4,17 @@
 #include "string.h"
 #include <stdarg.h>
 
-EXPORT void vformat_into(String_Builder* append_to, const char* format, va_list args);
-EXPORT void vformat_into_sized(String_Builder* append_to, String format, va_list args);
+EXPORT void vformat_append_into(String_Builder* append_to, const char* format, va_list args);
+EXPORT void vformat_append_into_sized(String_Builder* append_to, String format, va_list args);
 
-EXPORT void format_into(String_Builder* append_to, const char* format, ...);
-EXPORT void format_into_sized(String_Builder* append_to, String format, ...);
+EXPORT void format_append_into(String_Builder* append_to, const char* format, ...);
+EXPORT void format_append_into_sized(String_Builder* append_to, String format, ...);
+
+EXPORT void vformat_into(String_Builder* into, const char* format, va_list args);
+EXPORT void vformat_into_sized(String_Builder* into, String format, va_list args);
+
+EXPORT void format_into(String_Builder* into, const char* format, ...);
+EXPORT void format_into_sized(String_Builder* into, String format, ...);
 
 #define CSTRING_ESCAPE(s) (s) == NULL ? "" : (s)
 
@@ -26,10 +32,9 @@ typedef long long int lld;
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_IMPL)) && !defined(LIB_FORMAT_HAS_IMPL)
 #define LIB_FORMAT_HAS_IMPL
-
     #include <stdio.h>
 
-    EXPORT void vformat_into(String_Builder* append_to, const char* format, va_list args)
+    EXPORT void vformat_append_into(String_Builder* append_to, const char* format, va_list args)
     {
         //an attempt to estimate the needed size so we dont need to call vsnprintf twice
         isize format_size = strlen(format);
@@ -53,30 +58,59 @@ typedef long long int lld;
         array_resize(append_to, base_size + count);
         return;
     }
-    EXPORT void vformat_into_sized(String_Builder* append_to, String format, va_list args)
+
+    EXPORT void vformat_append_into_sized(String_Builder* append_to, String format, va_list args)
     {
         String_Builder escaped = {0};
         array_init_backed(&escaped, allocator_get_scratch(), 1024);
         builder_append(&escaped, format);
     
-        vformat_into(append_to, cstring_from_builder(escaped), args);
+        vformat_append_into(append_to, cstring_from_builder(escaped), args);
 
         array_deinit(&escaped);
     }
 
-    EXPORT void format_into(String_Builder* append_to, const char* format, ...)
+    EXPORT void format_append_into(String_Builder* append_to, const char* format, ...)
     {
         va_list args;
         va_start(args, format);
-        vformat_into(append_to, format, args);
+        vformat_append_into(append_to, format, args);
         va_end(args);
     }
 
-    EXPORT void format_into_sized(String_Builder* append_to, String format, ...)
+    EXPORT void format_append_into_sized(String_Builder* append_to, String format, ...)
     {
         va_list args;
         va_start(args, format);
-        vformat_into_sized(append_to, format, args);
+        vformat_append_into_sized(append_to, format, args);
+        va_end(args);
+    }
+    
+    EXPORT void vformat_into(String_Builder* into, const char* format, va_list args)
+    {
+        array_clear(into);
+        vformat_append_into(into, format, args);
+    }
+
+    EXPORT void vformat_into_sized(String_Builder* into, String format, va_list args)
+    {
+        array_clear(into);
+        vformat_append_into_sized(into, format, args);
+    }
+
+    EXPORT void format_into(String_Builder* into, const char* format, ...)
+    {
+        va_list args;
+        va_start(args, format);
+        vformat_into(into, format, args);
+        va_end(args);
+    }
+
+    EXPORT void format_into_sized(String_Builder* into, String format, ...)
+    {
+        va_list args;
+        va_start(args, format);
+        vformat_into_sized(into, format, args);
         va_end(args);
     }
 

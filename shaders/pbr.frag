@@ -5,26 +5,33 @@ out vec4 frag_color;
 in VS_OUT
 {
     vec3 frag_pos;
-    vec2 uv_coord;
+    vec2 uv;
     vec3 norm;
 } fs_in;
 
-
 #define PBR_MAX_LIGHTS 4
 
-uniform vec3  albedo;
-uniform float metallic;
-uniform float roughness;
-uniform float ao;
+uniform sampler2D texture_albedo;
+uniform sampler2D texture_normal;
+uniform sampler2D texture_metallic;
+uniform sampler2D texture_roughness;
+uniform sampler2D texture_ao;
+
+uniform int use_textures;
+
+uniform vec3 solid_albedo;
+uniform float solid_metallic;
+uniform float solid_roughness;
+uniform float solid_ao;
+uniform vec3  reflection_at_zero_incidence;
+
 uniform float gamma;
+uniform float attentuation_strength;
 
 uniform vec3  view_pos;
 uniform vec3  lights_pos[PBR_MAX_LIGHTS];
 uniform vec3  lights_color[PBR_MAX_LIGHTS];
 uniform float lights_radius[PBR_MAX_LIGHTS];
-uniform vec3  reflection_at_zero_incidence;
-
-//uniform sampler2D texture_albedo;
 
 const float PI = 3.14159265359;
 
@@ -90,17 +97,10 @@ float attentuate_no_singularity(float light_distance, float light_radius)
     return result;
 }
 
-void main()
-{
-    //vec3  albedo = texture(texture_albedo, fs_in.uv_coord).rgb;
-    //float metallic;
-    //float roughness;
-    //float ao;
-    //float gamma;
 
-    vec3 albedo_color = albedo;
-    //albedo_color = gamma_correct(albedo, 1.0/gamma);
-    vec3 N = normalize(fs_in.norm); 
+vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, float ao)
+{
+    vec3 N = normal; 
     vec3 V = normalize(view_pos - fs_in.frag_pos);
 
     vec3 Lo = vec3(0.0);
@@ -114,6 +114,7 @@ void main()
         float radius      = lights_radius[i];
         //float attenuation = attentuate_square(distance, radius);
         float attenuation = attentuate_no_singularity(distance, radius);
+        attenuation = mix(1, attenuation, attentuation_strength);
         vec3 radiance     = lights_color[i] * attenuation; 
 
         float cos_theta = max(dot(H, V), 0.0);
@@ -132,8 +133,46 @@ void main()
         kD *= 1.0 - metallic;	
 
         float NdotL = max(dot(N, L), 0.0);                
-        Lo += (kD * albedo_color / PI + specular) * radiance * NdotL; 
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
     }
     
-    frag_color = vec4(Lo, 1.0);
+    return Lo;
+}
+
+vec3 get_normal_from_map()
+{
+    vec3 tangent_normal = texture(texture_normal, fs_in.uv).xyz * 2.0 - 1.0;
+
+    vec3 Q1  = dFdx(fs_in.frag_pos);
+    vec3 Q2  = dFdy(fs_in.frag_pos);
+    vec2 st1 = dFdx(fs_in.uv);
+    vec2 st2 = dFdy(fs_in.uv);
+
+    vec3 N   = normalize(fs_in.norm);
+    vec3 T  = normalize(Q1*st2.t - Q2*st1.t);
+    vec3 B  = -normalize(cross(N, T));
+    mat3 TBN = mat3(T, B, N);
+
+    return normalize(TBN * tangent_normal);
+}
+
+void main()
+{
+    vec3 albedo = gamma_correct(solid_albedo, 1.0/gamma);
+    vec3 normal = normalize(fs_in.norm);
+    float metallic = solid_metallic;
+    float roughness = solid_roughness;
+    float ao = solid_ao;
+
+    if(use_textures > 0)
+    {
+        albedo = gamma_correct(texture(texture_albedo, fs_in.uv).rgb, 1.0/gamma);
+        normal = get_normal_from_map(); //normalize(fs_in.norm); 
+        metallic  = texture(texture_metallic, fs_in.uv).r;
+        roughness = texture(texture_roughness, fs_in.uv).r;
+        ao        = texture(texture_ao, fs_in.uv).r;
+    }
+
+    vec3 color = point_light_pbr(albedo, normal, metallic, roughness, ao);
+    frag_color = vec4(color, 1.0);
 }
