@@ -618,7 +618,7 @@ int main()
     return 0;    
 }
 
-typedef struct Screen_Frame_Buffers
+typedef struct Render_Screen_Frame_Buffers
 {
     GLuint frame_buff;
     GLuint screen_color_buff;
@@ -627,12 +627,10 @@ typedef struct Screen_Frame_Buffers
     i32 width;
     i32 height;
 
-    //used so that this becomes visible to debug_allocator
-    // and thus we prevent leaking
     String_Builder name;
-} Screen_Frame_Buffers;
+} Render_Screen_Frame_Buffers;
 
-void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_deinit(Render_Screen_Frame_Buffers* buffer)
 {
     glBindVertexArray(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -646,15 +644,15 @@ void screen_frame_buffers_deinit(Screen_Frame_Buffers* buffer)
     memset(buffer, 0, sizeof *buffer);
 }
 
-void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 height)
+void render_screen_frame_buffers_init(Render_Screen_Frame_Buffers* buffer, i32 width, i32 height)
 {
-    screen_frame_buffers_deinit(buffer);
+    render_screen_frame_buffers_deinit(buffer);
 
-    LOG_INFO("RENDR", "screen_frame_buffers_init %-4d x %-4d", width, height);
+    LOG_INFO("RENDR", "render_screen_frame_buffers_init %-4d x %-4d", width, height);
     
     buffer->width = width;
     buffer->height = height;
-    buffer->name = builder_from_cstring("Screen_Frame_Buffers");
+    buffer->name = builder_from_cstring("Render_Screen_Frame_Buffers");
 
     //@NOTE: 
     //The lack of the following line caused me 2 hours of debugging why my application crashed due to NULL ptr 
@@ -672,7 +670,7 @@ void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 heig
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // attach it to currently bound screen_frame_buffers object
+    // attach it to currently bound render_screen_frame_buffers object
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer->screen_color_buff, 0);
 
     glGenRenderbuffers(1, &buffer->render_buff);
@@ -689,7 +687,7 @@ void screen_frame_buffers_init(Screen_Frame_Buffers* buffer, i32 width, i32 heig
     glBindFramebuffer(GL_FRAMEBUFFER, 0); 
 }
 
-void screen_frame_buffers_render_begin(Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_render_begin(Render_Screen_Frame_Buffers* buffer)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff); 
         
@@ -699,13 +697,13 @@ void screen_frame_buffers_render_begin(Screen_Frame_Buffers* buffer)
     glFrontFace(GL_CW); 
 }
 
-void screen_frame_buffers_render_end(Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_render_end(Render_Screen_Frame_Buffers* buffer)
 {
     (void) buffer;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void screen_frame_buffers_post_process_begin(Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_post_process_begin(Render_Screen_Frame_Buffers* buffer)
 {
     (void) buffer;
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
@@ -713,13 +711,13 @@ void screen_frame_buffers_post_process_begin(Screen_Frame_Buffers* buffer)
     glDisable(GL_CULL_FACE);
 }
 
-void screen_frame_buffers_post_process_end(Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_post_process_end(Render_Screen_Frame_Buffers* buffer)
 {
     (void) buffer;
     //nothing
 }
 
-typedef struct Multi_Screen_Frame_Buffers
+typedef struct Render_Screen_Frame_Buffers_MSAA
 {
     GLuint frame_buff;
     GLuint texture_color_multisampled_buff;
@@ -733,9 +731,9 @@ typedef struct Multi_Screen_Frame_Buffers
     //used so that this becomes visible to debug_allocator
     // and thus we prevent leaking
     String_Builder name;
-} Multi_Screen_Frame_Buffers;
+} Render_Screen_Frame_Buffers_MSAA;
 
-void multi_screen_frame_buffers_deinit(Multi_Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_msaa_deinit(Render_Screen_Frame_Buffers_MSAA* buffer)
 {
     glBindVertexArray(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -751,16 +749,16 @@ void multi_screen_frame_buffers_deinit(Multi_Screen_Frame_Buffers* buffer)
     memset(buffer, 0, sizeof *buffer);
 }
 
-bool multi_screen_frame_buffers_init(Multi_Screen_Frame_Buffers* buffer, i32 width, i32 height, i32 sample_count)
+bool render_screen_frame_buffers_msaa_init(Render_Screen_Frame_Buffers_MSAA* buffer, i32 width, i32 height, i32 sample_count)
 {
-    multi_screen_frame_buffers_deinit(buffer);
-    LOG_INFO("RENDR", "multi_screen_frame_buffers_init %-4d x %-4d samples: %d", width, height, sample_count);
+    render_screen_frame_buffers_msaa_deinit(buffer);
+    LOG_INFO("RENDR", "render_screen_frame_buffers_msaa_init %-4d x %-4d samples: %d", width, height, sample_count);
 
     glBindVertexArray(0);
 
     buffer->width = width;
     buffer->height = height;
-    buffer->name = builder_from_cstring("Multi_Screen_Frame_Buffers");
+    buffer->name = builder_from_cstring("Render_Screen_Frame_Buffers_MSAA");
 
     bool state = true;
     glGenFramebuffers(1, &buffer->frame_buff);
@@ -811,7 +809,7 @@ bool multi_screen_frame_buffers_init(Multi_Screen_Frame_Buffers* buffer, i32 wid
     return false;
 }
 
-void multi_screen_frame_buffers_render_begin(Multi_Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_msaa_render_begin(Render_Screen_Frame_Buffers_MSAA* buffer)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff); 
         
@@ -821,13 +819,13 @@ void multi_screen_frame_buffers_render_begin(Multi_Screen_Frame_Buffers* buffer)
     glFrontFace(GL_CW); 
 }
 
-void multi_screen_frame_buffers_render_end(Multi_Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_msaa_render_end(Render_Screen_Frame_Buffers_MSAA* buffer)
 {
     (void) buffer;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void multi_screen_frame_buffers_post_process_begin(Multi_Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_msaa_post_process_begin(Render_Screen_Frame_Buffers_MSAA* buffer)
 {
     // 2. now blit multisampled buffer(s) to normal colorbuffer of intermediate FBO. Image is stored in screenTexture
     glBindFramebuffer(GL_READ_FRAMEBUFFER, buffer->frame_buff);
@@ -839,7 +837,7 @@ void multi_screen_frame_buffers_post_process_begin(Multi_Screen_Frame_Buffers* b
     glDisable(GL_CULL_FACE);
 }
 
-void multi_screen_frame_buffers_post_process_end(Multi_Screen_Frame_Buffers* buffer)
+void render_screen_frame_buffers_msaa_post_process_end(Render_Screen_Frame_Buffers_MSAA* buffer)
 {
     (void) buffer;
 }
@@ -872,6 +870,7 @@ typedef struct Bitmap
     i32 width;
     i32 height;
     u8 channels;
+    bool is_floats;
 
     i32 from_x;
     i32 to_x;
@@ -911,15 +910,15 @@ void render_texture_deinit(Render_Texture* render)
 
 void render_texture_init(Render_Texture* render, Bitmap bitmap, String name)
 {
+    GLenum bitmap_format = bitmap.is_floats ? GL_FLOAT : GL_UNSIGNED_BYTE;
     GLenum format = GL_RGB;
-    GLenum internal_format = GL_RGB;
     switch(bitmap.channels)
     {
-        case 1: format = GL_RED; internal_format = GL_R8; break;
-        case 2: format = GL_RG; internal_format = GL_RG8; break;
-        case 3: format = GL_RGB; internal_format = GL_RGB8; break;
-        case 4: format = GL_RGBA; internal_format = GL_RGBA8; break;
-        default: format = GL_RGB; internal_format = GL_RGB8; break;
+        case 1: format = GL_RED; break;
+        case 2: format = GL_RG; break;
+        case 3: format = GL_RGB; break;
+        case 4: format = GL_RGBA; break;
+        default: format = GL_RGB; break;
     }
 
     render_texture_deinit(render);
@@ -932,8 +931,36 @@ void render_texture_init(Render_Texture* render, Bitmap bitmap, String name)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, GL_UNSIGNED_BYTE, bitmap.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, bitmap_format, bitmap.data);
     glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+} 
+
+void render_texture_init_hdr(Render_Texture* render, Bitmap bitmap, String name)
+{
+    GLenum bitmap_format = bitmap.is_floats ? GL_FLOAT : GL_UNSIGNED_BYTE;
+    GLenum format = GL_RGB;
+    switch(bitmap.channels)
+    {
+        case 1: format = GL_RED; break;
+        case 2: format = GL_RG; break;
+        case 3: format = GL_RGB; break;
+        case 4: format = GL_RGBA; break;
+        default: format = GL_RGB; break;
+    }
+
+    render_texture_deinit(render);
+    render->height = bitmap.height;
+    render->width = bitmap.width;
+    render->name = builder_from_string(name);
+    glGenTextures(1, &render->texture);
+    glBindTexture(GL_TEXTURE_2D, render->texture);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, bitmap_format, bitmap.data);
     glBindTexture(GL_TEXTURE_2D, 0);
 } 
 
@@ -1035,7 +1062,10 @@ void bitmap_deinit(Bitmap* bitmap)
     memset(bitmap, 0, sizeof *bitmap);
 }
 
-bool bitmap_init_from_disk(Bitmap* bitmap, String path, bool flip)
+#define BITMAP_FROM_DISK_FLIP 1
+#define BITMAP_FROM_DISK_FLOATS 2
+
+bool bitmap_init_from_disk(Bitmap* bitmap, String path, int flags)
 {
     bitmap_deinit(bitmap);
     bitmap->name = builder_from_string(path);
@@ -1043,6 +1073,9 @@ bool bitmap_init_from_disk(Bitmap* bitmap, String path, bool flip)
     String_Builder escaped = {0};
     array_init_backed(&escaped, allocator_get_scratch(), 256);
     builder_append(&escaped, path);
+
+    bool flip = !!(flags & BITMAP_FROM_DISK_FLIP);
+    bool is_floats = !!(flags & BITMAP_FROM_DISK_FLOATS);
 
     // load and generate the texture
     int width = 0;
@@ -1057,6 +1090,7 @@ bool bitmap_init_from_disk(Bitmap* bitmap, String path, bool flip)
         bitmap->width = width;
         bitmap->height = height;
         bitmap->channels = (u8) channels;
+        bitmap->is_floats = is_floats;
 
         bitmap->to_x = width;
         bitmap->to_y = height;
@@ -1074,13 +1108,25 @@ bool bitmap_init_from_disk(Bitmap* bitmap, String path, bool flip)
 bool render_texture_init_from_disk(Render_Texture* tetxure, String path, String name)
 {
     Bitmap bitmap = {0};
-    bool state = bitmap_init_from_disk(&bitmap, path, true);
+    bool state = bitmap_init_from_disk(&bitmap, path, BITMAP_FROM_DISK_FLIP);
     ASSERT(state);
     render_texture_init(tetxure, bitmap, name);
     bitmap_deinit(&bitmap);
 
     return state;
 }
+
+bool render_texture_init_hdr_from_disk(Render_Texture* tetxure, String path, String name)
+{
+    Bitmap bitmap = {0};
+    bool state = bitmap_init_from_disk(&bitmap, path, BITMAP_FROM_DISK_FLIP | BITMAP_FROM_DISK_FLOATS);
+    ASSERT(state);
+    render_texture_init_hdr(tetxure, bitmap, name);
+    bitmap_deinit(&bitmap);
+
+    return state;
+}
+
 
 bool render_cubemap_init_from_disk(Render_Cubemap* render, String front, String back, String top, String bot, String right, String left, String name)
 {
@@ -1089,7 +1135,7 @@ bool render_cubemap_init_from_disk(Render_Cubemap* render, String front, String 
 
     bool state = true;
     for (isize i = 0; i < 6; i++)
-        state = state && bitmap_init_from_disk(&face_bitmaps[i], face_paths[i], false);
+        state = state && bitmap_init_from_disk(&face_bitmaps[i], face_paths[i], 0);
 
     render_cubemap_init(render, face_bitmaps, name);
     
@@ -1151,41 +1197,293 @@ void render_mesh_draw(Render_Mesh mesh)
     glBindVertexArray(0);
 }
 
-void render_mesh_draw_using_solid_color(Render_Mesh mesh, GLuint shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+typedef struct Render_Capture_Buffers
 {
-    shader_use(shader_depth_color);
-    shader_set_vec3(shader_depth_color, "color", color);
-    shader_set_mat4(shader_depth_color, "projection", projection);
-    shader_set_mat4(shader_depth_color, "view", view);
-    shader_set_mat4(shader_depth_color, "model", model);
-    render_mesh_draw(mesh);
-    shader_unuse();
+    GLuint frame_buff;
+    GLuint render_buff;
+
+    String_Builder name;
+} Render_Capture_Buffers;
+
+void render_capture_buffers_deinit(Render_Capture_Buffers* capture)
+{
+    glDeleteFramebuffers(1, &capture->frame_buff);
+    glDeleteRenderbuffers(1, &capture->render_buff);
+    array_deinit(&capture->name);
+    memset(capture, 0, sizeof(*capture));
 }
 
-void render_mesh_draw_using_depth_color(Render_Mesh mesh, GLuint shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+void render_capture_buffers_init(Render_Capture_Buffers* capture, i32 prealloc_width, i32 prealloc_height)
 {
-    shader_use(shader_depth_color);
-    shader_set_vec3(shader_depth_color, "color", color);
-    shader_set_mat4(shader_depth_color, "projection", projection);
-    shader_set_mat4(shader_depth_color, "view", view);
-    shader_set_mat4(shader_depth_color, "model", model);
-    render_mesh_draw(mesh);
-    shader_unuse();
+    render_capture_buffers_deinit(capture);
+    capture->name = builder_from_cstring("Render_Capture_Buffers");
+
+    glGenFramebuffers(1, &capture->frame_buff);
+    glGenRenderbuffers(1, &capture->render_buff);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
+    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, prealloc_width, prealloc_height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, capture->render_buff);
+    
+    TEST_MSG(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "frame buffer creation failed!");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void render_mesh_draw_using_uv_debug(Render_Mesh mesh, GLuint uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
+INTERNAL void _make_capture_projections(Mat4* capture_projection, Mat4 capture_views[6])
 {
-    shader_use(uv_shader_debug);
+    *capture_projection = mat4_perspective_projection(TAU/4, 1.0f, 0.1f, 10.0f);
+    capture_views[0] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_views[1] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3(-1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_views[2] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  1.0f,  0.0f), vec3(0.0f,  0.0f,  1.0f));
+    capture_views[3] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f, -1.0f,  0.0f), vec3(0.0f,  0.0f, -1.0f));
+    capture_views[4] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f,  1.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_views[5] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f, -1.0f), vec3(0.0f, -1.0f,  0.0f));
+}
+
+
+void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cubemap_environment, i32 width, i32 height, const Render_Texture* environment_tetxure,
+    const Render_Capture_Buffers* capture, const Render_Shader* shader_equi_to_cubemap, Render_Mesh cube_mesh)
+{
+    render_cubemap_deinit(cubemap_environment);
+    cubemap_environment->name = builder_from_cstring("environment");
+
+    glGenTextures(1, &cubemap_environment->texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_environment->texture);
+    for (u32 i = 0; i < 6; ++i)
+    {
+        cubemap_environment->widths[i] = width;
+        cubemap_environment->heights[i] = height;
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, NULL);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // pbr: convert HDR equirectangular environment map to cubemap equivalent
+    // ----------------------------------------------------------------------
+    glViewport(0, 0, width, height); // don't forget to configure the viewport to the capture dimensions.
+    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
+    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    
+    Mat4 capture_projection = {0};
+    Mat4 capture_views[6] = {0};
+    _make_capture_projections(&capture_projection, capture_views);
+
+    render_shader_use(shader_equi_to_cubemap);
+    render_shader_set_mat4(shader_equi_to_cubemap, "projection", capture_projection);
+    render_texture_use(environment_tetxure, 0);
+    render_shader_set_i32(shader_equi_to_cubemap, "equirectangularMap", 0);
+
+    for (u32 i = 0; i < 6; ++i)
+    {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_environment->texture, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        render_shader_set_mat4(shader_equi_to_cubemap, "view", capture_views[i]);
+        render_mesh_draw(cube_mesh);
+    }
+    render_shader_unuse(shader_equi_to_cubemap);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    
+    // then let OpenGL generate mipmaps from first mip face (combatting visible dots artifact)
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_environment->texture);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+}
+
+void render_cubemap_init_irradiance_from_environment(
+    Render_Cubemap* cubemap_irradiance, i32 width, i32 height, f32 sample_delta, const Render_Cubemap* cubemap_environment,
+    const Render_Capture_Buffers* capture, const Render_Shader* shader_irradiance_gen, Render_Mesh cube_mesh)
+{
+    // pbr: create an irradiance cubemap, and re-scale capture FBO to irradiance scale.
+    // --------------------------------------------------------------------------------
+    render_cubemap_deinit(cubemap_irradiance);
+    cubemap_irradiance->name = builder_from_cstring("irradiance");
+
+    glGenTextures(1, &cubemap_irradiance->texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_irradiance->texture);
+    for (u32 i = 0; i < 6; ++i)
+    {
+        cubemap_irradiance->widths[i] = width;
+        cubemap_irradiance->heights[i] = height;
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, NULL);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
+    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+
+    // pbr: solve diffuse integral by convolution to create an irradiance (cube)map.
+    // -----------------------------------------------------------------------------
+    
+    Mat4 capture_projection = {0};
+    Mat4 capture_views[6] = {0};
+    _make_capture_projections(&capture_projection, capture_views);
+
+    render_shader_use(shader_irradiance_gen);
+    render_shader_set_mat4(shader_irradiance_gen, "projection", capture_projection);
+    render_shader_set_f32(shader_irradiance_gen, "sample_delta", sample_delta);
+    render_cubemap_use(cubemap_environment, 0);
+    render_shader_set_i32(shader_irradiance_gen, "environmentMap", 0);
+
+    glViewport(0, 0, width, height); // don't forget to configure the viewport to the capture dimensions.
+    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
+    for (u32 i = 0; i < 6; ++i)
+    {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_irradiance->texture, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
+        render_shader_set_mat4(shader_irradiance_gen, "view", capture_views[i]);
+        render_mesh_draw(cube_mesh);
+    }
+    render_cubemap_unuse(cubemap_environment);
+    render_shader_unuse(shader_irradiance_gen);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_cubemap_init_prefilter_from_environment(
+    Render_Cubemap* cubemap_irradiance, i32 width, i32 height, const Render_Cubemap* cubemap_environment,
+    const Render_Capture_Buffers* capture, const Render_Shader* shader_prefilter, Render_Mesh cube_mesh)
+{
+    // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
+    // --------------------------------------------------------------------------------
+    render_cubemap_deinit(cubemap_irradiance);
+    cubemap_irradiance->name = builder_from_cstring("pbr_prefilter");
+
+    glGenTextures(1, &cubemap_irradiance->texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_irradiance->texture);
+    for (u32 i = 0; i < 6; ++i)
+    {
+        cubemap_irradiance->widths[i] = width;
+        cubemap_irradiance->heights[i] = height;
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, NULL);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // be sure to set minification filter to mip_linear 
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // generate mipmaps for the cubemap so OpenGL automatically allocates the required memory.
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+    // pbr: run a quasi monte-carlo simulation on the environment lighting to create a prefilter (cube)map.
+    // ----------------------------------------------------------------------------------------------------
+    Mat4 capture_projection = {0};
+    Mat4 capture_views[6] = {0};
+    _make_capture_projections(&capture_projection, capture_views);
+
+    render_shader_use(shader_prefilter);
+    render_shader_set_mat4(shader_prefilter, "projection", capture_projection);
+    render_cubemap_use(cubemap_environment, 0);
+    render_shader_set_i32(shader_prefilter, "environmentMap", 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
+    u32 maxMipLevels = 5; //@TODO: hoist out
+    for (u32 mip = 0; mip < maxMipLevels; ++mip)
+    {
+        // reisze framebuffer according to mip-level size.
+        i32 mipWidth  = (i32)(width * pow(0.5, mip));
+        i32 mipHeight = (i32)(height * pow(0.5, mip));
+        glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
+        glViewport(0, 0, mipWidth, mipHeight);
+
+        f32 roughness = (f32)mip / (f32)(maxMipLevels - 1);
+        render_shader_set_f32(shader_prefilter, "roughness", roughness);
+        for (u32 i = 0; i < 6; ++i)
+        {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_irradiance->texture, mip);
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            
+            render_shader_set_mat4(shader_prefilter, "view", capture_views[i]);
+            render_mesh_draw(cube_mesh);
+        }
+    }
+    render_cubemap_unuse(cubemap_environment);
+    render_shader_unuse(shader_prefilter);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_texture_init_BRDF_LUT(
+    Render_Texture* cubemap_irradiance, i32 width, i32 height,
+    const Render_Capture_Buffers* capture, const Render_Shader* shader_brdf_lut, Render_Mesh screen_quad_mesh)
+{
+    // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
+    // --------------------------------------------------------------------------------
+    render_texture_deinit(cubemap_irradiance);
+    cubemap_irradiance->height = height;
+    cubemap_irradiance->width = width;
+    cubemap_irradiance->name = builder_from_cstring("BRDF_LUT");
+
+    glGenTextures(1, &cubemap_irradiance->texture);
+    glBindTexture(GL_TEXTURE_2D, cubemap_irradiance->texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, height, 0, GL_RG, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // then re-configure capture framebuffer object and render screen-space quad with BRDF shader.
+    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
+    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cubemap_irradiance->texture, 0);
+
+    glViewport(0, 0, width, height);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    render_shader_use(shader_brdf_lut);
+    render_mesh_draw(screen_quad_mesh);
+    render_shader_unuse(shader_brdf_lut);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+{
+    render_shader_use(shader_depth_color);
+    render_shader_set_vec3(shader_depth_color, "color", color);
+    render_shader_set_mat4(shader_depth_color, "projection", projection);
+    render_shader_set_mat4(shader_depth_color, "view", view);
+    render_shader_set_mat4(shader_depth_color, "model", model);
+    render_mesh_draw(mesh);
+    render_shader_unuse(shader_depth_color);
+}
+
+void render_mesh_draw_using_depth_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+{
+    render_shader_use(shader_depth_color);
+    render_shader_set_vec3(shader_depth_color, "color", color);
+    render_shader_set_mat4(shader_depth_color, "projection", projection);
+    render_shader_set_mat4(shader_depth_color, "view", view);
+    render_shader_set_mat4(shader_depth_color, "model", model);
+    render_mesh_draw(mesh);
+    render_shader_unuse(shader_depth_color);
+}
+
+void render_mesh_draw_using_uv_debug(Render_Mesh mesh, const Render_Shader* uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
+{
+    render_shader_use(uv_shader_debug);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
     Mat3 normal_matrix = mat3_from_mat4(inv);
     normal_matrix = mat3_from_mat4(model);
 
-    shader_set_mat4(uv_shader_debug, "projection", projection);
-    shader_set_mat4(uv_shader_debug, "view", view);
-    shader_set_mat4(uv_shader_debug, "model", model);
-    shader_set_mat3(uv_shader_debug, "normal_matrix", normal_matrix);
+    render_shader_set_mat4(uv_shader_debug, "projection", projection);
+    render_shader_set_mat4(uv_shader_debug, "view", view);
+    render_shader_set_mat4(uv_shader_debug, "model", model);
+    render_shader_set_mat3(uv_shader_debug, "normal_matrix", normal_matrix);
     render_mesh_draw(mesh);
-    shader_unuse();
+    render_shader_unuse(uv_shader_debug);
 }
 
 typedef struct Blinn_Phong_Params
@@ -1199,57 +1497,56 @@ typedef struct Blinn_Phong_Params
     f32 gamma;
 } Blinn_Phong_Params;
 
-void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, GLuint blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Render_Texture diffuse)
+void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, const Render_Shader* blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Render_Texture diffuse)
 {
-    shader_use(blin_phong_shader);
+    render_shader_use(blin_phong_shader);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
     Mat3 normal_matrix = mat3_from_mat4(inv);
     normal_matrix = mat3_from_mat4(model);
 
-    shader_set_mat4(blin_phong_shader, "projection", projection);
-    shader_set_mat4(blin_phong_shader, "view", view);
-    shader_set_mat4(blin_phong_shader, "model", model);
-    shader_set_mat3(blin_phong_shader, "normal_matrix", normal_matrix);
+    render_shader_set_mat4(blin_phong_shader, "projection", projection);
+    render_shader_set_mat4(blin_phong_shader, "view", view);
+    render_shader_set_mat4(blin_phong_shader, "model", model);
+    render_shader_set_mat3(blin_phong_shader, "normal_matrix", normal_matrix);
 
-    shader_set_vec3(blin_phong_shader, "view_pos", view_pos);
-    shader_set_vec3(blin_phong_shader, "light_pos", light_pos);
-    shader_set_vec3(blin_phong_shader, "light_color", light_color);
+    render_shader_set_vec3(blin_phong_shader, "view_pos", view_pos);
+    render_shader_set_vec3(blin_phong_shader, "light_pos", light_pos);
+    render_shader_set_vec3(blin_phong_shader, "light_color", light_color);
     
-    shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    shader_set_f32(blin_phong_shader, "light_specular_strength", params.light_specular_strength);
-    shader_set_f32(blin_phong_shader, "light_specular_sharpness", params.light_specular_sharpness);
-    shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
-    shader_set_f32(blin_phong_shader, "gamma", params.gamma);
+    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
+    render_shader_set_f32(blin_phong_shader, "light_specular_strength", params.light_specular_strength);
+    render_shader_set_f32(blin_phong_shader, "light_specular_sharpness", params.light_specular_sharpness);
+    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
+    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
+    render_shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
+    render_shader_set_f32(blin_phong_shader, "gamma", params.gamma);
 
     render_texture_use(&diffuse, 0);
-    shader_set_i32(blin_phong_shader, "texture_diffuse", 0);
+    render_shader_set_i32(blin_phong_shader, "texture_diffuse", 0);
     
     render_mesh_draw(mesh);
     render_texture_unuse(&diffuse);
-    shader_unuse();
+    render_shader_unuse(blin_phong_shader);
 }
 
-void render_mesh_draw_using_skybox(Render_Mesh mesh, GLuint skybox_shader, Mat4 projection, Mat4 view, Mat4 model, f32 gamma, Render_Cubemap skybox)
+void render_mesh_draw_using_skybox(Render_Mesh mesh, const Render_Shader* skybox_shader, Mat4 projection, Mat4 view, Mat4 model, f32 gamma, Render_Cubemap skybox)
 {
     glDepthFunc(GL_LEQUAL);
-    shader_use(skybox_shader);
-    shader_set_mat4(skybox_shader, "projection", projection);
-    shader_set_mat4(skybox_shader, "view", view);
-    shader_set_mat4(skybox_shader, "model", model);
-    shader_set_f32(skybox_shader, "gamma", gamma);
+    render_shader_use(skybox_shader);
+    render_shader_set_mat4(skybox_shader, "projection", projection);
+    render_shader_set_mat4(skybox_shader, "view", view);
+    render_shader_set_mat4(skybox_shader, "model", model);
+    render_shader_set_f32(skybox_shader, "gamma", gamma);
     render_mesh_draw(mesh);
     
     render_cubemap_use(&skybox, 0);
-    shader_set_i32(skybox_shader, "cubemap_diffuse", 0);
+    render_shader_set_i32(skybox_shader, "cubemap_diffuse", 0);
     
     render_mesh_draw(mesh);
     render_cubemap_unuse(&skybox);
-    shader_unuse();
+    render_shader_unuse(skybox_shader);
     glDepthFunc(GL_LESS);
 }
-
 
 #define PBR_MAX_LIGHTS 4
 typedef struct PBR_Light
@@ -1271,7 +1568,7 @@ typedef struct Render_PBR_Material
 {
     Render_Texture texture_albedo;
     Render_Texture texture_normal;
-    Render_Texture texture_metalic;
+    Render_Texture texture_metallic;
     Render_Texture texture_roughness;
     Render_Texture texture_ao;
 
@@ -1286,81 +1583,81 @@ void render_pbr_material_deinit(Render_PBR_Material* material)
 {
     render_texture_deinit(&material->texture_albedo);
     render_texture_deinit(&material->texture_normal);
-    render_texture_deinit(&material->texture_metalic);
+    render_texture_deinit(&material->texture_metallic);
     render_texture_deinit(&material->texture_roughness);
     render_texture_deinit(&material->texture_ao);
     memset(material, 0, sizeof(*material));
 }
 
-void render_mesh_draw_using_pbr(Render_Mesh mesh, GLuint pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material)
+void render_mesh_draw_using_pbr(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material)
 {
-    shader_use(pbr_shader);
+    render_shader_use(pbr_shader);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
     Mat3 normal_matrix = mat3_from_mat4(inv);
     normal_matrix = mat3_from_mat4(model);
 
     //shader
-    shader_set_mat4(pbr_shader, "projection", projection);
-    shader_set_mat4(pbr_shader, "view", view);
-    shader_set_mat4(pbr_shader, "model", model);
-    shader_set_mat3(pbr_shader, "normal_matrix", normal_matrix);
+    render_shader_set_mat4(pbr_shader, "projection", projection);
+    render_shader_set_mat4(pbr_shader, "view", view);
+    render_shader_set_mat4(pbr_shader, "model", model);
+    render_shader_set_mat3(pbr_shader, "normal_matrix", normal_matrix);
 
     String_Builder name_str = {0};
     array_init_backed(&name_str, allocator_get_scratch(), 256);
     for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
     {
         format_into(&name_str, "lights_pos[%d]", (i32)i);
-        shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].pos);
+        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].pos);
 
         format_into(&name_str, "lights_color[%d]", (i32)i);
-        shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].color);
+        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].color);
         
         format_into(&name_str, "lights_radius[%d]", (i32)i);
-        shader_set_f32(pbr_shader, cstring_from_builder(name_str), params->lights[i].radius);
+        render_shader_set_f32(pbr_shader, cstring_from_builder(name_str), params->lights[i].radius);
     }
     array_deinit(&name_str);
     
-    shader_set_vec3(pbr_shader, "view_pos", params->view_pos);
-    shader_set_f32(pbr_shader, "gamma", params->gamma);
-    shader_set_f32(pbr_shader, "attentuation_strength", params->attentuation_strength);
+    render_shader_set_vec3(pbr_shader, "view_pos", params->view_pos);
+    render_shader_set_f32(pbr_shader, "gamma", params->gamma);
+    render_shader_set_f32(pbr_shader, "attentuation_strength", params->attentuation_strength);
 
     //material
     Vec3 reflection_at_zero_incidence = material->reflection_at_zero_incidence;
     if(vec3_is_equal(reflection_at_zero_incidence, vec3_of(0)))
         reflection_at_zero_incidence = vec3_of(0.04f);
-    shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
+    render_shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
 
     //Temp
     bool use_textures = material->texture_albedo.texture 
         || material->texture_normal.texture
-        || material->texture_metalic.texture
+        || material->texture_metallic.texture
         || material->texture_roughness.texture
         || material->texture_ao.texture;
-    shader_set_i32(pbr_shader, "use_textures", use_textures);
+    render_shader_set_i32(pbr_shader, "use_textures", use_textures);
 
     if(use_textures)
     {
         render_texture_use(&material->texture_albedo, 0);
-        shader_set_i32(pbr_shader, "texture_albedo", 0);    
+        render_shader_set_i32(pbr_shader, "texture_albedo", 0);    
         
         render_texture_use(&material->texture_normal, 1);
-        shader_set_i32(pbr_shader, "texture_normal", 1);   
+        render_shader_set_i32(pbr_shader, "texture_normal", 1);   
         
-        render_texture_use(&material->texture_metalic, 2);
-        shader_set_i32(pbr_shader, "texture_metalic", 2);   
+        render_texture_use(&material->texture_metallic, 2);
+        render_shader_set_i32(pbr_shader, "texture_metallic", 2);   
         
         render_texture_use(&material->texture_roughness, 3);
-        shader_set_i32(pbr_shader, "texture_roughness", 3);   
+        render_shader_set_i32(pbr_shader, "texture_roughness", 3);   
         
         render_texture_use(&material->texture_ao, 4);
-        shader_set_i32(pbr_shader, "texture_ao", 4);   
+        render_shader_set_i32(pbr_shader, "texture_ao", 4);   
     }
     else
     {
-        shader_set_vec3(pbr_shader, "solid_albedo", material->solid_albedo);
-        shader_set_f32(pbr_shader, "solid_metallic", material->solid_metallic);
-        shader_set_f32(pbr_shader, "solid_roughness", material->solid_roughness);
-        shader_set_f32(pbr_shader, "solid_ao", material->solid_ao);
+        render_shader_set_vec3(pbr_shader, "solid_albedo", material->solid_albedo);
+        render_shader_set_f32(pbr_shader, "solid_metallic", material->solid_metallic);
+        render_shader_set_f32(pbr_shader, "solid_roughness", material->solid_roughness);
+        render_shader_set_f32(pbr_shader, "solid_ao", material->solid_ao);
     }
     
     render_mesh_draw(mesh);
@@ -1369,13 +1666,132 @@ void render_mesh_draw_using_pbr(Render_Mesh mesh, GLuint pbr_shader, Mat4 projec
     {
         render_texture_unuse(&material->texture_albedo);
         render_texture_unuse(&material->texture_normal);
-        render_texture_unuse(&material->texture_metalic);
+        render_texture_unuse(&material->texture_metallic);
         render_texture_unuse(&material->texture_roughness);
         render_texture_unuse(&material->texture_ao);
     }
-    shader_unuse();
+    render_shader_unuse(pbr_shader);
 }
 
+
+void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material, 
+    const Render_Cubemap* environment, const Render_Cubemap* irradience, const Render_Cubemap* prefilter, const Render_Texture* brdf_lut)
+{
+    render_shader_use(pbr_shader);
+    Mat4 inv = mat4_inverse_nonuniform_scale(model);
+    Mat3 normal_matrix = mat3_from_mat4(inv);
+    normal_matrix = mat3_from_mat4(model);
+
+    (void) environment;
+    (void) prefilter;
+    (void) brdf_lut;
+
+    //shader
+    render_shader_set_mat4(pbr_shader, "projection", projection);
+    render_shader_set_mat4(pbr_shader, "view", view);
+    render_shader_set_mat4(pbr_shader, "model", model);
+    render_shader_set_mat3(pbr_shader, "normal_matrix", normal_matrix);
+
+    String_Builder name_str = {0};
+    array_init_backed(&name_str, allocator_get_scratch(), 256);
+    for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
+    {
+        format_into(&name_str, "lights_pos[%d]", (i32)i);
+        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].pos);
+
+        format_into(&name_str, "lights_color[%d]", (i32)i);
+        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].color);
+        
+        format_into(&name_str, "lights_radius[%d]", (i32)i);
+        render_shader_set_f32(pbr_shader, cstring_from_builder(name_str), params->lights[i].radius);
+    }
+    array_deinit(&name_str);
+    
+    render_shader_set_vec3(pbr_shader, "view_pos", params->view_pos);
+    render_shader_set_f32(pbr_shader, "gamma", params->gamma);
+    render_shader_set_f32(pbr_shader, "attentuation_strength", params->attentuation_strength);
+
+    //material
+    Vec3 reflection_at_zero_incidence = material->reflection_at_zero_incidence;
+    if(vec3_is_equal(reflection_at_zero_incidence, vec3_of(0)))
+        reflection_at_zero_incidence = vec3_of(0.04f);
+    render_shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
+     
+    i32 slot = 0;
+    render_cubemap_use(irradience, slot);
+    render_shader_set_i32(pbr_shader, "cubemap_irradiance", slot++);  
+    
+    render_cubemap_use(prefilter, slot);
+    render_shader_set_i32(pbr_shader, "cubemap_prefilter", slot++);  
+    
+    render_texture_use(brdf_lut, slot);
+    render_shader_set_i32(pbr_shader, "texture_brdf_lut", slot++);  
+
+    //Temp
+    bool use_textures = material->texture_albedo.texture 
+        || material->texture_normal.texture
+        || material->texture_metallic.texture
+        || material->texture_roughness.texture
+        || material->texture_ao.texture;
+    render_shader_set_i32(pbr_shader, "use_textures", use_textures);
+
+    if(use_textures)
+    {
+        render_texture_use(&material->texture_albedo, slot);
+        render_shader_set_i32(pbr_shader, "texture_albedo", slot++);    
+        
+        render_texture_use(&material->texture_normal, slot);
+        render_shader_set_i32(pbr_shader, "texture_normal", slot++);   
+        
+        render_texture_use(&material->texture_metallic, slot);
+        render_shader_set_i32(pbr_shader, "texture_metallic", slot++);   
+        
+        render_texture_use(&material->texture_roughness, slot);
+        render_shader_set_i32(pbr_shader, "texture_roughness", slot++);   
+        
+        render_texture_use(&material->texture_ao, slot);
+        render_shader_set_i32(pbr_shader, "texture_ao", slot++);   
+    }
+    else
+    {
+        render_shader_set_vec3(pbr_shader, "solid_albedo", material->solid_albedo);
+        render_shader_set_f32(pbr_shader, "solid_metallic", material->solid_metallic);
+        render_shader_set_f32(pbr_shader, "solid_roughness", material->solid_roughness);
+        render_shader_set_f32(pbr_shader, "solid_ao", material->solid_ao);
+    }
+
+    render_mesh_draw(mesh);
+
+    if(use_textures)
+    {
+        render_texture_unuse(&material->texture_albedo);
+        render_texture_unuse(&material->texture_normal);
+        render_texture_unuse(&material->texture_metallic);
+        render_texture_unuse(&material->texture_roughness);
+        render_texture_unuse(&material->texture_ao);
+    }
+
+    render_cubemap_unuse(irradience);
+    render_cubemap_unuse(prefilter);
+    render_texture_unuse(brdf_lut);
+    render_shader_unuse(pbr_shader);
+}
+
+
+void render_mesh_draw_using_postprocess(Render_Mesh screen_quad, const Render_Shader* shader_screen, GLuint screen_texture, f32 gamma, f32 exposure)
+{
+    render_shader_use(shader_screen);
+    render_shader_set_f32(shader_screen, "gamma", gamma);
+    render_shader_set_f32(shader_screen, "exposure", exposure);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, screen_texture);
+    render_shader_set_i32(shader_screen, "screen", 0);
+            
+    render_mesh_draw(screen_quad);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    render_shader_unuse(shader_screen);
+}
 
 void run_func(void* context)
 {
@@ -1410,7 +1826,16 @@ void run_func(void* context)
 
     mapping_make_default(game_state->control_mappings);
 
-    Multi_Screen_Frame_Buffers screen_buffers = {0};
+    Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
+    Render_Capture_Buffers capture_buffers = {0};
+    
+    i32 res_environment = 1024;
+    i32 res_irradiance = 32;
+    i32 res_prefilter = 128;
+    i32 res_brdf_lut = 512;
+
+    f32 irradicance_sample_delta = 0.025f; //big danger! If set too low pc will lag completely!
+    f32 default_ao = 0.2f;
 
     Shape uv_sphere = {0};
     Shape cube_sphere = {0};
@@ -1424,67 +1849,119 @@ void run_func(void* context)
     Render_Mesh render_cube = {0};
     Render_Mesh render_quad = {0};
     
+
     Render_Texture texture_floor = {0};
     Render_Texture texture_debug = {0};
+    Render_Texture texture_environment = {0};
     Render_PBR_Material material_metal = {0};
 
     Render_Cubemap cubemap_skybox = {0};
 
-    GLuint shader_depth_color = 0;
-    GLuint shader_solid_color = 0;
-    GLuint shader_screen = 0;
-    GLuint shader_debug = 0;
-    GLuint shader_blinn_phong = 0;
-    GLuint shader_skybox = 0;
-    GLuint shader_pbr = 0;
+    Render_Cubemap cubemap_environment = {0};
+    Render_Cubemap cubemap_irradiance = {0};
+    Render_Cubemap cubemap_prefilter = {0};
+    Render_Texture texture_brdf_lut = {0};
+
+    Render_Shader shader_depth_color = {0};
+    Render_Shader shader_solid_color = {0};
+    Render_Shader shader_screen = {0};
+    Render_Shader shader_debug = {0};
+    Render_Shader shader_blinn_phong = {0};
+    Render_Shader shader_skybox = {0};
+    Render_Shader shader_pbr = {0};
+    Render_Shader shader_pbr_mapped = {0};
+
+    Render_Shader shader_equi_to_cubemap = {0};
+    Render_Shader shader_irradiance = {0};
+    Render_Shader shader_prefilter = {0};
+    Render_Shader shader_brdf_lut = {0};
 
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
     String_Builder fps_display = {0};
-    for(bool first_run = true; game_state->should_close == false; first_run = false)
+    bool use_mapping = true;
+
+    for(isize frame_num = 0; game_state->should_close == false; frame_num ++)
     {
+        glfwSwapBuffers(window);
         f64 start_frame_time = clock_s();
         game_state->delta_time = start_frame_time - game_state->last_frame_timepoint; 
         game_state->last_frame_timepoint = start_frame_time; 
 
-        window_process_input(window, first_run);
+        window_process_input(window, frame_num == 0);
         if(game_state->window_framebuffer_width != game_state->window_framebuffer_width_prev 
             || game_state->window_framebuffer_height != game_state->window_framebuffer_height_prev
-            || first_run)
+            || frame_num == 0)
         {
             LOG_INFO("APP", "Resizing");
-            multi_screen_frame_buffers_deinit(&screen_buffers);
-            multi_screen_frame_buffers_init(&screen_buffers, game_state->window_framebuffer_width, game_state->window_framebuffer_height, game_state->settings.MSAA_samples);
-            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height);
+            render_screen_frame_buffers_msaa_deinit(&screen_buffers);
+            render_screen_frame_buffers_msaa_init(&screen_buffers, game_state->window_framebuffer_width, game_state->window_framebuffer_height, game_state->settings.MSAA_samples);
+            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
         }
         
         if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
             || control_was_pressed(&game_state->controls, CONTROL_REFRESH_SHADERS)
-            || first_run)
+            || frame_num == 0)
         {
             LOG_INFO("APP", "Refreshing shaders");
-            shader_unload(&shader_solid_color);
-            shader_unload(&shader_depth_color);
-            shader_unload(&shader_screen);
-            shader_unload(&shader_debug);
-            shader_unload(&shader_blinn_phong);
-            shader_unload(&shader_pbr);
-            shader_unload(&shader_skybox);
 
-            shader_solid_color = shader_load(STRING("shaders/solid_color.vert"), STRING("shaders/solid_color.frag"), STRING(""), STRING(""), NULL);
-            shader_depth_color = shader_load(STRING("shaders/depth_color.vert"), STRING("shaders/depth_color.frag"), STRING(""), STRING(""), NULL);
-            shader_screen = shader_load(STRING("shaders/screen.vert"), STRING("shaders/screen.frag"), STRING(""), STRING(""), NULL);
-            shader_debug = shader_load(STRING("shaders/uv_debug.vert"), STRING("shaders/uv_debug.frag"), STRING("shaders/uv_debug.geom"), STRING(""), NULL);
-            shader_blinn_phong = shader_load(STRING("shaders/blinn_phong.vert"), STRING("shaders/blinn_phong.frag"), STRING(""), STRING(""), NULL);
-            shader_skybox = shader_load(STRING("shaders/skybox.vert"), STRING("shaders/skybox.frag"), STRING(""), STRING(""), NULL);
+            bool ok = true;
+            ok = ok && render_shader_init_from_disk(&shader_solid_color, 
+                STRING("shaders/solid_color.vert"), 
+                STRING("shaders/solid_color.frag"), 
+                STRING("shader_solid_color"));
+            ok = ok && render_shader_init_from_disk(&shader_depth_color, 
+                STRING("shaders/depth_color.vert"), 
+                STRING("shaders/depth_color.frag"), 
+                STRING("shader_depth_color"));
+            ok = ok && render_shader_init_from_disk(&shader_screen, 
+                STRING("shaders/screen.vert"), 
+                STRING("shaders/screen.frag"), 
+                STRING("shader_screen"));
+            ok = ok && render_shader_init_from_disk(&shader_blinn_phong, 
+                STRING("shaders/blinn_phong.vert"), 
+                STRING("shaders/blinn_phong.frag"), 
+                STRING("shader_blinn_phong"));
+            ok = ok && render_shader_init_from_disk(&shader_skybox, 
+                STRING("shaders/skybox.vert"), 
+                STRING("shaders/skybox.frag"), 
+                STRING("shader_skybox"));
+            ok = ok && render_shader_init_from_disk(&shader_pbr, 
+                STRING("shaders/pbr.vert"), 
+                STRING("shaders/pbr.frag"), 
+                STRING("shader_pbr"));
+            ok = ok && render_shader_init_from_disk(&shader_equi_to_cubemap, 
+                STRING("shaders/equi_to_cubemap.vert"), 
+                STRING("shaders/equi_to_cubemap.frag"), 
+                STRING("shader_equi_to_cubemap"));
+            ok = ok && render_shader_init_from_disk(&shader_irradiance, 
+                STRING("shaders/irradiance_convolution.vert"), 
+                STRING("shaders/irradiance_convolution.frag"), 
+                STRING("shader_irradiance"));
+            ok = ok && render_shader_init_from_disk(&shader_prefilter, 
+                STRING("shaders/prefilter.vert"), 
+                STRING("shaders/prefilter.frag"), 
+                STRING("shader_prefilter"));
+            ok = ok && render_shader_init_from_disk(&shader_brdf_lut, 
+                STRING("shaders/brdf_lut.vert"), 
+                STRING("shaders/brdf_lut.frag"), 
+                STRING("shader_brdf_lut"));
+            ok = ok && render_shader_init_from_disk(&shader_pbr_mapped, 
+                STRING("shaders/pbr_mapped.vert"), 
+                STRING("shaders/pbr_mapped.frag"), 
+                STRING("shader_pbr_mapped"));
+            ok = ok && render_shader_init_from_disk_custom(&shader_debug, 
+                STRING("shaders/uv_debug.vert"), 
+                STRING("shaders/uv_debug.frag"), 
+                STRING("shaders/uv_debug.geom"), 
+                STRING(""), STRING("shader_debug"), NULL);
 
-
-            shader_pbr = shader_load(STRING("shaders/pbr.vert"), STRING("shaders/pbr.frag"), STRING(""), STRING(""), NULL);
+            ASSERT(ok);
         }
-        
+
         if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
             || control_was_pressed(&game_state->controls, CONTROL_REFRESH_ART)
-            || first_run)
+            || frame_num == 0)
         {
             
             LOG_INFO("APP", "Refreshing art");
@@ -1500,12 +1977,6 @@ void run_func(void* context)
             screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
             unit_cube = shapes_make_unit_cube();
             unit_quad = shapes_make_unit_quad();
-    
-            render_mesh_deinit(&render_uv_sphere);
-            render_mesh_deinit(&render_cube_sphere);
-            render_mesh_deinit(&render_screen_quad);
-            render_mesh_deinit(&render_cube);
-            render_mesh_deinit(&render_quad);
 
             render_mesh_init(&render_uv_sphere, uv_sphere.vertices.data, uv_sphere.vertices.size, uv_sphere.indeces.data, uv_sphere.indeces.size, STRING("uv_sphere"));
             render_mesh_init(&render_cube_sphere, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.indeces.data, cube_sphere.indeces.size, STRING("cube_sphere"));
@@ -1513,14 +1984,10 @@ void run_func(void* context)
             render_mesh_init(&render_cube, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.indeces.data, unit_cube.indeces.size, STRING("unit_cube"));
             render_mesh_init(&render_quad, unit_quad.vertices.data, unit_quad.vertices.size, unit_quad.indeces.data, unit_quad.indeces.size, STRING("unit_cube"));
 
-            render_texture_deinit(&texture_floor);
-            render_texture_deinit(&texture_debug);
-            render_cubemap_deinit(&cubemap_skybox);
-
-            bool load_okay = true;
-            load_okay = load_okay && render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
-            load_okay = load_okay && render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
-            load_okay = load_okay && render_cubemap_init_from_disk(&cubemap_skybox, 
+            bool ok = true;
+            ok = ok && render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            ok = ok && render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
+            ok = ok && render_cubemap_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
                 STRING("resources/skybox_back.jpg"), 
                 STRING("resources/skybox_top.jpg"), 
@@ -1528,15 +1995,30 @@ void run_func(void* context)
                 STRING("resources/skybox_right.jpg"), 
                 STRING("resources/skybox_left.jpg"), STRING("skybox"));
                 
-            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
-            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_metalic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
-            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
-            load_okay = load_okay && render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
-            render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(1), 1, STRING("rustediron2_ao"));
+            ok = ok && render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
+            ok = ok && render_texture_init_from_disk(&material_metal.texture_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
+            ok = ok && render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
+            ok = ok && render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
+            render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(default_ao), 1, STRING("rustediron2_ao"));
 
-            ASSERT(load_okay);
+            ok = ok && render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
+            
+            render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
+            render_cubemap_init_environment_from_environment_texture(
+                &cubemap_environment, res_environment, res_environment, 
+                &texture_environment, &capture_buffers, &shader_equi_to_cubemap, render_cube);
+            render_cubemap_init_irradiance_from_environment(
+                &cubemap_irradiance, res_irradiance, res_irradiance, irradicance_sample_delta,
+                &cubemap_environment, &capture_buffers, &shader_irradiance, render_cube);
+
+            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
+
+            ASSERT(ok);
         }
         
+        
+
+
         if(control_was_pressed(&game_state->controls, CONTROL_ESCAPE))
         {
             game_state->is_in_mouse_mode = !game_state->is_in_mouse_mode;
@@ -1545,6 +2027,11 @@ void run_func(void* context)
         if(control_was_pressed(&game_state->controls, CONTROL_DEBUG_1))
         {
             game_state->is_in_uv_debug_mode = !game_state->is_in_uv_debug_mode;
+        }
+        
+        if(control_was_pressed(&game_state->controls, CONTROL_DEBUG_2))
+        {
+            use_mapping = !use_mapping;
         }
 
         if(game_state->is_in_mouse_mode == false)
@@ -1641,8 +2128,10 @@ void run_func(void* context)
                 else
                     game_state->settings.fov = game_state->zoom_target_fov;
             }
+            
         }
 
+        
         game_state->camera.fov = game_state->settings.fov;
         game_state->camera.near = 0.1f;
         game_state->camera.far = 100.0f;
@@ -1652,16 +2141,17 @@ void run_func(void* context)
 
         Mat4 view = camera_make_view_matrix(game_state->camera);
         Mat4 projection = camera_make_projection_matrix(game_state->camera);
+
         
         //================ FIRST PASS ==================
         {
-            multi_screen_frame_buffers_render_begin(&screen_buffers);
+            render_screen_frame_buffers_msaa_render_begin(&screen_buffers);
             glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             PBR_Light lights[PBR_MAX_LIGHTS] = {0};
 
-            lights[0].pos = vec3(0, 4, 1.75f);
+            lights[0].pos = vec3(0, 4, 0);
             lights[0].color = vec3(1, 1, 0.9f);
             lights[0].radius = 0.3f;
             
@@ -1691,12 +2181,13 @@ void run_func(void* context)
                 blinn_phong_params.gamma = 1.3f; //looks better on the wood texture
 
                 Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_sf() / 8), vec3(5, 0, -5));
-                render_mesh_draw_using_blinn_phong(render_cube_sphere, shader_blinn_phong, projection, view, model, game_state->camera.pos, light.pos, light.color, blinn_phong_params, texture_floor);
+                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, game_state->camera.pos, light.pos, light.color, blinn_phong_params, texture_floor);
             
                 if(game_state->is_in_uv_debug_mode)
-                    render_mesh_draw_using_uv_debug(render_cube_sphere, shader_debug, projection, view, model);
+                    render_mesh_draw_using_uv_debug(render_cube_sphere, &shader_debug, projection, view, model);
             }
 
+            
             //render pbr sphere
             {
                 PBR_Params params = {0};
@@ -1728,27 +2219,40 @@ void run_func(void* context)
                         material.solid_metallic = metallic;
                         material.solid_roughness = rough;
                         material.solid_albedo = vec3(1, 1, 0.92f);
-                        material.solid_ao = 0;
+                        material.solid_ao = default_ao;
 
                         Vec3 pos = vec3(spacing * rough_i, spacing*metalic_i, 0);
                         Mat4 model = mat4_scale_affine(mat4_translation(vec3_add(offset, pos)), vec3_of(scale));
-                        render_mesh_draw_using_pbr(render_cube_sphere, shader_pbr, projection, view, model, &params, &material);
+
+                        if(use_mapping)
+                            render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material,
+                                &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &texture_brdf_lut);
+                        else
+                            render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material);
                     }
                 }
 
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.5f)), vec3(0, 2, 5));
-                render_mesh_draw_using_pbr(render_uv_sphere, shader_pbr, projection, view, model, &params, &material_metal);
+                //render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material_metal);
+                
+                if(use_mapping)
+                    render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material_metal,
+                        &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &texture_brdf_lut);
+                else
+                    render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material_metal);
             }
+            
 
             //render light
             for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
             {
                 PBR_Light light = lights[i]; 
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
-                render_mesh_draw_using_solid_color(render_uv_sphere, shader_solid_color, projection, view, model, light.color);
+                render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color);
             }
 
             //render gismos
+            if(0)
             {
                 f32 size = 0.05f;
                 f32 length = 0.8f;
@@ -1760,39 +2264,39 @@ void run_func(void* context)
                 Mat4 Z = mat4_translate(mat4_scaling(vec3(size, size, length)), vec3(0, 0, offset));
                 Mat4 MID = mat4_scaling(vec3(size, size, size));
 
-                render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, X, vec3(1, 0, 0));
-                render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, Y, vec3(0, 1, 0));
-                render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, Z, vec3(0, 0, 1));
-                render_mesh_draw_using_solid_color(render_cube, shader_solid_color, projection, view, MID, vec3(1, 1, 1));
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, X, vec3(1, 0, 0));
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Y, vec3(0, 1, 0));
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Z, vec3(0, 0, 1));
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, MID, vec3(1, 1, 1));
             }
 
             //render skybox
             {
                 Mat4 model = mat4_scaling(vec3_of(-1));
                 Mat4 stationary_view = mat4_from_mat3(mat3_from_mat4(view));
-                render_mesh_draw_using_skybox(render_cube, shader_skybox, projection, stationary_view, model, game_state->settings.screen_gamma, cubemap_skybox);
+                render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, game_state->settings.screen_gamma, cubemap_environment);
             }
-            multi_screen_frame_buffers_render_end(&screen_buffers);
+
+            render_screen_frame_buffers_msaa_render_end(&screen_buffers);
         }
 
         // ============== POST PROCESSING PASS ==================
         {
-            multi_screen_frame_buffers_post_process_begin(&screen_buffers);
-
-            {
-                shader_use(shader_screen);
-                shader_set_i32(shader_screen, "screen", 0);
-                shader_set_f32(shader_screen, "gamma", game_state->settings.screen_gamma);
-                shader_set_f32(shader_screen, "exposure", game_state->settings.screen_exposure);
-
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, screen_buffers.screen_color_buff);
-            
-                render_mesh_draw(render_screen_quad);
-                glBindTexture(GL_TEXTURE_2D, 0);
-            }
-            multi_screen_frame_buffers_post_process_end(&screen_buffers);
+            render_screen_frame_buffers_msaa_post_process_begin(&screen_buffers);
+            render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, game_state->settings.screen_gamma, game_state->settings.screen_exposure);
+            render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
         }
+            //@HACK: this forsome reason depends on some calculation from the previous frame else it doesnt work dont know why
+            if(frame_num == 0)
+            {
+                render_cubemap_init_prefilter_from_environment(
+                    &cubemap_prefilter, res_prefilter, res_prefilter,
+                    &cubemap_environment, &capture_buffers, &shader_prefilter, render_cube);
+                render_texture_init_BRDF_LUT(
+                    &texture_brdf_lut, res_brdf_lut, res_brdf_lut,
+                    &capture_buffers, &shader_brdf_lut, render_quad);
+                glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
+            }
 
         f64 end_frame_time = clock_s();
         f64 frame_time = end_frame_time - start_frame_time;
@@ -1802,22 +2306,31 @@ void run_func(void* context)
             format_into(&fps_display, "Game %5d fps", (int) (1.0f/frame_time));
             glfwSetWindowTitle(window, cstring_from_builder(fps_display));
         }
-
-        glfwSwapBuffers(window);
-        
     }
     
+    shape_deinit(&uv_sphere);
+    shape_deinit(&cube_sphere);
+    shape_deinit(&screen_quad);
+    shape_deinit(&unit_cube);
+    shape_deinit(&unit_quad);
+    
+    render_capture_buffers_deinit(&capture_buffers);
+
     render_mesh_deinit(&render_uv_sphere);
     render_mesh_deinit(&render_cube_sphere);
     render_mesh_deinit(&render_screen_quad);
     render_mesh_deinit(&render_cube);
     render_mesh_deinit(&render_quad);
 
-    shape_deinit(&uv_sphere);
-    shape_deinit(&cube_sphere);
-    shape_deinit(&screen_quad);
-    shape_deinit(&unit_cube);
-    shape_deinit(&unit_quad);
+    render_shader_deinit(&shader_solid_color);
+    render_shader_deinit(&shader_depth_color);
+    render_shader_deinit(&shader_screen);
+    render_shader_deinit(&shader_blinn_phong);
+    render_shader_deinit(&shader_skybox);
+    render_shader_deinit(&shader_pbr);
+    render_shader_deinit(&shader_debug);
+
+    render_pbr_material_deinit(&material_metal);
 
     array_deinit(&fps_display);
     
@@ -1825,7 +2338,7 @@ void run_func(void* context)
     render_texture_deinit(&texture_debug);
     render_cubemap_deinit(&cubemap_skybox);
 
-    multi_screen_frame_buffers_deinit(&screen_buffers);
+    render_screen_frame_buffers_msaa_deinit(&screen_buffers);
 
     debug_allocator_print_alive_allocations(debug_alloc, 0);
     debug_allocator_deinit(&debug_alloc);

@@ -24,6 +24,7 @@ EXPORT void  hash_index_clear(Hash_Index* to_table);
 EXPORT isize hash_index_find(Hash_Index table, uint64_t hash);
 EXPORT isize hash_index_find_first(Hash_Index table, uint64_t hash, isize* finished_at);
 EXPORT isize hash_index_find_next(Hash_Index table, uint64_t hash, isize prev_found, isize* finished_at);
+EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash);
 EXPORT isize hash_index_rehash(Hash_Index* table, isize to_size); //rehashes 
 EXPORT void  hash_index_reserve(Hash_Index* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
 EXPORT isize hash_index_insert(Hash_Index* table, uint64_t hash, uint64_t value);
@@ -221,15 +222,37 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         uint64_t start_at = escaped & mask;
         return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, start_at, finished_at);
     }
+    
     EXPORT isize hash_index_find(Hash_Index table, uint64_t hash)
     {
         isize finished_at = 0;
         return hash_index_find_first(table, hash, &finished_at);
     }
+    
     EXPORT isize hash_index_find_next(Hash_Index table, uint64_t hash, isize prev_found, isize* finished_at)
     {
         return _lin_probe_hash_find_from(table.entries, table.entries_count, hash, prev_found + 1, finished_at);
     }
+
+    EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash)
+    {
+        hash_index_reserve(table, table->size + 1);
+        isize finish_at = 0;
+        uint64_t escaped = _lin_probe_hash_escape(hash);
+        uint64_t mask = (uint64_t) table->entries_count - 1;
+        uint64_t start_at = escaped & mask;
+        isize found = _lin_probe_hash_find_from(table->entries, table->entries_count, escaped, start_at, &finish_at);
+            
+        if(found == -1)
+        {
+            ASSERT(finish_at < table->entries_count);
+            table->entries[finish_at].hash = escaped;
+            table->size += 1;
+        }
+
+        return found;
+    }
+
     EXPORT isize hash_index_rehash(Hash_Index* table, isize to_size)
     {
         ASSERT(hash_index_is_invariant(*table));

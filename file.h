@@ -5,8 +5,9 @@
 #include "allocator.h"
 #include "string.h"
 
+Platform_Error file_read_entire_append_into(String file_path, String_Builder* append_into);
 Platform_Error file_read_entire(String file_path, String_Builder* data);
-Platform_Error file_append_entire(String file_path, String contents);
+Platform_Error file_append_entire(String file_path, String data);
 Platform_Error file_write_entire(String file_path, String data);
 
 Platform_Error file_create(String file_path, bool* was_just_created);
@@ -26,7 +27,7 @@ void file_translate_error(String_Builder* into, u64 error);
 #include "time.h"
 #include "log.h"
 
-Platform_Error file_read_entire(String file_path, String_Builder* contents)
+Platform_Error file_read_entire_append_into(String file_path, String_Builder* append_into)
 {
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
@@ -38,12 +39,19 @@ Platform_Error file_read_entire(String file_path, String_Builder* contents)
     {
         //@NOTE: if this fails because we dont have enough memory then the file remains mapped!
         //@TOOD: make this proper!
-        array_append(contents, (char*) mapping.address, mapping.size);
+        array_append(append_into, (char*) mapping.address, mapping.size);
         platform_file_memory_unmap(&mapping);
     }
 
     array_deinit(&escpaed_file_path);
     return error;
+}
+
+
+Platform_Error file_read_entire(String file_path, String_Builder* data)
+{
+    array_clear(data);
+    return file_read_entire_append_into(file_path, data);
 }
 
 Platform_Error file_append_entire(String file_path, String contents)

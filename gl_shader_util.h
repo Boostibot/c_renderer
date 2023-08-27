@@ -6,7 +6,7 @@
 
 #define SHADER_UTIL_CHANEL "ASSET"
 
-String_Builder shader_source_prepend(String data, String prepend, Allocator* allocator)
+String_Builder render_shader_source_prepend(String data, String prepend, Allocator* allocator)
 {
     String_Builder composed = {allocator};
     if(prepend.size == 0)
@@ -44,8 +44,26 @@ String_Builder shader_source_prepend(String data, String prepend, Allocator* all
     return composed;
 }
 
-GLuint shader_load_from_source(const char* vertex, const char* fragment, const char* geometry, String_Builder* error, isize* error_at_stage)
+typedef struct Render_Shader
 {
+    GLuint shader;
+    String_Builder name;
+} Render_Shader;
+
+void render_shader_deinit(Render_Shader* shader)
+{
+    if(shader->shader != 0)
+    {
+        glUseProgram(0);
+        glDeleteProgram(shader->shader);
+    }
+    array_deinit(&shader->name);
+    memset(shader, 0, sizeof(*shader));
+}
+
+bool render_shader_init(Render_Shader* shader, const char* vertex, const char* fragment, const char* geometry, String name, String_Builder* error, isize* error_at_stage)
+{
+    render_shader_deinit(shader);
     ASSERT(vertex != NULL && fragment != NULL);
 
     GLuint shader_program = 0;
@@ -108,132 +126,128 @@ GLuint shader_load_from_source(const char* vertex, const char* fragment, const c
     glDeleteShader(shaders[1]);
     glDeleteShader(shaders[2]);
 
+    shader->shader = shader_program;
+    shader->name = builder_from_string(name);
     if(success == false)
     {
         glDeleteProgram(shader_program);
         shader_program = 0;
     }
 
-    return shader_program;
+    return success;
 }
 
-GLuint shader_load(String vertex_path, String fragment_path, String geometry_path, String prepend, String_Builder* error)
+bool render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_path, String fragment_path, String geometry_path, String prepend, String name, String_Builder* error)
 {
     Allocator* scratch = allocator_get_scratch();
     String_Builder temp = {scratch};
 
     Platform_Error vertex_error = file_read_entire(vertex_path, &temp);
-    String_Builder vertex_source = shader_source_prepend(string_from_builder(temp), prepend, scratch);
-    array_clear(&temp);
+    String_Builder vertex_source = render_shader_source_prepend(string_from_builder(temp), prepend, scratch);
 
     Platform_Error fragment_error = file_read_entire(fragment_path, &temp);
-    String_Builder fragment_source = shader_source_prepend(string_from_builder(temp), prepend, scratch);
-    array_clear(&temp);
+    String_Builder fragment_source = render_shader_source_prepend(string_from_builder(temp), prepend, scratch);
 
     String_Builder geometry_source = {0};
     Platform_Error geomtery_error = PLATFORM_ERROR_OK;
     if(geometry_path.size > 0)
     {
         geomtery_error = file_read_entire(geometry_path, &temp);
-        geometry_source = shader_source_prepend(string_from_builder(temp), prepend, scratch);
-        array_clear(&temp);
+        geometry_source = render_shader_source_prepend(string_from_builder(temp), prepend, scratch);
     }
 
+    bool ok = !vertex_error && !fragment_error && !geomtery_error;
     isize error_at_compilation_stage = 0; 
-    GLuint shader_program = 0;
-    if(!vertex_error && !fragment_error && !geomtery_error)
+    if(ok)
     {
         //Else tries to build the program
         // if an error ocurs here it gets written to error
         // and shader_program = 0. This means we dont have to do anything
-        shader_program = shader_load_from_source(
+        ok = render_shader_init(shader,
             cstring_from_builder(vertex_source),
             cstring_from_builder(fragment_source),
             cstring_from_builder(geometry_source),
+            name,
             &temp, &error_at_compilation_stage);
     }
         
-    //Error reporting (that is longer than the function itself :( )
-    if(shader_program == 0)
+    //Error reporting ... that is longer than the function itself :/
+    if(!ok)
     {
         #if defined(DO_LOG) && defined(DO_LOG_ERROR)
-        //LOG_DEBUG(SHADER_UTIL_CHANEL, "vertex:\n" STRING_FMT, STRING_PRINT(vertex_source));
-        //LOG_DEBUG(SHADER_UTIL_CHANEL, "fragment:\n" STRING_FMT, STRING_PRINT(fragment_source));
-        //LOG_DEBUG(SHADER_UTIL_CHANEL, "geometry:\n" STRING_FMT, STRING_PRINT(geometry_source));
+            String_Builder vertex_error_string = {scratch};
+            String_Builder fragment_error_string = {scratch};
+            String_Builder geometry_error_string = {scratch};
 
-        String_Builder vertex_error_string = {scratch};
-        String_Builder fragment_error_string = {scratch};
-        String_Builder geometry_error_string = {scratch};
+            if(vertex_error)
+                file_translate_error(&vertex_error_string, vertex_error);
+            if(fragment_error)
+                file_translate_error(&fragment_error_string, fragment_error);
+            if(geomtery_error)
+                file_translate_error(&geometry_error_string, geomtery_error);
 
-        if(vertex_error)
-            file_translate_error(&vertex_error_string, vertex_error);
-        if(fragment_error)
-            file_translate_error(&fragment_error_string, fragment_error);
-        if(geomtery_error)
-            file_translate_error(&geometry_error_string, geomtery_error);
-
-        //if has error print the translated version
-        LOG_ERROR(SHADER_UTIL_CHANEL, "shader_load() failed! files:\n");
-        log_group_push();
-            LOG_ERROR(SHADER_UTIL_CHANEL, "vertex:   \"" STRING_FMT "\"", STRING_PRINT(vertex_path));
-                log_group_push();
-                if(vertex_error_string.size > 0)
-                    LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(vertex_error_string));
-                if(error_at_compilation_stage == 1)
-                    LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
-            log_group_pop();
-
-            LOG_ERROR(SHADER_UTIL_CHANEL, "fragment: \"" STRING_FMT "\"", STRING_PRINT(fragment_path));
+            //if has error print the translated version
+            LOG_ERROR(SHADER_UTIL_CHANEL, "shader_load() failed! files:\n");
             log_group_push();
-                if(fragment_error_string.size > 0)
-                    LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(fragment_error_string));
-                if(error_at_compilation_stage == 2)
-                    LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
-            log_group_pop();
-
-            if(geometry_path.size > 0)
-            {
-                LOG_ERROR(SHADER_UTIL_CHANEL, "geometry: \"" STRING_FMT "\"", STRING_PRINT(geometry_path));
-                log_group_push();
-                    if(geometry_error_string.size > 0)
-                        LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(geometry_error_string));
-                    if(error_at_compilation_stage == 3)
+                LOG_ERROR(SHADER_UTIL_CHANEL, "vertex:   \"" STRING_FMT "\"", STRING_PRINT(vertex_path));
+                    log_group_push();
+                    if(vertex_error_string.size > 0)
+                        LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(vertex_error_string));
+                    if(error_at_compilation_stage == 1)
                         LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
                 log_group_pop();
-            }
+
+                LOG_ERROR(SHADER_UTIL_CHANEL, "fragment: \"" STRING_FMT "\"", STRING_PRINT(fragment_path));
+                log_group_push();
+                    if(fragment_error_string.size > 0)
+                        LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(fragment_error_string));
+                    if(error_at_compilation_stage == 2)
+                        LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
+                log_group_pop();
+
+                if(geometry_path.size > 0)
+                {
+                    LOG_ERROR(SHADER_UTIL_CHANEL, "geometry: \"" STRING_FMT "\"", STRING_PRINT(geometry_path));
+                    log_group_push();
+                        if(geometry_error_string.size > 0)
+                            LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(geometry_error_string));
+                        if(error_at_compilation_stage == 3)
+                            LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
+                    log_group_pop();
+                }
             
-            if(prepend.size > 0)
+                if(prepend.size > 0)
+                {
+                    LOG_ERROR(SHADER_UTIL_CHANEL, "prepend:");
+                    log_group_push();
+                        LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(prepend));
+                    log_group_pop();
+                }
+
+                if(error_at_compilation_stage == 4)
+                {
+                    LOG_ERROR(SHADER_UTIL_CHANEL, "link:");
+                    log_group_push();
+                        LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
+                    log_group_pop();
+                }
+            log_group_pop();
+
+            if(error)
             {
-                LOG_ERROR(SHADER_UTIL_CHANEL, "prepend:");
-                log_group_push();
-                    LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(prepend));
-                log_group_pop();
+                if(vertex_error)
+                    array_copy(error, vertex_error_string);
+                else if(fragment_error)
+                    array_copy(error, fragment_error_string);
+                else if(geomtery_error)
+                    array_copy(error, geometry_error_string);
+                else if(!ok)
+                    array_copy(error, temp);
             }
 
-            if(error_at_compilation_stage == 4)
-            {
-                LOG_ERROR(SHADER_UTIL_CHANEL, "link:");
-                log_group_push();
-                    LOG_ERROR(SHADER_UTIL_CHANEL, STRING_FMT, STRING_PRINT(temp));
-                log_group_pop();
-            }
-        log_group_pop();
-
-        if(error)
-        {
-            if(vertex_error)
-                array_copy(error, vertex_error_string);
-            else if(fragment_error)
-                array_copy(error, fragment_error_string);
-            else if(geomtery_error)
-                array_copy(error, geometry_error_string);
-            else if(shader_program == 0)
-                array_copy(error, temp);
-        }
-
-        array_deinit(&vertex_error_string);
-        array_deinit(&fragment_error_string);
-        array_deinit(&geometry_error_string);
+            array_deinit(&vertex_error_string);
+            array_deinit(&fragment_error_string);
+            array_deinit(&geometry_error_string);
         #endif
     }
 
@@ -242,45 +256,60 @@ GLuint shader_load(String vertex_path, String fragment_path, String geometry_pat
     array_deinit(&geometry_source);
     array_deinit(&geometry_source);
     array_deinit(&temp);
-    return shader_program;
+    return ok;
 }
     
-void shader_unload(GLuint* shader)
+bool render_shader_init_from_disk(Render_Shader* shader, String vertex_path, String fragment_path, String name)
 {
+    //String_Builder name = {0};
+    //array_init_backed(&name, allocator_get_scratch(), 256);
+    //format_into(&name, "vert: " STRING_FMT " frag: " STRING_FMT, STRING_PRINT(vertex_path), STRING_PRINT(fragment_path));
+
+    return render_shader_init_from_disk_custom(shader, vertex_path, fragment_path, STRING(""), STRING(""), name, NULL);
+}
+
+void render_shader_use(const Render_Shader* shader)
+{
+    ASSERT(shader->shader != 0);
+    glUseProgram(shader->shader);
+}
+
+void render_shader_unuse(const Render_Shader* shader)
+{
+    (void) shader;
     glUseProgram(0);
-    glDeleteProgram(*shader);
-    *shader = 0;
 }
 
-void shader_use(GLuint program)
+int render_shader_get_uniform_location(const Render_Shader* shader, const char* uniform)
 {
-    ASSERT(program);
-    glUseProgram(program);
-}
-
-void shader_unuse()
-{
-    glUseProgram(0);
-}
-
-INTERNAL int _get_shader_uniform_location(GLuint program, const char* name)
-{
-    int location = glGetUniformLocation(program, name);
+    int location = glGetUniformLocation(shader->shader, uniform);
     if(location == -1)
     {
-        //@NOTE: Exponential logging
-        static i32 log_index = 0;
-        if(is_power_of_two_zero(log_index++))
-            LOG_ERROR("RENDER", "failed to find uniform location %s", name);
-        //ASSERT(false);
+        //if the shader uniform is not found we log only 
+        //each 2^n th error message from this shader and uniform
+        //(unless shader name, uniform, and shader program have a hash colision)
+        enum {ERROR_COUNTS_MAX = 256};
+        static u32 error_counts[ERROR_COUNTS_MAX] = {0};
+
+        String uniform_str = string_make(uniform);
+        u64 name_hash = hash64_murmur(shader->name.data, shader->name.size, 0);
+        u64 uniform_hash = hash64_murmur(uniform_str.data, uniform_str.size, 0);
+        u64 shader_hash = hash64(shader->shader);
+        u64 final_hash = name_hash ^ uniform_hash ^ shader_hash;
+
+        u64 index = final_hash % ERROR_COUNTS_MAX;
+        u32* error_count = &error_counts[index];
+
+        if(is_power_of_two_zero((*error_count)++))
+            LOG_ERROR("RENDER", "failed to find uniform location %-25s shader: " STRING_FMT, uniform, STRING_PRINT(shader->name));
     }
 
     return location;
 }
 
-bool shader_set_i32(GLuint program, const char* name, GLint val)
+bool render_shader_set_i32(const Render_Shader* shader, const char* name, GLint val)
 {
-    int location = _get_shader_uniform_location(program, name);
+    int location = render_shader_get_uniform_location(shader, name);
     if(location == -1) 
         return false;
 
@@ -288,9 +317,9 @@ bool shader_set_i32(GLuint program, const char* name, GLint val)
     return true;
 }
     
-bool shader_set_f32(GLuint program, const char* name, GLfloat val)
+bool render_shader_set_f32(const Render_Shader* shader, const char* name, GLfloat val)
 {
-    int location = _get_shader_uniform_location(program, name);
+    int location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
@@ -298,9 +327,9 @@ bool shader_set_f32(GLuint program, const char* name, GLfloat val)
     return true;
 }
 
-bool shader_set_vec3(GLuint program, const char* name, Vec3 val)
+bool render_shader_set_vec3(const Render_Shader* shader, const char* name, Vec3 val)
 {
-    int location = _get_shader_uniform_location(program, name);
+    int location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
@@ -308,9 +337,9 @@ bool shader_set_vec3(GLuint program, const char* name, Vec3 val)
     return true;
 }
 
-bool shader_set_mat4(GLuint program, const char* name, Mat4 val)
+bool render_shader_set_mat4(const Render_Shader* shader, const char* name, Mat4 val)
 {
-    int location = _get_shader_uniform_location(program, name);
+    int location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
@@ -318,9 +347,9 @@ bool shader_set_mat4(GLuint program, const char* name, Mat4 val)
     return true;
 }
     
-bool shader_set_mat3(GLuint program, const char* name, Mat3 val)
+bool render_shader_set_mat3(const Render_Shader* shader, const char* name, Mat3 val)
 {
-    int location = _get_shader_uniform_location(program, name);
+    int location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
