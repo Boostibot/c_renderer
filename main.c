@@ -82,7 +82,7 @@ typedef enum Control_Name
 // by duplicating this structure
 typedef struct Control_Mapping
 {
-    u8 mouse[GLFW_MOUSE_LAST];
+    u8 mouse[GLFW_MOUSE_LAST + 1];
     u8 mouse_buttons[GLFW_MOUSE_BUTTON_LAST + 1];
     u8 keys[GLFW_KEY_LAST + 1];
     //@TODO: Joystick and gamepads later....
@@ -370,7 +370,6 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
         glfwSetKeyCallback(window, glfw_key_func);
         glfwSetMouseButtonCallback(window, glfw_mouse_button_func);
         glfwSetScrollCallback(window, glfw_scroll_func);
-        glfwSetScrollCallback(window, glfw_scroll_func); 
     }
     
     game_state->controls_prev = game_state->controls;
@@ -1242,7 +1241,7 @@ INTERNAL void _make_capture_projections(Mat4* capture_projection, Mat4 capture_v
 }
 
 
-void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cubemap_environment, i32 width, i32 height, const Render_Texture* environment_tetxure,
+void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cubemap_environment, i32 width, i32 height, const Render_Texture* environment_tetxure, f32 texture_gamma,
     const Render_Capture_Buffers* capture, const Render_Shader* shader_equi_to_cubemap, Render_Mesh cube_mesh)
 {
     render_cubemap_deinit(cubemap_environment);
@@ -1277,6 +1276,7 @@ void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cu
 
     render_shader_use(shader_equi_to_cubemap);
     render_shader_set_mat4(shader_equi_to_cubemap, "projection", capture_projection);
+    render_shader_set_f32(shader_equi_to_cubemap, "gamma", texture_gamma);
     render_texture_use(environment_tetxure, 0);
     render_shader_set_i32(shader_equi_to_cubemap, "equirectangularMap", 0);
 
@@ -1449,13 +1449,14 @@ void render_texture_init_BRDF_LUT(
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color, f32 gamma)
 {
     render_shader_use(shader_depth_color);
     render_shader_set_vec3(shader_depth_color, "color", color);
     render_shader_set_mat4(shader_depth_color, "projection", projection);
     render_shader_set_mat4(shader_depth_color, "view", view);
     render_shader_set_mat4(shader_depth_color, "model", model);
+    render_shader_set_f32(shader_depth_color, "gamma", gamma);
     render_mesh_draw(mesh);
     render_shader_unuse(shader_depth_color);
 }
@@ -1817,7 +1818,7 @@ void run_func(void* context)
     game_state->settings.movement_speed = 2.5f;
     game_state->settings.movement_sprint_mult = 5;
     game_state->settings.screen_gamma = 2.2f;
-    game_state->settings.screen_exposure = 1.0;
+    game_state->settings.screen_exposure = 1;
     game_state->settings.mouse_sensitivity = 0.002f;
     game_state->settings.mouse_wheel_sensitivity = 0.05f; // uwu
     game_state->settings.zoom_adjust_time = 0.2f;
@@ -1881,6 +1882,7 @@ void run_func(void* context)
     String_Builder fps_display = {0};
     bool use_mapping = true;
 
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     for(isize frame_num = 0; game_state->should_close == false; frame_num ++)
     {
         glfwSwapBuffers(window);
@@ -2004,9 +2006,14 @@ void run_func(void* context)
             ok = ok && render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
             
             render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
+            
+            f32 use_gamma = 2.0f;
+            if(control_is_down(&game_state->controls, CONTROL_DEBUG_3))
+                use_gamma = 1.0f;
+
             render_cubemap_init_environment_from_environment_texture(
-                &cubemap_environment, res_environment, res_environment, 
-                &texture_environment, &capture_buffers, &shader_equi_to_cubemap, render_cube);
+                &cubemap_environment, res_environment, res_environment, &texture_environment, use_gamma, 
+                &capture_buffers, &shader_equi_to_cubemap, render_cube);
             render_cubemap_init_irradiance_from_environment(
                 &cubemap_irradiance, res_irradiance, res_irradiance, irradicance_sample_delta,
                 &cubemap_environment, &capture_buffers, &shader_irradiance, render_cube);
@@ -2151,21 +2158,25 @@ void run_func(void* context)
 
             PBR_Light lights[PBR_MAX_LIGHTS] = {0};
 
+            f32 light_radius = 0.3f;
+            if(control_is_down(&game_state->controls, CONTROL_DEBUG_4))
+                light_radius = 1;
+
             lights[0].pos = vec3(0, 4, 0);
-            lights[0].color = vec3(1, 1, 0.9f);
-            lights[0].radius = 0.3f;
+            lights[0].color = vec3(1, 1, 0.5f);
+            lights[0].radius = light_radius;
             
             lights[1].pos = vec3(0, 4, 4);
             lights[1].color = vec3(1, 0.5f, 1);
-            lights[1].radius = 0.3f;
+            lights[1].radius = light_radius;
 
             lights[2].pos = vec3(0, 0, 4);
             lights[2].color = vec3(1, 1, 0.5f);
-            lights[2].radius = 0.3f;
+            lights[2].radius = light_radius;
 
             lights[3].pos = vec3(2, 2, 4);
             lights[3].color = vec3(0.5f, 1, 1);
-            lights[3].radius = 0.3f;
+            lights[3].radius = light_radius;
 
             //render blinn phong sphere
             {
@@ -2196,7 +2207,7 @@ void run_func(void* context)
 
                 params.view_pos = game_state->camera.pos;
                 params.gamma = game_state->settings.screen_gamma;
-                params.attentuation_strength = 0.0;
+                params.attentuation_strength = 1.0f;
             
                 f32 spacing = 3;
                 f32 scale = 0.2f;
@@ -2248,7 +2259,8 @@ void run_func(void* context)
             {
                 PBR_Light light = lights[i]; 
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
-                render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color);
+                //render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, game_state->settings.screen_gamma);
+                render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, 1);
             }
 
             //render gismos
@@ -2264,17 +2276,24 @@ void run_func(void* context)
                 Mat4 Z = mat4_translate(mat4_scaling(vec3(size, size, length)), vec3(0, 0, offset));
                 Mat4 MID = mat4_scaling(vec3(size, size, size));
 
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, X, vec3(1, 0, 0));
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Y, vec3(0, 1, 0));
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Z, vec3(0, 0, 1));
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, MID, vec3(1, 1, 1));
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, X, vec3(1, 0, 0), game_state->settings.screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Y, vec3(0, 1, 0), game_state->settings.screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Z, vec3(0, 0, 1), game_state->settings.screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, MID, vec3(1, 1, 1), game_state->settings.screen_gamma);
             }
 
             //render skybox
             {
                 Mat4 model = mat4_scaling(vec3_of(-1));
                 Mat4 stationary_view = mat4_from_mat3(mat3_from_mat4(view));
-                render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, game_state->settings.screen_gamma, cubemap_environment);
+                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, game_state->settings.screen_gamma, cubemap_environment);
+                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1.0f/game_state->settings.screen_gamma, cubemap_skybox);
+                //else
+                if(control_is_down(&game_state->controls, CONTROL_DEBUG_3))
+                    render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_prefilter);
+                else
+                    render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_environment);
+                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_skybox);
             }
 
             render_screen_frame_buffers_msaa_render_end(&screen_buffers);
@@ -2286,17 +2305,20 @@ void run_func(void* context)
             render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, game_state->settings.screen_gamma, game_state->settings.screen_exposure);
             render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
         }
-            //@HACK: this forsome reason depends on some calculation from the previous frame else it doesnt work dont know why
-            if(frame_num == 0)
-            {
-                render_cubemap_init_prefilter_from_environment(
-                    &cubemap_prefilter, res_prefilter, res_prefilter,
-                    &cubemap_environment, &capture_buffers, &shader_prefilter, render_cube);
-                render_texture_init_BRDF_LUT(
-                    &texture_brdf_lut, res_brdf_lut, res_brdf_lut,
-                    &capture_buffers, &shader_brdf_lut, render_quad);
-                glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
-            }
+
+        //@HACK: this forsome reason depends on some calculation from the previous frame else it doesnt work dont know why
+        if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&game_state->controls, CONTROL_REFRESH_ART)
+            || frame_num == 0)
+        {
+            render_cubemap_init_prefilter_from_environment(
+                &cubemap_prefilter, res_prefilter, res_prefilter,
+                &cubemap_environment, &capture_buffers, &shader_prefilter, render_cube);
+            render_texture_init_BRDF_LUT(
+                &texture_brdf_lut, res_brdf_lut, res_brdf_lut,
+                &capture_buffers, &shader_brdf_lut, render_quad);
+            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
+        }
 
         f64 end_frame_time = clock_s();
         f64 frame_time = end_frame_time - start_frame_time;

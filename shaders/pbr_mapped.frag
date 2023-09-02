@@ -104,8 +104,194 @@ float attentuate_no_singularity(float light_distance, float light_radius)
 vec3 fresnel_schlick_rougness(float cos_theta, vec3 F0, float roughness)
 {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
-}  
+} 
 
+float fresnel_schlick_rougness2(float cos_theta, float F0, float roughness)
+{
+    return F0 + (max(1.0 - roughness, F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+} 
+
+float clamp01(float f)
+{
+    return clamp(f, 0, 1);
+}
+
+struct Point_Light
+{
+    vec3 pos;
+    vec3 color;
+    float radius;
+    float range;
+};
+
+struct Light_Contribution
+{
+    vec3 specular;
+    vec3 diffuse;
+};
+
+Light_Contribution contribution_brdf(vec3 L, vec3 N, vec3 V, vec3 F0, float roughness)
+{
+    Light_Contribution result = Light_Contribution(vec3(0), vec3(0));
+
+    vec3 H = normalize(V + L);
+    float cos_theta = max(dot(H, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);    
+    float NDF = distribution_ggx(N, H, roughness);       
+    float G   = geometry_smith(N, V, L, roughness);  
+    vec3  F   = fresnel_schlick(cos_theta, F0);
+
+    vec3 specular_numerator    = NDF * G * F;
+    float specular_denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;
+        
+    vec3 kS = vec3(F);
+    vec3 kD = (vec3(1.0) - kS);
+
+    result.specular = specular_numerator / specular_denominator * NdotL;
+    result.diffuse = kD * NdotL;
+    return result;
+}
+
+Light_Contribution contribution_point_light(vec3 P, vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, Point_Light light)
+{
+    Light_Contribution result = Light_Contribution(vec3(0), vec3(0));
+
+    vec3 L_whole = light.pos - P;
+    float light_distance = length(L_whole);
+    if(light_distance < light.range)
+    {
+        //vec3 point_L = light.pos - P;
+        //vec3 center_to_ray = dot(point_L, R)*R - point_L;
+        //vec3 closest_point = point_L + center_to_ray * clamp(light.radius/length(center_to_ray), 0, 1);
+        //L_whole = point_L;
+        vec3 L = normalize(L_whole);
+
+        float attenuation = attentuate_no_singularity(light_distance, light.radius);
+        attenuation       = mix(1, attenuation, attentuation_strength);
+
+        Light_Contribution BRDF = contribution_brdf(L, N, V, F0, roughness);
+        result.specular = max(BRDF.specular * light.color * attenuation, 0);
+        result.diffuse = max(BRDF.diffuse * light.color * attenuation, 0);
+    }
+    return result;
+}
+
+//taken from: https://github.com/turanszkij/WickedEngine/blob/62d1d02691286cc6c25da61294bfb416d018782b/WickedEngine/lightingHF.hlsli#L368
+float illuminance_sphere_or_disk(float cosTheta, float sinSigmaSqr)
+{
+	float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
+
+	float illuminance = 0.0f;
+	// Note: Following test is equivalent to the original formula. 
+	// There is 3 phase in the curve: cosTheta > sqrt(sinSigmaSqr), 
+	// cosTheta > -sqrt(sinSigmaSqr) and else it is 0 
+	// The two outer case can be merge into a cosTheta * cosTheta > sinSigmaSqr 
+	// and using saturate(cosTheta) instead. 
+	if (cosTheta * cosTheta > sinSigmaSqr)
+	{
+		illuminance = PI * sinSigmaSqr * clamp(cosTheta, 0, 1);
+	}
+	else
+	{
+		float x = sqrt(1.0f / sinSigmaSqr - 1.0f); // For a disk this simplify to x = d / r 
+		float y = -x * (cosTheta / sinTheta);
+		float sinThetaSqrtY = sinTheta * sqrt(1.0f - y * y);
+		illuminance = (cosTheta * acos(y) - x * sinThetaSqrtY) * sinSigmaSqr + atan(sinThetaSqrtY / x);
+	}
+
+	return max(illuminance, 0.0f);
+}
+
+Light_Contribution contribution_sphere_light(vec3 P, vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, Point_Light light)
+{
+    Light_Contribution result = Light_Contribution(vec3(0), vec3(0));
+
+    vec3 L_point = light.pos - P;
+    vec3 center_to_ray = dot(L_point, R)*R - L_point;
+    vec3 closest_point = L_point + center_to_ray * clamp(light.radius/length(center_to_ray), 0, 1);
+    vec3 L_whole = closest_point;
+    vec3 L = normalize(L_whole);
+    float light_distance = length(L_whole);
+    if(light_distance < light.range)
+    {
+        float cos_theta = clamp(dot(N, L), -0.999, 0.999); // Clamp to avoid edge case 
+	    float sin_sigma = min(light.radius / light_distance, 0.9999f);
+	    //float f_light = illuminance_sphere_or_disk(cos_theta, sin_sigma * sin_sigma);
+
+        //result.specular = vec3(f_light*f_light);
+        //return result;
+
+        float f_light = attentuate_no_singularity(light_distance, light.radius);
+        f_light       = mix(1, f_light, attentuation_strength);
+        //f_light = 1;
+        f_light *= 1/(light.radius*light.radius*PI);
+
+        Light_Contribution BRDF = contribution_brdf(L, N, V, F0, roughness);
+        result.specular = max(BRDF.specular * light.color * f_light, 0);
+        result.diffuse = max(BRDF.diffuse * light.color * f_light, 0);
+    }
+    return result;
+}
+
+Light_Contribution contribution_ambient_map(vec3 P, vec3 N, vec3 V, vec3 R, vec3 F0, float roughness)
+{
+    vec3 F = fresnel_schlick_rougness(max(dot(N, V), 0.0), F0, roughness);
+    
+    vec3 kS = F;
+    vec3 kD = 1.0 - kS;
+
+    vec3 irradiance = texture(cubemap_irradiance, N).rgb;
+    vec3 diffuse    = irradiance;
+    
+    // sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 prefiltered_color = textureLod(cubemap_prefilter, R,  roughness * MAX_REFLECTION_LOD).rgb;    
+    vec2 brdf  = texture(texture_brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
+    vec3 specular = prefiltered_color * (F * brdf.x + brdf.y);
+
+    Light_Contribution result = Light_Contribution(vec3(0), vec3(0));
+    result.diffuse = kD * diffuse;
+    result.specular = specular;
+
+    return result;
+}
+
+vec3 pbr(vec3 albedo, vec3 normal, float metallic, float roughness, float ao)
+{
+    vec3 P = fs_in.frag_pos;
+    vec3 N = normal; 
+    vec3 V = normalize(view_pos - P);
+    vec3 R = reflect(-V, N); 
+
+    roughness = max(roughness, 0.005);
+    vec3 F0 = mix(reflection_at_zero_incidence, albedo, metallic);
+
+    vec3 direct_light = vec3(0);
+    vec3 ambient_light = vec3(0);
+    for(int i = 0; i < PBR_MAX_LIGHTS; ++i) 
+    {
+        Point_Light point_light = Point_Light(vec3(0), vec3(0), 0, 0);
+        point_light.pos = lights_pos[i];
+        point_light.color = lights_color[i];
+        point_light.radius = lights_radius[i];
+        point_light.range = 99999;
+
+        Light_Contribution contribution = contribution_sphere_light(P, N, V, R, F0, roughness, point_light);
+        contribution.diffuse *= albedo * (1.0 - metallic) / PI;
+        direct_light += contribution.diffuse + contribution.specular;
+    }
+    
+    Light_Contribution ambient = Light_Contribution(vec3(0), vec3(0));
+    ambient = contribution_ambient_map(P, N, V, R, F0, roughness);
+    ambient.diffuse *= albedo * (1.0 - metallic);
+
+    ambient_light = (ambient.diffuse + ambient.specular)*ao;
+    
+    vec3 color = ambient_light + direct_light;
+    return color;
+}
+
+//old!
 vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, float ao)
 {
     vec3 N = normal; 
@@ -203,6 +389,6 @@ void main()
         ao        = texture(texture_ao, fs_in.uv).r;
     }
 
-    vec3 color = point_light_pbr(albedo, normal, metallic, roughness, ao);
+    vec3 color = pbr(albedo, normal, metallic, roughness, ao);
     frag_color = vec4(color, 1.0);
 }
