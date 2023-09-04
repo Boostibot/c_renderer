@@ -9,6 +9,7 @@
 #include "log.h"
 #include "file.h"
 #include "allocator_debug.h"
+#include "allocator_malloc.h"
 #include "random.h"
 #include "math.h"
 
@@ -19,7 +20,6 @@
 
 #include "stb/stb_image.h"
 #include "glfw/glfw3.h"
-
 
 typedef enum Control_Name
 {
@@ -494,25 +494,17 @@ const char* platform_sandbox_error_to_cstring(Platform_Sandox_Error error)
 
 void* glfw_malloc_func(size_t size, void* user)
 {
-    Debug_Allocator* allocator = (Debug_Allocator*) user;
-    return allocator_try_reallocate(&allocator->allocator, size, NULL, 0, 8, SOURCE_INFO());
+    return malloc_allocator_malloc((Malloc_Allocator*) user, size);
 }
 
 void* glfw_realloc_func(void* block, size_t size, void* user)
 {
-    Debug_Allocator* allocator = (Debug_Allocator*) user;
-    Debug_Allocation allocation = debug_allocator_get_allocation(allocator, block); 
-    void* out = allocator_try_reallocate(&allocator->allocator, size, allocation.ptr, allocation.size, 8, SOURCE_INFO());
-    debug_allocator_deinit_allocation(&allocation);
-    return out;
+    return malloc_allocator_realloc((Malloc_Allocator*) user, block, size);
 }
 
 void glfw_free_func(void* block, void* user)
 {
-    Debug_Allocator* allocator = (Debug_Allocator*) user;
-    Debug_Allocation allocation = debug_allocator_get_allocation(allocator, block); 
-    allocator_try_reallocate(&allocator->allocator, 0, allocation.ptr, allocation.size, 8, SOURCE_INFO());
-    debug_allocator_deinit_allocation(&allocation);
+    malloc_allocator_free((Malloc_Allocator*) user, block);
 }
 
 void glfw_error_func(int code, const char* description)
@@ -559,16 +551,15 @@ void error_func(void* context, Platform_Sandox_Error error_code);
 int main()
 {
     platform_init();
-    log_system_init(&global_malloc_allocator.allocator, &global_malloc_allocator.allocator);
-
-    Debug_Allocator debug_allocator = {0};
-    debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
+    Malloc_Allocator malloc_allocator = {0};
+    malloc_allocator_init_use(&malloc_allocator, 0);
+    log_system_init(&malloc_allocator.allocator, &malloc_allocator.allocator);
 
     GLFWallocator allocator = {0};
     allocator.allocate = glfw_malloc_func;
     allocator.reallocate = glfw_realloc_func;
     allocator.deallocate = glfw_free_func;
-    allocator.user = &debug_allocator;
+    allocator.user = &malloc_allocator;
  
     glfwInitAllocator(&allocator);
     glfwSetErrorCallback(glfw_error_func);
@@ -609,9 +600,9 @@ int main()
     glfwDestroyWindow(window);
     glfwTerminate();
 
-    debug_allocator_deinit(&debug_allocator);
-
     log_system_deinit();
+    ASSERT(malloc_allocator.bytes_allocated == 0);
+    malloc_allocator_deinit(&malloc_allocator);
     platform_deinit();
 
     return 0;    
@@ -647,7 +638,7 @@ void render_screen_frame_buffers_init(Render_Screen_Frame_Buffers* buffer, i32 w
 {
     render_screen_frame_buffers_deinit(buffer);
 
-    LOG_INFO("RENDR", "render_screen_frame_buffers_init %-4d x %-4d", width, height);
+    LOG_INFO("RENDER", "render_screen_frame_buffers_init %-4d x %-4d", width, height);
     
     buffer->width = width;
     buffer->height = height;
@@ -679,8 +670,7 @@ void render_screen_frame_buffers_init(Render_Screen_Frame_Buffers* buffer, i32 w
 
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, buffer->render_buff);
 
-    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-       TEST_MSG(false, "frame buffer creation failed!"); 
+    TEST_MSG(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "frame buffer creation failed!");
 
     glDisable(GL_FRAMEBUFFER_SRGB);
     glBindFramebuffer(GL_FRAMEBUFFER, 0); 
@@ -751,7 +741,7 @@ void render_screen_frame_buffers_msaa_deinit(Render_Screen_Frame_Buffers_MSAA* b
 bool render_screen_frame_buffers_msaa_init(Render_Screen_Frame_Buffers_MSAA* buffer, i32 width, i32 height, i32 sample_count)
 {
     render_screen_frame_buffers_msaa_deinit(buffer);
-    LOG_INFO("RENDR", "render_screen_frame_buffers_msaa_init %-4d x %-4d samples: %d", width, height, sample_count);
+    LOG_INFO("RENDER", "render_screen_frame_buffers_msaa_init %-4d x %-4d samples: %d", width, height, sample_count);
 
     glBindVertexArray(0);
 
@@ -2352,17 +2342,28 @@ void run_func(void* context)
     render_shader_deinit(&shader_pbr);
     render_shader_deinit(&shader_debug);
 
+    render_shader_deinit(&shader_equi_to_cubemap);
+    render_shader_deinit(&shader_irradiance);
+    render_shader_deinit(&shader_prefilter);
+    render_shader_deinit(&shader_brdf_lut);
+    render_shader_deinit(&shader_pbr_mapped);
+
+
     render_pbr_material_deinit(&material_metal);
 
     array_deinit(&fps_display);
     
     render_texture_deinit(&texture_floor);
     render_texture_deinit(&texture_debug);
+    render_texture_deinit(&texture_environment);
+    render_texture_deinit(&texture_brdf_lut);
     render_cubemap_deinit(&cubemap_skybox);
+    render_cubemap_deinit(&cubemap_environment);
+    render_cubemap_deinit(&cubemap_irradiance);
+    render_cubemap_deinit(&cubemap_prefilter);
 
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
 
-    debug_allocator_print_alive_allocations(debug_alloc, 0);
     debug_allocator_deinit(&debug_alloc);
     
 

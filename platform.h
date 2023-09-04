@@ -29,6 +29,7 @@ typedef enum Platform_Memory_Protection
 
 void* platform_virtual_reallocate(void* allocate_at, int64_t bytes, Platform_Virtual_Allocation action, Platform_Memory_Protection protection);
 void* platform_heap_reallocate(int64_t new_size, void* old_ptr, int64_t old_size, int64_t align);
+int64_t platform_heap_get_block_size(void* old_ptr, int64_t align); //returns the size in bytes of the allocated block. Useful for compatibility with APIs that expect malloc/free type allocation functions without explicit size
 
 //=========================================
 // Threading

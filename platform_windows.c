@@ -63,14 +63,30 @@ void* platform_virtual_reallocate(void* adress, int64_t bytes, Platform_Virtual_
 
 void* platform_heap_reallocate(int64_t new_size, void* old_ptr, int64_t old_size, int64_t align)
 {
+    assert(align > 0 && new_size >= 0 && old_size >= 0);
+    
     (void) old_size;
+    #ifndef NDEBUG
+    if(old_ptr != NULL && old_size != 0)
+    {
+        int64_t correct_size = platform_heap_get_block_size(old_ptr, align);
+        assert(old_size == correct_size && "incorrect old_size passed to platform_heap_reallocate!");
+    }
+    #endif
+
     if(new_size == 0)
     {
         _aligned_free(old_ptr);
         return NULL;
     }
+    return _aligned_realloc(old_ptr, (size_t) new_size, (size_t) align);
+}
 
-    return _aligned_realloc(old_ptr, new_size, align);
+
+int64_t platform_heap_get_block_size(void* old_ptr, int64_t align)
+{
+    int64_t size = _aligned_msize(old_ptr, (size_t) align, 0);
+    return size;
 }
 
 //=========================================

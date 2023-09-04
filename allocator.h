@@ -3,6 +3,7 @@
 
 #include "defines.h"
 #include "assert.h"
+#include <string.h>
 
 // This module introduces a framework for dealing with memory and allocation used by every other system.
 // It makes very little assumptions about the use case making it very portable to other projects.
@@ -128,25 +129,6 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 #define GIBI_BYTE   ((int64_t) 1 << 30)
 #define TEBI_BYTE   ((int64_t) 1 << 40)
 
-typedef struct Malloc_Allocator
-{
-    Allocator allocator;
-    const char* name;
-
-    isize bytes_allocated;
-    isize max_bytes_allocated;
-
-    isize allocation_count;
-    isize deallocation_count;
-    isize reallocation_count;
-} Malloc_Allocator;
-
-EXPORT Malloc_Allocator malloc_allocator_make();
-
-EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
-EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_);
-
-extern Malloc_Allocator global_malloc_allocator;
 
 #ifdef _MSC_VER
     #define stack_allocate(size, align) \
@@ -160,8 +142,6 @@ extern Malloc_Allocator global_malloc_allocator;
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ALLOCATOR_IMPL)) && !defined(LIB_ALLOCATOR_HAS_IMPL)
 #define LIB_ALLOCATOR_HAS_IMPL
-
-    #include "platform.h"
 
     INTERNAL Allocator* _mask_allocator_bits(Allocator* self)
     {
@@ -205,8 +185,8 @@ extern Malloc_Allocator global_malloc_allocator;
         return masked->get_stats(masked);
     }
 
-    INTERNAL THREAD_LOCAL Allocator* _default_allocator = &global_malloc_allocator.allocator;
-    INTERNAL THREAD_LOCAL Allocator* _scratch_allocator = &global_malloc_allocator.allocator;
+    INTERNAL THREAD_LOCAL Allocator* _default_allocator = NULL;
+    INTERNAL THREAD_LOCAL Allocator* _scratch_allocator = NULL;
 
     EXPORT Allocator* allocator_get_default()
     {
@@ -313,64 +293,4 @@ extern Malloc_Allocator global_malloc_allocator;
         return (void*) ptr_num;
     }
 
-    Malloc_Allocator global_malloc_allocator = {_malloc_allocator_allocate, _malloc_allocator_get_stats, "global_malloc_allocator"};
-
-    EXPORT Malloc_Allocator malloc_allocator_make()
-    {
-        Malloc_Allocator malloc = {0};
-        malloc.allocator.allocate = _malloc_allocator_allocate;
-        malloc.allocator.get_stats = _malloc_allocator_get_stats;
-        return malloc;
-    }
-
-    EXPORT void* _malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
-    {
-        (void) called_from;
-        Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
-        isize size_delta = new_size - old_size;
-        self->bytes_allocated += size_delta;
-
-        void* out_ptr = NULL;
-        if(old_ptr == NULL)
-        {
-            self->allocation_count += 1;
-            out_ptr = platform_heap_reallocate(new_size, NULL, 0, align);
-        }
-        else if(new_size == 0)
-        {
-            self->deallocation_count += 1;
-            platform_heap_reallocate(0, old_ptr, old_size, align);
-            return NULL;                
-        }
-        else
-        {
-            self->reallocation_count += 1;
-            out_ptr = platform_heap_reallocate(new_size, old_ptr, old_size, align);
-        }
-    
-        if(out_ptr == NULL)
-            self->bytes_allocated -= size_delta;
-    
-        if(self->max_bytes_allocated < self->bytes_allocated)
-            self->max_bytes_allocated = self->bytes_allocated;
-
-        return out_ptr;
-    }
-
-    EXPORT Allocator_Stats _malloc_allocator_get_stats(Allocator* self_)
-    {
-        Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
-        Allocator_Stats out = {0};
-        out.type_name = "Malloc_Allocator";
-        out.name = self->name;
-        out.parent = NULL;
-        out.is_top_level = true;
-        out.max_bytes_allocated = self->max_bytes_allocated;
-        out.bytes_allocated = self->bytes_allocated;
-        out.allocation_count = self->allocation_count;
-        out.deallocation_count = self->deallocation_count;
-        out.reallocation_count = self->reallocation_count;
-
-        return out;
-    }
 #endif

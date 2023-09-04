@@ -224,7 +224,7 @@ Light_Contribution contribution_sphere_light(vec3 P, vec3 N, vec3 V, vec3 R, vec
         float f_light = attentuate_no_singularity(light_distance, light.radius);
         f_light       = mix(1, f_light, attentuation_strength);
         //f_light = 1;
-        f_light *= 1/(light.radius*light.radius*PI);
+        //f_light *= 1/(light.radius*light.radius*PI);
 
         Light_Contribution BRDF = contribution_brdf(L, N, V, F0, roughness);
         result.specular = max(BRDF.specular * light.color * f_light, 0);

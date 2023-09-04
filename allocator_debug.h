@@ -32,9 +32,9 @@
 //  | | 0           |         |                  *BLOCK*: allocated block from parent allocator 
 //  | | ...         |         |       |------------------------------------------------------------------------|
 //  | | 0x140144100 | --------------->| XXXX | header | call stack | dead zone | USER DATA | dead zone | XXXXX |
-//  | | 0           |         |       ^---------------------------^--------------------------------------------|
-//  | |_____________|         |       ^                           ^ 
-//  |_________________________|       L 8 aligned                 L aligned to user specified align
+//  | | 0           |         |       ^----------------------------------------^-------------------------------|
+//  | |_____________|         |       ^                                        ^ 
+//  |_________________________|       L 8 aligned                              L aligned to user specified align
 //
 // 
 // Within each *BLOCK* are contained the properly sized user data along with some header containing meta
@@ -205,12 +205,8 @@ typedef enum Debug_Allocator_Panic_Reason
 
 #define DEBUG_ALLOCATOR_MAGIC_NUM8  (u8)  0x55
 
-//if defined prints callstack even when printing dead allocations
-//#define DEBUG_ALLOCATOR_PRINT_DEAD_CALLSTACK
-
 #include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> //qsort
 
 typedef struct Debug_Allocation_Header
 {
@@ -278,7 +274,7 @@ EXPORT void debug_allocator_init_use(Debug_Allocator* debug, u64 flags)
     if(flags & DEBUG_ALLOCATOR_KEEP_HISTORY)
         options.max_dead_allocations = 1000;
 
-    debug_allocator_init(debug, &global_malloc_allocator.allocator, options);
+    debug_allocator_init(debug, allocator_get_default(), options);
 
     debug->allocator_backup = allocator_set_both(&debug->allocator, &debug->allocator);
 }
@@ -330,7 +326,6 @@ EXPORT void debug_allocator_panic_func(Debug_Allocator* allocator, Debug_Allocat
     platform_trap();
     platform_abort();
 }
-
 
 typedef struct Debug_Allocation_Pre_Block
 {

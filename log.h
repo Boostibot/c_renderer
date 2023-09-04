@@ -107,6 +107,7 @@ typedef Platform_Stack_Trace_Entry Stack_Trace_Entry;
 DEFINE_ARRAY_TYPE(Stack_Trace_Entry, Stack_Trace);
 
 EXPORT void log_message(String chanel, u8 log_type, const char* format, ...);
+EXPORT void vlog_message(String chanel, u8 log_type, const char* format, va_list args);
 EXPORT void log_group_push();  
 EXPORT void log_group_pop();
 EXPORT i32  log_group_depth();
@@ -629,12 +630,12 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
     Platform_Calendar_Time c = platform_epoch_time_to_calendar_time(entry.epoch_time);
     if(log_type_str != NULL)
     {
-        format_into(append_to, "[%02d:%02d:%02d %03d %-5s] {%-5s} ", 
+        format_into(append_to, "[%02d:%02d:%02d %03d %-5s] {%-6s} ", 
             (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, log_type_str, cstring_from_builder(entry.chanel));
     }
     else
     {
-        format_into(append_to, "[%02d:%02d:%02d %03d %-5d] {%-5s} ", 
+        format_into(append_to, "[%02d:%02d:%02d %03d %-5d] {%-6s} ", 
             (int) c.hour, (int) c.minute, (int) c.second, (int) c.millisecond, (int) entry.log_type, cstring_from_builder(entry.chanel));
     }
     
@@ -688,7 +689,7 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
     }
 }
 
-EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
+EXPORT void vlog_message(String chanel, u8 log_type, const char* format, va_list args)
 {
     if(global_log_state.is_init == false || global_log_state.error_recusion_depth > _LOG_MAX_RECURSION_DEPTH)
         return;
@@ -706,10 +707,7 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     array_init_backed(&chanel_entry.message, scratch_alloc, 256);
     array_init_backed(&chanel_entry.chanel, scratch_alloc, 32);
 
-    va_list args;
-    va_start(args, format);
     vlog_process_message(&chanel_entry, chanel, log_type, format, args);
-    va_end(args);
 
     log_format_entry(&message, chanel_entry);
 
@@ -749,6 +747,15 @@ EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
     array_deinit(&chanel_entry.chanel);
 
     global_log_state.error_recusion_depth -= 1;
+}
+
+
+EXPORT void log_message(String chanel, u8 log_type, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vlog_message(chanel, log_type, format, args);
+    va_end(args);
 }
 
 
@@ -812,14 +819,20 @@ EXPORT void log_captured_callstack(String chanel, const void** callstack, isize 
     array_deinit(&trace);
 }
 
-EXPORT void assertion_report(const char* expression, const char* message, const char* file, int line)
+EXPORT void assertion_report(const char* expression, const char* file, int line, const char* message, ...)
 {
     Source_Info info = {0};
     info.file = file;
     info.line = line;
-        LOG_FATAL("TEST", "TEST(%s) TEST/ASSERTION failed! " SOURCE_INFO_FMT, expression, SOURCE_INFO_PRINT(info));
+    LOG_FATAL("TEST", "TEST(%s) TEST/ASSERTION failed! " SOURCE_INFO_FMT, expression, SOURCE_INFO_PRINT(info));
     if(message != NULL && strlen(message) != 0)
-        LOG_FATAL("TEST", "with message:\n%s", message);
+    {
+        LOG_FATAL("TEST", "with message:\n", message);
+        va_list args;
+        va_start(args, message);
+        log_message(STRING("TEST"), LOG_TYPE_FATAL, message, args);
+        va_end(args);
+    }
         
     log_group_push();
     log_callstack(STRING("TEST"), -1, 1);
