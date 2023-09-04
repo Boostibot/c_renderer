@@ -83,7 +83,7 @@ INTERNAL void test_array_stress(f64 max_seconds)
 			
 			case INIT_BACKED: {
 				array_deinit(arr);
-				array_init_backed_custom(arr, allocator_get_default(), buffer, BACKING);
+				array_init_backed_from_memory(arr, allocator_get_default(), buffer, BACKING);
 				break;
 			}
 			

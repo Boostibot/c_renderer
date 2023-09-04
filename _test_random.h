@@ -76,7 +76,7 @@ INTERNAL void test_random_range()
 		int64_t abs_index = random - RANDOM_TEST_RANGE_FROM;
 		int64_t index = abs_index / BAR_SIZE;
 
-		assert(0 <= index && index < RANDOM_HIST_SIZE);
+		ASSERT(0 <= index && index < RANDOM_HIST_SIZE);
 		histogram[index] += 1;
 	}
 	
@@ -100,7 +100,7 @@ INTERNAL void test_random_f64()
 		double random = random_f64();
 		TEST(0 <= random && random < 1);
 		int64_t index = (int64_t) (random / BAR_SIZE);
-		assert(0 <= index && index < RANDOM_HIST_SIZE);
+		ASSERT(0 <= index && index < RANDOM_HIST_SIZE);
 		histogram[index] += 1;
 	}
 	
@@ -124,7 +124,7 @@ INTERNAL void test_random_f32()
 		float random = random_f32();
 		TEST(0 <= random && random < 1);
 		int64_t index = (int64_t) (random / BAR_SIZE);
-		assert(0 <= index && index < RANDOM_HIST_SIZE);
+		ASSERT(0 <= index && index < RANDOM_HIST_SIZE);
 		histogram[index] += 1;
 	}
 	

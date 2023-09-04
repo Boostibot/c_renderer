@@ -135,7 +135,7 @@ typedef struct Camera
     f32 right;
 } Camera;
 
-typedef struct Game_Settings
+typedef struct App_Settings
 {
     f32 fov;
     f32 movement_speed;
@@ -151,12 +151,12 @@ typedef struct Game_Settings
 
     f32 zoom_adjust_time;
     i32 MSAA_samples;
-} Game_Settings;
+} App_Settings;
 
 #define CONTROL_MAPPING_SETS 3
-typedef struct Game_State
+typedef struct App_State
 {
-    Game_Settings settings;
+    App_Settings settings;
     Camera camera;
     
     f32 camera_yaw;
@@ -191,7 +191,7 @@ typedef struct Game_State
     Controls controls_prev;
     Control_Mapping control_mappings[CONTROL_MAPPING_SETS];
     bool key_states[GLFW_KEY_LAST + 1];
-} Game_State;
+} App_State;
 
 
 bool control_was_pressed(Controls* controls, Control_Name control)
@@ -334,16 +334,16 @@ void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mo
 void glfw_mouse_button_func(GLFWwindow* window, int button, int action, int mods);
 void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset);
 
-void controls_set_control_by_input(Game_State* game_state, Input_Type input_type, isize index, f32 value, bool is_increment)
+void controls_set_control_by_input(App_State* app, Input_Type input_type, isize index, f32 value, bool is_increment)
 {
     for(isize i = 0; i < CONTROL_MAPPING_SETS; i++)
     {
-        Control_Mapping* mapping = &game_state->control_mappings[i];
+        Control_Mapping* mapping = &app->control_mappings[i];
         u8* control_slot = control_mapping_get_entry(mapping, input_type, index);
         if(*control_slot != CONTROL_NONE)
         {
-            u8* interactions = &game_state->controls.interactions[*control_slot];
-            f32* stored_value = &game_state->controls.values[*control_slot];
+            u8* interactions = &app->controls.interactions[*control_slot];
+            f32* stored_value = &app->controls.values[*control_slot];
 
             if(*interactions < UINT8_MAX)
                 *interactions += 1;
@@ -358,7 +358,7 @@ void controls_set_control_by_input(Game_State* game_state, Input_Type input_type
 
 void window_process_input(GLFWwindow* window, bool is_initial_call)
 {
-    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
+    App_State* app = (App_State*) glfwGetWindowUserPointer(window);
     if(is_initial_call)
     {
         //void glfw_framebuffer_resize_func(GLFWwindow* window, int width, int height);
@@ -372,34 +372,34 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
         glfwSetScrollCallback(window, glfw_scroll_func);
     }
     
-    game_state->controls_prev = game_state->controls;
-    memset(&game_state->controls.interactions, 0, sizeof game_state->controls.interactions);
+    app->controls_prev = app->controls;
+    memset(&app->controls.interactions, 0, sizeof app->controls.interactions);
 
     glfwPollEvents();
-    game_state->should_close = glfwWindowShouldClose(window);
+    app->should_close = glfwWindowShouldClose(window);
     
     STATIC_ASSERT(sizeof(int) == sizeof(i32));
 
-    game_state->window_screen_width_prev = game_state->window_screen_width;
-    game_state->window_screen_height_prev = game_state->window_screen_height;
-    glfwGetWindowSize(window, (int*) &game_state->window_screen_width, (int*) &game_state->window_screen_height);
+    app->window_screen_width_prev = app->window_screen_width;
+    app->window_screen_height_prev = app->window_screen_height;
+    glfwGetWindowSize(window, (int*) &app->window_screen_width, (int*) &app->window_screen_height);
 
-    game_state->window_framebuffer_width_prev = game_state->window_framebuffer_width;
-    game_state->window_framebuffer_height_prev = game_state->window_framebuffer_height;
-    glfwGetFramebufferSize(window, (int*) &game_state->window_framebuffer_width, (int*) &game_state->window_framebuffer_height);
+    app->window_framebuffer_width_prev = app->window_framebuffer_width;
+    app->window_framebuffer_height_prev = app->window_framebuffer_height;
+    glfwGetFramebufferSize(window, (int*) &app->window_framebuffer_width, (int*) &app->window_framebuffer_height);
     
-    game_state->window_framebuffer_width = MAX(game_state->window_framebuffer_width, 1);
-    game_state->window_framebuffer_height = MAX(game_state->window_framebuffer_height, 1);
+    app->window_framebuffer_width = MAX(app->window_framebuffer_width, 1);
+    app->window_framebuffer_height = MAX(app->window_framebuffer_height, 1);
 
     f64 new_mouse_x = 0;
     f64 new_mouse_y = 0;
     glfwGetCursorPos(window, &new_mouse_x, &new_mouse_y);
-    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_X, (f32) new_mouse_x, false);
-    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_Y, (f32) new_mouse_y, false);
+    controls_set_control_by_input(app, INPUT_TYPE_MOUSE, GLFW_MOUSE_X, (f32) new_mouse_x, false);
+    controls_set_control_by_input(app, INPUT_TYPE_MOUSE, GLFW_MOUSE_Y, (f32) new_mouse_y, false);
     
-    if(game_state->is_in_mouse_mode_prev != game_state->is_in_mouse_mode || is_initial_call)
+    if(app->is_in_mouse_mode_prev != app->is_in_mouse_mode || is_initial_call)
     {
-        if(game_state->is_in_mouse_mode == false)
+        if(app->is_in_mouse_mode == false)
         {
             if(glfwRawMouseMotionSupported())
                 glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
@@ -413,9 +413,9 @@ void window_process_input(GLFWwindow* window, bool is_initial_call)
     }
 
     //if(is_initial_call)
-        //game_state->controls_prev = game_state->controls;
+        //app->controls_prev = app->controls;
 
-    game_state->is_in_mouse_mode_prev = game_state->is_in_mouse_mode;
+    app->is_in_mouse_mode_prev = app->is_in_mouse_mode;
 }
 
 void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -434,8 +434,8 @@ void glfw_key_func(GLFWwindow* window, int key, int scancode, int action, int mo
     else
         return;
 
-    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    controls_set_control_by_input(game_state, INPUT_TYPE_KEY, key, value, false);
+    App_State* app = (App_State*) glfwGetWindowUserPointer(window);
+    controls_set_control_by_input(app, INPUT_TYPE_KEY, key, value, false);
     
 }
 
@@ -450,16 +450,16 @@ void glfw_mouse_button_func(GLFWwindow* window, int button, int action, int mods
     else
         return;
 
-    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE_BUTTON, button, value, false);
+    App_State* app = (App_State*) glfwGetWindowUserPointer(window);
+    controls_set_control_by_input(app, INPUT_TYPE_MOUSE_BUTTON, button, value, false);
 }
 
 void glfw_scroll_func(GLFWwindow* window, f64 xoffset, f64 yoffset)
 {   
     (void) xoffset;
     f32 value = (f32) yoffset;
-    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    controls_set_control_by_input(game_state, INPUT_TYPE_MOUSE, GLFW_MOUSE_SCROLL, value, true);
+    App_State* app = (App_State*) glfwGetWindowUserPointer(window);
+    controls_set_control_by_input(app, INPUT_TYPE_MOUSE, GLFW_MOUSE_SCROLL, value, true);
 }
 
 const char* platform_sandbox_error_to_cstring(Platform_Sandox_Error error)
@@ -584,8 +584,8 @@ int main()
     GLFWwindow* window = glfwCreateWindow(1600, 900, "Game", NULL, NULL);
     TEST_MSG(window != NULL, "Failed to make glfw window");
 
-    Game_State game_state = {0};
-    glfwSetWindowUserPointer(window, &game_state);
+    App_State app = {0};
+    glfwSetWindowUserPointer(window, &app);
     glfwMakeContextCurrent(window);
 
     int version = gladLoadGL((GLADloadfunc) glfwGetProcAddress);
@@ -1792,30 +1792,31 @@ void run_func(void* context)
     debug_allocator_init_use(&debug_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
     GLFWwindow* window = (GLFWwindow*) context;
-    Game_State* game_state = (Game_State*) glfwGetWindowUserPointer(window);
-    memset(game_state, 0, sizeof *game_state);
+    App_State* app = (App_State*) glfwGetWindowUserPointer(window);
+    App_Settings* settings = &app->settings;
+    memset(app, 0, sizeof *app);
 
-    game_state->camera.pos        = vec3(0.0f, 0.0f,  0.0f);
-    game_state->camera.looking_at = vec3(1.0f, 0.0f,  0.0f);
-    game_state->camera.up_dir     = vec3(0.0f, 1.0f,  0.0f);
-    game_state->camera.is_position_relative = true;
+    app->camera.pos        = vec3(0.0f, 0.0f,  0.0f);
+    app->camera.looking_at = vec3(1.0f, 0.0f,  0.0f);
+    app->camera.up_dir     = vec3(0.0f, 1.0f,  0.0f);
+    app->camera.is_position_relative = true;
 
-    game_state->camera_yaw = -TAU/4;
-    game_state->camera_pitch = 0.0;
+    app->camera_yaw = -TAU/4;
+    app->camera_pitch = 0.0;
 
-    game_state->is_in_mouse_mode = false;
-    game_state->settings.fov = TAU/4;
-    game_state->settings.movement_speed = 2.5f;
-    game_state->settings.movement_sprint_mult = 5;
-    game_state->settings.screen_gamma = 2.2f;
-    game_state->settings.screen_exposure = 1;
-    game_state->settings.mouse_sensitivity = 0.002f;
-    game_state->settings.mouse_wheel_sensitivity = 0.05f; // uwu
-    game_state->settings.zoom_adjust_time = 0.2f;
-    game_state->settings.mouse_sensitivity_scale_with_fov_ammount = 1.0f;
-    game_state->settings.MSAA_samples = 4;
+    app->is_in_mouse_mode = false;
+    settings->fov = TAU/4;
+    settings->movement_speed = 2.5f;
+    settings->movement_sprint_mult = 5;
+    settings->screen_gamma = 2.2f;
+    settings->screen_exposure = 1;
+    settings->mouse_sensitivity = 0.002f;
+    settings->mouse_wheel_sensitivity = 0.05f; // uwu
+    settings->zoom_adjust_time = 0.2f;
+    settings->mouse_sensitivity_scale_with_fov_ammount = 1.0f;
+    settings->MSAA_samples = 4;
 
-    mapping_make_default(game_state->control_mappings);
+    mapping_make_default(app->control_mappings);
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
     Render_Capture_Buffers capture_buffers = {0};
@@ -1873,26 +1874,26 @@ void run_func(void* context)
     bool use_mapping = true;
 
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-    for(isize frame_num = 0; game_state->should_close == false; frame_num ++)
+    for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
         glfwSwapBuffers(window);
         f64 start_frame_time = clock_s();
-        game_state->delta_time = start_frame_time - game_state->last_frame_timepoint; 
-        game_state->last_frame_timepoint = start_frame_time; 
+        app->delta_time = start_frame_time - app->last_frame_timepoint; 
+        app->last_frame_timepoint = start_frame_time; 
 
         window_process_input(window, frame_num == 0);
-        if(game_state->window_framebuffer_width != game_state->window_framebuffer_width_prev 
-            || game_state->window_framebuffer_height != game_state->window_framebuffer_height_prev
+        if(app->window_framebuffer_width != app->window_framebuffer_width_prev 
+            || app->window_framebuffer_height != app->window_framebuffer_height_prev
             || frame_num == 0)
         {
             LOG_INFO("APP", "Resizing");
             render_screen_frame_buffers_msaa_deinit(&screen_buffers);
-            render_screen_frame_buffers_msaa_init(&screen_buffers, game_state->window_framebuffer_width, game_state->window_framebuffer_height, game_state->settings.MSAA_samples);
-            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
+            render_screen_frame_buffers_msaa_init(&screen_buffers, app->window_framebuffer_width, app->window_framebuffer_height, settings->MSAA_samples);
+            glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
         }
         
-        if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
-            || control_was_pressed(&game_state->controls, CONTROL_REFRESH_SHADERS)
+        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&app->controls, CONTROL_REFRESH_SHADERS)
             || frame_num == 0)
         {
             LOG_INFO("APP", "Refreshing shaders");
@@ -1951,8 +1952,8 @@ void run_func(void* context)
             ASSERT(ok);
         }
 
-        if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
-            || control_was_pressed(&game_state->controls, CONTROL_REFRESH_ART)
+        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
             || frame_num == 0)
         {
             
@@ -1998,7 +1999,7 @@ void run_func(void* context)
             render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
             
             f32 use_gamma = 2.0f;
-            if(control_is_down(&game_state->controls, CONTROL_DEBUG_3))
+            if(control_is_down(&app->controls, CONTROL_DEBUG_3))
                 use_gamma = 1.0f;
 
             render_cubemap_init_environment_from_environment_texture(
@@ -2008,7 +2009,7 @@ void run_func(void* context)
                 &cubemap_irradiance, res_irradiance, res_irradiance, irradicance_sample_delta,
                 &cubemap_environment, &capture_buffers, &shader_irradiance, render_cube);
 
-            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
+            glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
 
             ASSERT(ok);
         }
@@ -2016,79 +2017,79 @@ void run_func(void* context)
         
 
 
-        if(control_was_pressed(&game_state->controls, CONTROL_ESCAPE))
+        if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
         {
-            game_state->is_in_mouse_mode = !game_state->is_in_mouse_mode;
+            app->is_in_mouse_mode = !app->is_in_mouse_mode;
         }
         
-        if(control_was_pressed(&game_state->controls, CONTROL_DEBUG_1))
+        if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
         {
-            game_state->is_in_uv_debug_mode = !game_state->is_in_uv_debug_mode;
+            app->is_in_uv_debug_mode = !app->is_in_uv_debug_mode;
         }
         
-        if(control_was_pressed(&game_state->controls, CONTROL_DEBUG_2))
+        if(control_was_pressed(&app->controls, CONTROL_DEBUG_2))
         {
             use_mapping = !use_mapping;
         }
 
-        if(game_state->is_in_mouse_mode == false)
+        if(app->is_in_mouse_mode == false)
         {
-            f32 fov_sens_modifier = sinf(game_state->zoom_target_fov);
+            f32 fov_sens_modifier = sinf(app->zoom_target_fov);
             //Movement
             {
-                f32 move_speed = game_state->settings.movement_speed;
-                if(control_is_down(&game_state->controls, CONTROL_SPRINT))
-                    move_speed *= game_state->settings.movement_sprint_mult;
+                f32 move_speed = settings->movement_speed;
+                if(control_is_down(&app->controls, CONTROL_SPRINT))
+                    move_speed *= settings->movement_sprint_mult;
 
-                Vec3 direction_forward = vec3_norm(camera_get_look_dir(game_state->camera));
-                Vec3 direction_up = vec3_norm(game_state->camera.up_dir);
-                Vec3 direction_right = vec3_norm(vec3_cross(direction_forward, game_state->camera.up_dir));
+                Vec3 direction_forward = vec3_norm(camera_get_look_dir(app->camera));
+                Vec3 direction_up = vec3_norm(app->camera.up_dir);
+                Vec3 direction_right = vec3_norm(vec3_cross(direction_forward, app->camera.up_dir));
             
                 Vec3 move_dir = {0};
-                move_dir = vec3_add(move_dir, vec3_scale(direction_forward, game_state->controls.values[CONTROL_MOVE_FORWARD]));
-                move_dir = vec3_add(move_dir, vec3_scale(direction_up, game_state->controls.values[CONTROL_MOVE_UP]));
-                move_dir = vec3_add(move_dir, vec3_scale(direction_right, game_state->controls.values[CONTROL_MOVE_RIGHT]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_forward, app->controls.values[CONTROL_MOVE_FORWARD]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_up, app->controls.values[CONTROL_MOVE_UP]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_right, app->controls.values[CONTROL_MOVE_RIGHT]));
             
-                move_dir = vec3_add(move_dir, vec3_scale(direction_forward, -game_state->controls.values[CONTROL_MOVE_BACKWARD]));
-                move_dir = vec3_add(move_dir, vec3_scale(direction_up, -game_state->controls.values[CONTROL_MOVE_DOWN]));
-                move_dir = vec3_add(move_dir, vec3_scale(direction_right, -game_state->controls.values[CONTROL_MOVE_LEFT]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_forward, -app->controls.values[CONTROL_MOVE_BACKWARD]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_up, -app->controls.values[CONTROL_MOVE_DOWN]));
+                move_dir = vec3_add(move_dir, vec3_scale(direction_right, -app->controls.values[CONTROL_MOVE_LEFT]));
 
                 if(vec3_len(move_dir) != 0.0f)
                     move_dir = vec3_norm(move_dir);
 
-                Vec3 move_ammount = vec3_scale(move_dir, move_speed * (f32) game_state->delta_time);
-                game_state->camera.pos = vec3_add(game_state->camera.pos, move_ammount);
+                Vec3 move_ammount = vec3_scale(move_dir, move_speed * (f32) app->delta_time);
+                app->camera.pos = vec3_add(app->camera.pos, move_ammount);
             }
 
             //Camera rotation
             {
-                f32 mousex_prev = game_state->controls_prev.values[CONTROL_LOOK_X];
-                f32 mousey_prev = game_state->controls_prev.values[CONTROL_LOOK_Y];
+                f32 mousex_prev = app->controls_prev.values[CONTROL_LOOK_X];
+                f32 mousey_prev = app->controls_prev.values[CONTROL_LOOK_Y];
 
-                f32 mousex = game_state->controls.values[CONTROL_LOOK_X];
-                f32 mousey = game_state->controls.values[CONTROL_LOOK_Y];
+                f32 mousex = app->controls.values[CONTROL_LOOK_X];
+                f32 mousey = app->controls.values[CONTROL_LOOK_Y];
             
                 if(mousex != mousex_prev || mousey != mousey_prev)
                 {
                     f64 xoffset = mousex - mousex_prev;
                     f64 yoffset = mousey_prev - mousey; // reversed since y-coordinates range from bottom to top
 
-                    f32 total_sensitivity = game_state->settings.mouse_sensitivity * lerpf(1, fov_sens_modifier, game_state->settings.mouse_sensitivity_scale_with_fov_ammount);
+                    f32 total_sensitivity = settings->mouse_sensitivity * lerpf(1, fov_sens_modifier, settings->mouse_sensitivity_scale_with_fov_ammount);
 
                     xoffset *= total_sensitivity;
                     yoffset *= total_sensitivity;
                     f32 epsilon = 1e-5f;
 
-                    game_state->camera_yaw   += (f32) xoffset;
-                    game_state->camera_pitch += (f32) yoffset; 
-                    game_state->camera_pitch = CLAMP(game_state->camera_pitch, -TAU/4.0f + epsilon, TAU/4.0f - epsilon);
+                    app->camera_yaw   += (f32) xoffset;
+                    app->camera_pitch += (f32) yoffset; 
+                    app->camera_pitch = CLAMP(app->camera_pitch, -TAU/4.0f + epsilon, TAU/4.0f - epsilon);
         
                     Vec3 direction = {0};
-                    direction.x = cosf(game_state->camera_yaw) * cosf(game_state->camera_pitch);
-                    direction.y = sinf(game_state->camera_pitch);
-                    direction.z = sinf(game_state->camera_yaw) * cosf(game_state->camera_pitch);
+                    direction.x = cosf(app->camera_yaw) * cosf(app->camera_pitch);
+                    direction.y = sinf(app->camera_pitch);
+                    direction.z = sinf(app->camera_yaw) * cosf(app->camera_pitch);
 
-                    game_state->camera.looking_at = vec3_norm(direction);
+                    app->camera.looking_at = vec3_norm(direction);
                 }
             }
         
@@ -2096,48 +2097,48 @@ void run_func(void* context)
             {
                 //Works by setting a target fov, time to hit it and speed and then
                 //interpolates smoothly until the value is hit
-                if(game_state->zoom_target_fov == 0)
-                    game_state->zoom_target_fov = game_state->settings.fov;
+                if(app->zoom_target_fov == 0)
+                    app->zoom_target_fov = settings->fov;
                 
-                f32 zoom = game_state->controls.values[CONTROL_ZOOM];
-                f32 zoom_prev = game_state->controls_prev.values[CONTROL_ZOOM];
+                f32 zoom = app->controls.values[CONTROL_ZOOM];
+                f32 zoom_prev = app->controls_prev.values[CONTROL_ZOOM];
                 f32 zoom_delta = zoom_prev - zoom;
                 if(zoom_delta != 0)
                 {   
-                    f32 fov_delta = zoom_delta * game_state->settings.mouse_wheel_sensitivity * fov_sens_modifier;
+                    f32 fov_delta = zoom_delta * settings->mouse_wheel_sensitivity * fov_sens_modifier;
                 
-                    game_state->zoom_target_fov = CLAMP(game_state->zoom_target_fov + fov_delta, 0, TAU/2);
-                    game_state->zoom_target_time = start_frame_time + game_state->settings.zoom_adjust_time;
-                    game_state->zoom_change_per_sec = (game_state->zoom_target_fov - game_state->settings.fov) / game_state->settings.zoom_adjust_time;
+                    app->zoom_target_fov = CLAMP(app->zoom_target_fov + fov_delta, 0, TAU/2);
+                    app->zoom_target_time = start_frame_time + settings->zoom_adjust_time;
+                    app->zoom_change_per_sec = (app->zoom_target_fov - settings->fov) / settings->zoom_adjust_time;
                 }
             
-                if(start_frame_time < game_state->zoom_target_time)
+                if(start_frame_time < app->zoom_target_time)
                 {
-                    f32 fov_before = game_state->settings.fov;
-                    game_state->settings.fov += game_state->zoom_change_per_sec * (f32) game_state->delta_time;
+                    f32 fov_before = settings->fov;
+                    settings->fov += app->zoom_change_per_sec * (f32) app->delta_time;
 
                     //if is already past the target snap to target
-                    if(fov_before < game_state->zoom_target_fov && game_state->settings.fov > game_state->zoom_target_fov)
-                        game_state->settings.fov = game_state->zoom_target_fov;
-                    if(fov_before > game_state->zoom_target_fov && game_state->settings.fov < game_state->zoom_target_fov)
-                        game_state->settings.fov = game_state->zoom_target_fov;
+                    if(fov_before < app->zoom_target_fov && settings->fov > app->zoom_target_fov)
+                        settings->fov = app->zoom_target_fov;
+                    if(fov_before > app->zoom_target_fov && settings->fov < app->zoom_target_fov)
+                        settings->fov = app->zoom_target_fov;
                 }
                 else
-                    game_state->settings.fov = game_state->zoom_target_fov;
+                    settings->fov = app->zoom_target_fov;
             }
             
         }
 
         
-        game_state->camera.fov = game_state->settings.fov;
-        game_state->camera.near = 0.1f;
-        game_state->camera.far = 100.0f;
-        game_state->camera.is_ortographic = false;
-        game_state->camera.is_position_relative = true;
-        game_state->camera.aspect_ratio = (f32) game_state->window_framebuffer_width / (f32) game_state->window_framebuffer_height;
+        app->camera.fov = settings->fov;
+        app->camera.near = 0.1f;
+        app->camera.far = 100.0f;
+        app->camera.is_ortographic = false;
+        app->camera.is_position_relative = true;
+        app->camera.aspect_ratio = (f32) app->window_framebuffer_width / (f32) app->window_framebuffer_height;
 
-        Mat4 view = camera_make_view_matrix(game_state->camera);
-        Mat4 projection = camera_make_projection_matrix(game_state->camera);
+        Mat4 view = camera_make_view_matrix(app->camera);
+        Mat4 projection = camera_make_projection_matrix(app->camera);
 
         
         //================ FIRST PASS ==================
@@ -2149,7 +2150,7 @@ void run_func(void* context)
             PBR_Light lights[PBR_MAX_LIGHTS] = {0};
 
             f32 light_radius = 0.3f;
-            if(control_is_down(&game_state->controls, CONTROL_DEBUG_4))
+            if(control_is_down(&app->controls, CONTROL_DEBUG_4))
                 light_radius = 1;
 
             lights[0].pos = vec3(0, 4, 0);
@@ -2178,13 +2179,13 @@ void run_func(void* context)
                 blinn_phong_params.light_quadratic_attentuation = 0.00f;
                 blinn_phong_params.light_specular_sharpness = 32;
                 blinn_phong_params.light_specular_effect = 0.4f; 
-                //blinn_phong_params.gamma = game_state->settings.screen_gamma;
+                //blinn_phong_params.gamma = settings->screen_gamma;
                 blinn_phong_params.gamma = 1.3f; //looks better on the wood texture
 
                 Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_sf() / 8), vec3(5, 0, -5));
-                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, game_state->camera.pos, light.pos, light.color, blinn_phong_params, texture_floor);
+                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, app->camera.pos, light.pos, light.color, blinn_phong_params, texture_floor);
             
-                if(game_state->is_in_uv_debug_mode)
+                if(app->is_in_uv_debug_mode)
                     render_mesh_draw_using_uv_debug(render_cube_sphere, &shader_debug, projection, view, model);
             }
 
@@ -2195,8 +2196,8 @@ void run_func(void* context)
                 for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
                     params.lights[i] = lights[i];
 
-                params.view_pos = game_state->camera.pos;
-                params.gamma = game_state->settings.screen_gamma;
+                params.view_pos = app->camera.pos;
+                params.gamma = settings->screen_gamma;
                 params.attentuation_strength = 1.0f;
             
                 f32 spacing = 3;
@@ -2249,7 +2250,7 @@ void run_func(void* context)
             {
                 PBR_Light light = lights[i]; 
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
-                //render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, game_state->settings.screen_gamma);
+                //render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, settings->screen_gamma);
                 render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, 1);
             }
 
@@ -2266,20 +2267,20 @@ void run_func(void* context)
                 Mat4 Z = mat4_translate(mat4_scaling(vec3(size, size, length)), vec3(0, 0, offset));
                 Mat4 MID = mat4_scaling(vec3(size, size, size));
 
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, X, vec3(1, 0, 0), game_state->settings.screen_gamma);
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Y, vec3(0, 1, 0), game_state->settings.screen_gamma);
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Z, vec3(0, 0, 1), game_state->settings.screen_gamma);
-                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, MID, vec3(1, 1, 1), game_state->settings.screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, X, vec3(1, 0, 0), settings->screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Y, vec3(0, 1, 0), settings->screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, Z, vec3(0, 0, 1), settings->screen_gamma);
+                render_mesh_draw_using_solid_color(render_cube, &shader_solid_color, projection, view, MID, vec3(1, 1, 1), settings->screen_gamma);
             }
 
             //render skybox
             {
                 Mat4 model = mat4_scaling(vec3_of(-1));
                 Mat4 stationary_view = mat4_from_mat3(mat3_from_mat4(view));
-                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, game_state->settings.screen_gamma, cubemap_environment);
-                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1.0f/game_state->settings.screen_gamma, cubemap_skybox);
+                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, settings->screen_gamma, cubemap_environment);
+                    //render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1.0f/settings->screen_gamma, cubemap_skybox);
                 //else
-                if(control_is_down(&game_state->controls, CONTROL_DEBUG_3))
+                if(control_is_down(&app->controls, CONTROL_DEBUG_3))
                     render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_prefilter);
                 else
                     render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_environment);
@@ -2292,13 +2293,13 @@ void run_func(void* context)
         // ============== POST PROCESSING PASS ==================
         {
             render_screen_frame_buffers_msaa_post_process_begin(&screen_buffers);
-            render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, game_state->settings.screen_gamma, game_state->settings.screen_exposure);
+            render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, settings->screen_gamma, settings->screen_exposure);
             render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
         }
 
         //@HACK: this forsome reason depends on some calculation from the previous frame else it doesnt work dont know why
-        if(control_was_pressed(&game_state->controls, CONTROL_REFRESH_ALL) 
-            || control_was_pressed(&game_state->controls, CONTROL_REFRESH_ART)
+        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
             || frame_num == 0)
         {
             render_cubemap_init_prefilter_from_environment(
@@ -2307,7 +2308,7 @@ void run_func(void* context)
             render_texture_init_BRDF_LUT(
                 &texture_brdf_lut, res_brdf_lut, res_brdf_lut,
                 &capture_buffers, &shader_brdf_lut, render_quad);
-            glViewport(0, 0, game_state->window_framebuffer_width, game_state->window_framebuffer_height); //@TODO stuff somehwere else!
+            glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
         }
 
         f64 end_frame_time = clock_s();

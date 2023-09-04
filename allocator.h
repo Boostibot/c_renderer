@@ -143,20 +143,13 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ALLOCATOR_IMPL)) && !defined(LIB_ALLOCATOR_HAS_IMPL)
 #define LIB_ALLOCATOR_HAS_IMPL
 
-    INTERNAL Allocator* _mask_allocator_bits(Allocator* self)
-    {
-        //mask off the lower 2 bits of allocator since allocators are required to be at least 4 aligned.
-        //Those bits can be used internally to store some extra state (for example if deallocation is necessary)
-        usize mask = ~(usize) 3;
-        self = (Allocator*)((usize) self & mask);
-        return self;
-    }
-
     EXPORT void* allocator_try_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
     {
-        Allocator* masked = _mask_allocator_bits(from_allocator);
-        ASSERT(masked != NULL && masked->allocate != NULL);
-        return masked->allocate(masked, new_size, old_ptr, old_size, align, called_from);
+        //if is dealloc and old_ptr is NULL do nothing. 
+        //This is equivalent to free(NULL)
+        if(new_size == 0 && old_ptr == NULL)
+            return NULL;
+        return from_allocator->allocate(from_allocator, new_size, old_ptr, old_size, align, called_from);
     }
 
     EXPORT void* allocator_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
@@ -180,9 +173,7 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 
     EXPORT Allocator_Stats allocator_get_stats(Allocator* self)
     {
-        Allocator* masked = _mask_allocator_bits(self);
-        ASSERT(masked != NULL && masked->get_stats != NULL);
-        return masked->get_stats(masked);
+        return self->get_stats(self);
     }
 
     INTERNAL THREAD_LOCAL Allocator* _default_allocator = NULL;
@@ -269,7 +260,7 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 
     EXPORT void* align_forward(void* ptr, isize align_to)
     {
-        assert(is_power_of_two(align_to));
+        ASSERT(is_power_of_two(align_to));
 
         //this is a little criptic but according to the iternet should be the fastest way of doing this
         // my benchmarks support this. 
@@ -283,7 +274,7 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 
     EXPORT void* align_backward(void* ptr, isize align_to)
     {
-        assert(is_power_of_two(align_to));
+        ASSERT(is_power_of_two(align_to));
 
         usize ualign = (usize) align_to;
         usize mask = ~(ualign - 1);
