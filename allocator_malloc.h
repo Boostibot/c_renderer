@@ -29,7 +29,7 @@ typedef struct Malloc_Allocator
     Malloc_Allocator_Block_Header* first_block;
     Malloc_Allocator_Block_Header* last_block;
 
-    Allocator_Backup allocator_backup;
+    Allocator_Set allocator_backup;
 } Malloc_Allocator;
 
 typedef struct Malloc_Allocator_Block_Header {
@@ -112,7 +112,6 @@ EXPORT void  malloc_allocator_free(Malloc_Allocator* self, void* old_ptr);
 
     EXPORT void malloc_allocator_deinit(Malloc_Allocator* self)
     {
-        
         _malloc_allocator_assert_block_coherency(self, self->first_block);
         _malloc_allocator_assert_block_coherency(self, self->last_block);
         for(Malloc_Allocator_Block_Header* block = self->first_block; block != NULL; )
@@ -123,7 +122,7 @@ EXPORT void  malloc_allocator_free(Malloc_Allocator* self, void* old_ptr);
             block = next_block;
         }
         
-        allocator_restore(self->allocator_backup);
+        allocator_set(self->allocator_backup);
 
         ASSERT_SLOW(self->first_block == NULL);
         ASSERT_SLOW(self->last_block == NULL);

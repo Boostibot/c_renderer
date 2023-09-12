@@ -22,6 +22,8 @@ DEFINE_ARRAY_TYPE(String_Builder, String_Builder_Array);
 EXPORT const char*      cstring_escape(const char* string);
 //Returns always null terminated string contained within a builder
 EXPORT const char*      cstring_from_builder(String_Builder builder); 
+//if string is NULL returns 0 else strlen(string)
+EXPORT isize safe_strlen(const char* string);
 
 //Returns a String contained within string builder. The data portion of the string MIGHT be null and in that case its size == 0
 EXPORT String string_from_builder(String_Builder builder); 
@@ -101,10 +103,7 @@ EXPORT String_Array string_split(String to_split, String split_by);
 
     EXPORT String string_make(const char* cstring)
     {
-        String out = {cstring, 0};
-        if(cstring != NULL)
-            out.size = strlen(cstring);
-
+        String out = {cstring, safe_strlen(cstring)};
         return out;
     }
 
@@ -237,6 +236,14 @@ EXPORT String_Array string_split(String to_split, String split_by);
             return "";
         else
             return string;
+    }
+    
+    EXPORT isize safe_strlen(const char* string)
+    {
+        if(string == NULL)
+            return 0;
+        else
+            return strlen(string);
     }
 
     EXPORT const char* cstring_from_builder(String_Builder builder)

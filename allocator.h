@@ -80,11 +80,12 @@ typedef struct Source_Info
     const char* function;
 } Source_Info;
 
-typedef struct Allocator_Backup
+typedef struct Allocator_Set
 {
-    Allocator* previous_default;
-    Allocator* previous_scratch;
-} Allocator_Backup;
+    Allocator* allocator_default;
+    Allocator* allocator_scratch;
+    Allocator* allocator_static;
+} Allocator_Set;
 
 #define DEF_ALIGN 8
 #define SOURCE_INFO() BRACE_INIT(Source_Info){__LINE__, __FILE__, __FUNCTION__}
@@ -108,13 +109,18 @@ EXPORT void allocator_out_of_memory(
     Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
     Source_Info called_from, const char* format_string, ...);
 
-EXPORT Allocator* allocator_get_default();
-EXPORT Allocator* allocator_get_scratch();
+EXPORT Allocator* allocator_get_default(); //returns the default allocator used for returning values from a function
+EXPORT Allocator* allocator_get_scratch(); //returns the scracth allocator used for temp often stack order allocations inside a function
+EXPORT Allocator* allocator_get_static(); //returns the static allocator used for allocations with potentially unbound lifetime. This includes things that will never be deallocated.
+//@NOTE: static is useful for example for static local dyanmic lookup tables 
 
-EXPORT Allocator_Backup allocator_set_default(Allocator* new_default);
-EXPORT Allocator_Backup allocator_set_scratch(Allocator* new_scratch);
-EXPORT Allocator_Backup allocator_set_both(Allocator* new_default, Allocator* new_scratch);
-EXPORT Allocator_Backup allocator_restore(Allocator_Backup backup); 
+//All of these return the previously used Allocator_Set. This enables simple set/restore pair. 
+EXPORT Allocator_Set allocator_set_default(Allocator* new_default);
+EXPORT Allocator_Set allocator_set_scratch(Allocator* new_scratch);
+EXPORT Allocator_Set allocator_set_static(Allocator* new_scratch);
+EXPORT Allocator_Set allocator_set_both(Allocator* new_default, Allocator* new_scratch);
+EXPORT Allocator_Set allocator_set(Allocator_Set backup); 
+
 
 EXPORT bool  is_power_of_two(isize num);
 EXPORT bool  is_power_of_two_zero(isize num);
@@ -178,6 +184,7 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 
     INTERNAL THREAD_LOCAL Allocator* _default_allocator = NULL;
     INTERNAL THREAD_LOCAL Allocator* _scratch_allocator = NULL;
+    INTERNAL THREAD_LOCAL Allocator* _static_allocator = NULL;
 
     EXPORT Allocator* allocator_get_default()
     {
@@ -187,43 +194,54 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
     {
         return _scratch_allocator;
     }
-
-    EXPORT Allocator_Backup allocator_set_default(Allocator* new_default)
+    EXPORT Allocator* allocator_get_static()
     {
-        Allocator_Backup out = {0};
-        out.previous_default = _default_allocator;
-        _default_allocator = new_default;
-        return out;
-    }
-    EXPORT Allocator_Backup allocator_set_scratch(Allocator* new_scratch)
-    {
-        Allocator_Backup out = {0};
-        out.previous_scratch = _scratch_allocator;
-        _scratch_allocator = new_scratch;
-        return out;
-    }
-    EXPORT Allocator_Backup allocator_set_both(Allocator* new_default, Allocator* new_scratch)
-    {
-        Allocator_Backup out = {0};
-        out.previous_default = _default_allocator;
-        out.previous_scratch = _scratch_allocator;
-        _default_allocator = new_default;
-        _scratch_allocator = new_scratch;
-        return out;
+        return _static_allocator;
     }
 
-    EXPORT Allocator_Backup allocator_restore(Allocator_Backup backup)
+    EXPORT Allocator_Set allocator_set_default(Allocator* new_default)
     {
-        Allocator_Backup out = {0};
-        out.previous_default = _default_allocator;
-        out.previous_scratch = _scratch_allocator;
-        if(backup.previous_default != NULL)
-            _default_allocator = backup.previous_default;
+        return allocator_set_both(new_default, NULL);
+    }
+    EXPORT Allocator_Set allocator_set_scratch(Allocator* new_scratch)
+    {
+        return allocator_set_both(NULL, new_scratch);
+    }
+    EXPORT Allocator_Set allocator_set_static(Allocator* new_static)
+    {
+        Allocator_Set set_to = {0};
+        set_to.allocator_static = new_static;
+        return allocator_set(set_to);
+    }
 
-        if(backup.previous_scratch != NULL)
-            _scratch_allocator = backup.previous_scratch;
+    EXPORT Allocator_Set allocator_set_both(Allocator* new_default, Allocator* new_scratch)
+    {
+        Allocator_Set set_to = {new_default, new_scratch};
+        return allocator_set(set_to);
+    }
 
-        return out;
+    EXPORT Allocator_Set allocator_set(Allocator_Set set_to)
+    {
+        Allocator_Set prev = {0};
+        if(set_to.allocator_default != NULL)
+        {
+            prev.allocator_default = _default_allocator;
+            _default_allocator = set_to.allocator_default;
+        }
+
+        if(set_to.allocator_scratch != NULL)
+        {
+            prev.allocator_scratch = _scratch_allocator;
+            _scratch_allocator = set_to.allocator_scratch;
+        }
+        
+        if(set_to.allocator_static != NULL)
+        {
+            prev.allocator_static = _static_allocator;
+            _static_allocator = set_to.allocator_static;
+        }
+
+        return prev;
     }
 
     #ifdef LIB_ALLOCATOR_NAKED

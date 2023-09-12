@@ -42,19 +42,19 @@ INTERNAL void test_array_stress(f64 max_seconds)
 	enum {
 		MAX_ITERS = 1000*1000*10,
 		MIN_ITERS = 100,
-		BACKING = 1000,
+		BACKING = 125,
 		MAX_CAPACITY = 1000*10,
 	};
 
-	char buffer1[BACKING] = {0};
-	char buffer2[BACKING] = {0};
+	i64 buffer1[BACKING] = {0};
+	i64 buffer2[BACKING] = {0};
 	i64_Array array1 = {0};
 	i64_Array array2 = {0};
 
-	char* buffer = buffer1;
+	i64* buffer = buffer1;
 	i64_Array* arr = &array1;
 	
-	char* other_buffer = buffer2;
+	i64* other_buffer = buffer2;
 	i64_Array* other_array = &array2;
 	
 	Discrete_Distribution dist = random_discrete_make(probabilities, ACTION_ENUM_COUNT);

@@ -11,7 +11,7 @@ GLenum _gl_check_error(const char *file, int line)
     GLenum errorCode = 0;
     while ((errorCode = glGetError()) != GL_NO_ERROR)
     {
-        const char* error;
+        const char* error = "";
         switch (errorCode)
         {
             case GL_INVALID_ENUM:                  error = "INVALID_ENUM"; break;

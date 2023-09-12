@@ -61,8 +61,21 @@ void render_shader_deinit(Render_Shader* shader)
     memset(shader, 0, sizeof(*shader));
 }
 
-bool render_shader_init(Render_Shader* shader, const char* vertex, const char* fragment, const char* geometry, String name, String_Builder* error, isize* error_at_stage)
+String translate_shader_error(u32 code, void* context)
 {
+    (void) context;
+    if(code == 1)
+        return STRING("shader compilation failed");
+    else
+        return STRING("<unexpected shader error; this is a result of a bug>");
+}
+
+Error render_shader_init(Render_Shader* shader, const char* vertex, const char* fragment, const char* geometry, String name, String_Builder* error, isize* error_at_stage)
+{
+    static u32 shader_error_module = 0;
+    if(shader_error_module == 0)
+        shader_error_module = error_system_register_module(translate_shader_error, STRING("shader_util.h"), NULL);
+
     render_shader_deinit(shader);
     ASSERT(vertex != NULL && fragment != NULL);
 
@@ -126,44 +139,49 @@ bool render_shader_init(Render_Shader* shader, const char* vertex, const char* f
     glDeleteShader(shaders[1]);
     glDeleteShader(shaders[2]);
 
-    shader->shader = shader_program;
-    shader->name = builder_from_string(name);
     if(success == false)
     {
         glDeleteProgram(shader_program);
         shader_program = 0;
     }
 
-    return success;
+    shader->shader = shader_program;
+    shader->name = builder_from_string(name);
+
+    if(success == false)
+        return error_make(shader_error_module, 1);
+    else
+        return error_make(shader_error_module, 0);
+        
 }
 
-bool render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_path, String fragment_path, String geometry_path, String prepend, String name, String_Builder* error)
+Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_path, String fragment_path, String geometry_path, String prepend, String name, String_Builder* error)
 {
     Allocator* scratch = allocator_get_scratch();
     String_Builder temp = {scratch};
 
-    Platform_Error vertex_error = file_read_entire(vertex_path, &temp);
+    Error vertex_error = file_read_entire(vertex_path, &temp);
     String_Builder vertex_source = render_shader_source_prepend(string_from_builder(temp), prepend, scratch);
 
-    Platform_Error fragment_error = file_read_entire(fragment_path, &temp);
+    Error fragment_error = file_read_entire(fragment_path, &temp);
     String_Builder fragment_source = render_shader_source_prepend(string_from_builder(temp), prepend, scratch);
 
     String_Builder geometry_source = {0};
-    Platform_Error geomtery_error = PLATFORM_ERROR_OK;
+    Error geomtery_error = {0};
     if(geometry_path.size > 0)
     {
         geomtery_error = file_read_entire(geometry_path, &temp);
         geometry_source = render_shader_source_prepend(string_from_builder(temp), prepend, scratch);
     }
 
-    bool ok = !vertex_error && !fragment_error && !geomtery_error;
+    Error compile_error = ERROR_OR(vertex_error) ERROR_OR(fragment_error) geomtery_error;
     isize error_at_compilation_stage = 0; 
-    if(ok)
+    if(error_ok(compile_error))
     {
         //Else tries to build the program
         // if an error ocurs here it gets written to error
         // and shader_program = 0. This means we dont have to do anything
-        ok = render_shader_init(shader,
+        compile_error = render_shader_init(shader,
             cstring_from_builder(vertex_source),
             cstring_from_builder(fragment_source),
             cstring_from_builder(geometry_source),
@@ -172,19 +190,19 @@ bool render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_pa
     }
         
     //Error reporting ... that is longer than the function itself :/
-    if(!ok)
+    if(!error_ok(compile_error))
     {
         #if defined(DO_LOG) && defined(DO_LOG_ERROR)
             String_Builder vertex_error_string = {scratch};
             String_Builder fragment_error_string = {scratch};
             String_Builder geometry_error_string = {scratch};
 
-            if(vertex_error)
-                file_translate_error(&vertex_error_string, vertex_error);
-            if(fragment_error)
-                file_translate_error(&fragment_error_string, fragment_error);
-            if(geomtery_error)
-                file_translate_error(&geometry_error_string, geomtery_error);
+            if(!error_ok(vertex_error))
+                error_code_into(&vertex_error_string, vertex_error);
+            if(!error_ok(fragment_error))
+                error_code_into(&fragment_error_string, fragment_error);
+            if(!error_ok(geomtery_error))
+                error_code_into(&geometry_error_string, geomtery_error);
 
             //if has error print the translated version
             LOG_ERROR(SHADER_UTIL_CHANEL, "shader_load() failed! files:\n");
@@ -235,13 +253,13 @@ bool render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_pa
 
             if(error)
             {
-                if(vertex_error)
+                if(!error_ok(vertex_error))
                     array_copy(error, vertex_error_string);
-                else if(fragment_error)
+                else if(!error_ok(fragment_error))
                     array_copy(error, fragment_error_string);
-                else if(geomtery_error)
+                else if(!error_ok(geomtery_error))
                     array_copy(error, geometry_error_string);
-                else if(!ok)
+                else if(!error_ok(compile_error))
                     array_copy(error, temp);
             }
 
@@ -256,7 +274,8 @@ bool render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_pa
     array_deinit(&geometry_source);
     array_deinit(&geometry_source);
     array_deinit(&temp);
-    return ok;
+
+    return compile_error;
 }
     
 bool render_shader_init_from_disk(Render_Shader* shader, String vertex_path, String fragment_path, String name)
@@ -265,7 +284,7 @@ bool render_shader_init_from_disk(Render_Shader* shader, String vertex_path, Str
     //array_init_backed(&name, allocator_get_scratch(), 256);
     //format_into(&name, "vert: " STRING_FMT " frag: " STRING_FMT, STRING_PRINT(vertex_path), STRING_PRINT(fragment_path));
 
-    return render_shader_init_from_disk_custom(shader, vertex_path, fragment_path, STRING(""), STRING(""), name, NULL);
+    return error_ok(render_shader_init_from_disk_custom(shader, vertex_path, fragment_path, STRING(""), STRING(""), name, NULL));
 }
 
 void render_shader_use(const Render_Shader* shader)
@@ -280,16 +299,15 @@ void render_shader_unuse(const Render_Shader* shader)
     glUseProgram(0);
 }
 
-int render_shader_get_uniform_location(const Render_Shader* shader, const char* uniform)
+GLint render_shader_get_uniform_location(const Render_Shader* shader, const char* uniform)
 {
-    int location = glGetUniformLocation(shader->shader, uniform);
+    GLint location = glGetUniformLocation(shader->shader, uniform);
     if(location == -1)
     {
         //if the shader uniform is not found we log only 
         //each 2^n th error message from this shader and uniform
-        //(unless shader name, uniform, and shader program have a hash colision)
-        enum {ERROR_COUNTS_MAX = 256};
-        static u32 error_counts[ERROR_COUNTS_MAX] = {0};
+        //(unless shader name, uniform, and shader program have a hash colision
+        // but thats astronomically improbable)
 
         String uniform_str = string_make(uniform);
         u64 name_hash = hash64_murmur(shader->name.data, shader->name.size, 0);
@@ -297,9 +315,15 @@ int render_shader_get_uniform_location(const Render_Shader* shader, const char* 
         u64 shader_hash = hash64(shader->shader);
         u64 final_hash = name_hash ^ uniform_hash ^ shader_hash;
 
-        u64 index = final_hash % ERROR_COUNTS_MAX;
-        u32* error_count = &error_counts[index];
+        static Hash_Index error_hash_index = {0};
+        if(error_hash_index.allocator == NULL)
+        {
+            hash_index_init(&error_hash_index, allocator_get_static());
+            hash_index_reserve(&error_hash_index, 32);
+        }
 
+        isize found = hash_index_find_or_insert(&error_hash_index, final_hash);
+        u64* error_count = &error_hash_index.entries[found].value;
         if(is_power_of_two_zero((*error_count)++))
             LOG_ERROR("RENDER", "failed to find uniform location %-25s shader: " STRING_FMT, uniform, STRING_PRINT(shader->name));
     }
@@ -309,7 +333,7 @@ int render_shader_get_uniform_location(const Render_Shader* shader, const char* 
 
 bool render_shader_set_i32(const Render_Shader* shader, const char* name, GLint val)
 {
-    int location = render_shader_get_uniform_location(shader, name);
+    GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1) 
         return false;
 
@@ -319,7 +343,7 @@ bool render_shader_set_i32(const Render_Shader* shader, const char* name, GLint 
     
 bool render_shader_set_f32(const Render_Shader* shader, const char* name, GLfloat val)
 {
-    int location = render_shader_get_uniform_location(shader, name);
+    GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
@@ -329,7 +353,7 @@ bool render_shader_set_f32(const Render_Shader* shader, const char* name, GLfloa
 
 bool render_shader_set_vec3(const Render_Shader* shader, const char* name, Vec3 val)
 {
-    int location = render_shader_get_uniform_location(shader, name);
+    GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
@@ -339,7 +363,7 @@ bool render_shader_set_vec3(const Render_Shader* shader, const char* name, Vec3 
 
 bool render_shader_set_mat4(const Render_Shader* shader, const char* name, Mat4 val)
 {
-    int location = render_shader_get_uniform_location(shader, name);
+    GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
@@ -349,7 +373,7 @@ bool render_shader_set_mat4(const Render_Shader* shader, const char* name, Mat4 
     
 bool render_shader_set_mat3(const Render_Shader* shader, const char* name, Mat3 val)
 {
-    int location = render_shader_get_uniform_location(shader, name);
+    GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 

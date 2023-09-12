@@ -91,8 +91,8 @@ EXPORT void _array_clear(void* array, isize item_size);
 //Only triggers a proper reallocation once the capacity required is grater than backed_elements_count.
 #ifndef LIB_MEM_DEBUG
     #define array_init_backed(array_ptr, allocator, backed_elements_count) \
-        char PP_CONCAT(_backing_buffer_, __LINE__)[backed_elements_count * sizeof *(array_ptr)->data]; \
-        _array_init_backed(array_ptr, sizeof *(array_ptr)->data, allocator, PP_CONCAT(_backing_buffer_, __LINE__), sizeof PP_CONCAT(_backing_buffer_, __LINE__), SOURCE_INFO())
+        char PP_CONCAT(_backing_buffer_, __LINE__)[(backed_elements_count) * sizeof *(array_ptr)->data]; \
+        _array_init_backed(array_ptr, sizeof *(array_ptr)->data, allocator, PP_CONCAT(_backing_buffer_, __LINE__), (backed_elements_count), SOURCE_INFO())
 #else
     #define array_init_backed(array_ptr, allocator, backed_elements_count) \
         array_init(array_ptr, allocator)
@@ -103,8 +103,8 @@ EXPORT void _array_clear(void* array, isize item_size);
 
 //Initializes the array using backing_array_size elements alloced at backing_array as backing store.
 //Only triggers a proper reallocation once the capacity required is grater than backed_elements_count.
-#define array_init_backed_from_memory(array_ptr, allocator, backing_array, backing_array_size) \
-    _array_init_backed(array_ptr, sizeof *(array_ptr)->data, allocator, backing_array, backing_array_size, SOURCE_INFO())
+#define array_init_backed_from_memory(array_ptr, allocator, backed_elements, backed_elements_count) \
+    _array_init_backed(array_ptr, sizeof *(array_ptr)->data, allocator, backed_elements, backed_elements_count, SOURCE_INFO())
 
 //Deallocates and resets the array
 #define array_deinit(array_ptr) \
@@ -231,14 +231,12 @@ EXPORT void _array_init(void* array, isize item_size, Allocator* allocator, Sour
     base->allocator = allocator;
 }
 
-EXPORT void _array_init_backed(void* array, isize item_size, Allocator* allocator, void* backing, int64_t backing_size, Source_Info from)
+EXPORT void _array_init_backed(void* array, isize item_size, Allocator* allocator, void* backing, int64_t backing_item_count, Source_Info from)
 {
     u8_Array* base = (u8_Array*) array;
     _array_deinit(array, item_size, from);
-    base->allocator = allocator;
 
-    isize backing_item_count = backing_size / item_size;
-    if(backing != NULL && backing_item_count != 0)
+    if(backing_item_count != 0)
     {
         base->data = backing;
         base->capacity = backing_item_count;

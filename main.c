@@ -17,6 +17,7 @@
 #include "gl_shader_util.h"
 #include "gl_debug_output.h"
 #include "shapes.h"
+#include "obj_loader.h"
 
 #include "stb/stb_image.h"
 #include "glfw/glfw3.h"
@@ -551,9 +552,16 @@ void error_func(void* context, Platform_Sandox_Error error_code);
 int main()
 {
     platform_init();
+    Malloc_Allocator static_allocator = {0};
+    malloc_allocator_init(&static_allocator);
+    allocator_set_static(&static_allocator.allocator);
+
     Malloc_Allocator malloc_allocator = {0};
     malloc_allocator_init_use(&malloc_allocator, 0);
+    
+    error_system_init(&static_allocator.allocator);
     log_system_init(&malloc_allocator.allocator, &malloc_allocator.allocator);
+
 
     GLFWallocator allocator = {0};
     allocator.allocate = glfw_malloc_func;
@@ -601,6 +609,7 @@ int main()
     glfwTerminate();
 
     log_system_deinit();
+    error_system_deinit();
     ASSERT(malloc_allocator.bytes_allocated == 0);
     malloc_allocator_deinit(&malloc_allocator);
     platform_deinit();
@@ -1134,7 +1143,7 @@ bool render_cubemap_init_from_disk(Render_Cubemap* render, String front, String 
     return state;
 }
 
-void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Indeces* indeces, isize indeces_count, String name)
+void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize indeces_count, String name)
 {
     memset(mesh, 0, sizeof *mesh);
 
@@ -1147,7 +1156,7 @@ void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_
     glBufferData(GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indeces_count * sizeof(Triangle_Indeces), indeces, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indeces_count * sizeof(Triangle_Index), indeces, GL_STATIC_DRAW);
     
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
@@ -1168,6 +1177,11 @@ void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_
     builder_append(&mesh->name, name);
     mesh->index_count = (GLuint) indeces_count;
     mesh->vertex_count = (GLuint) vertices_count;
+}
+
+void render_mesh_init_from_shape(Render_Mesh* mesh, Shape shape, String name)
+{
+    render_mesh_init(mesh, shape.vertices.data, shape.vertices.size, shape.indeces.data, shape.indeces.size, name);
 }
 
 void render_mesh_deinit(Render_Mesh* mesh)
@@ -1437,6 +1451,7 @@ void render_texture_init_BRDF_LUT(
     render_mesh_draw(screen_quad_mesh);
     render_shader_unuse(shader_brdf_lut);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color, f32 gamma)
@@ -1834,13 +1849,15 @@ void run_func(void* context)
     Shape screen_quad = {0};
     Shape unit_quad = {0};
     Shape unit_cube = {0};
+    Shape falcon = {0};
+
 
     Render_Mesh render_uv_sphere = {0};
     Render_Mesh render_cube_sphere = {0};
     Render_Mesh render_screen_quad = {0};
     Render_Mesh render_cube = {0};
     Render_Mesh render_quad = {0};
-    
+    Render_Mesh render_falcon = {0};
 
     Render_Texture texture_floor = {0};
     Render_Texture texture_debug = {0};
@@ -1943,11 +1960,11 @@ void run_func(void* context)
                 STRING("shaders/pbr_mapped.vert"), 
                 STRING("shaders/pbr_mapped.frag"), 
                 STRING("shader_pbr_mapped"));
-            ok = ok && render_shader_init_from_disk_custom(&shader_debug, 
+            ok = ok && error_ok(render_shader_init_from_disk_custom(&shader_debug, 
                 STRING("shaders/uv_debug.vert"), 
                 STRING("shaders/uv_debug.frag"), 
                 STRING("shaders/uv_debug.geom"), 
-                STRING(""), STRING("shader_debug"), NULL);
+                STRING(""), STRING("shader_debug"), NULL));
 
             ASSERT(ok);
         }
@@ -1971,13 +1988,16 @@ void run_func(void* context)
             unit_cube = shapes_make_unit_cube();
             unit_quad = shapes_make_unit_quad();
 
-            render_mesh_init(&render_uv_sphere, uv_sphere.vertices.data, uv_sphere.vertices.size, uv_sphere.indeces.data, uv_sphere.indeces.size, STRING("uv_sphere"));
-            render_mesh_init(&render_cube_sphere, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.indeces.data, cube_sphere.indeces.size, STRING("cube_sphere"));
-            render_mesh_init(&render_screen_quad, screen_quad.vertices.data, screen_quad.vertices.size, screen_quad.indeces.data, screen_quad.indeces.size, STRING("screen_quad"));
-            render_mesh_init(&render_cube, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.indeces.data, unit_cube.indeces.size, STRING("unit_cube"));
-            render_mesh_init(&render_quad, unit_quad.vertices.data, unit_quad.vertices.size, unit_quad.indeces.data, unit_quad.indeces.size, STRING("unit_cube"));
-
             bool ok = true;
+            ok = ok && error_ok(obj_parser_load(&falcon, STRING("resources/models/falcon.obj"), NULL, true));
+
+            render_mesh_init_from_shape(&render_uv_sphere, uv_sphere, STRING("uv_sphere"));
+            render_mesh_init_from_shape(&render_cube_sphere, cube_sphere, STRING("cube_sphere"));
+            render_mesh_init_from_shape(&render_screen_quad, screen_quad, STRING("screen_quad"));
+            render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
+            render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
+            render_mesh_init_from_shape(&render_falcon, falcon, STRING("unit_cube"));
+
             ok = ok && render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
             ok = ok && render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
             ok = ok && render_cubemap_init_from_disk(&cubemap_skybox, 
@@ -1996,6 +2016,7 @@ void run_func(void* context)
 
             ok = ok && render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
             
+
             render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
             
             f32 use_gamma = 2.0f;
@@ -2013,9 +2034,6 @@ void run_func(void* context)
 
             ASSERT(ok);
         }
-        
-        
-
 
         if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
         {
@@ -2252,6 +2270,12 @@ void run_func(void* context)
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
                 //render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, settings->screen_gamma);
                 render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, 1);
+            }
+
+            //render falcon
+            {
+                Mat4 model = mat4_translate(mat4_scaling(vec3_of(1)), vec3(20, 0, 20));
+                render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
             }
 
             //render gismos

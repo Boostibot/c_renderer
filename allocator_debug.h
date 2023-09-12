@@ -98,7 +98,7 @@ typedef struct Debug_Allocator
     isize deallocation_count;
     isize reallocation_count;
 
-    Allocator_Backup allocator_backup;
+    Allocator_Set allocator_backup;
     bool is_init; //prevents double init
 } Debug_Allocator;
 
@@ -286,7 +286,7 @@ EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
     if(allocator->bytes_allocated != 0 && allocator->do_deinit_leak_check)
         _debug_allocator_panic(allocator, DEBUG_ALLOC_PANIC_DEINIT_MEMORY_LEAKED, NULL, SOURCE_INFO());
 
-    allocator_restore(allocator->allocator_backup);
+    allocator_set(allocator->allocator_backup);
     debug_allocator_deinit_allocation_array(&allocator->dead_allocations);
     hash_index_deinit(&allocator->alive_allocations_hash);
     

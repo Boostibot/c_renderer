@@ -209,13 +209,12 @@ Light_Contribution contribution_sphere_light(vec3 P, vec3 N, vec3 V, vec3 R, vec
     vec3 L_point = light.pos - P;
     vec3 center_to_ray = dot(L_point, R)*R - L_point;
     vec3 closest_point = L_point + center_to_ray * clamp(light.radius/length(center_to_ray), 0, 1);
-    vec3 L_whole = closest_point;
-    vec3 L = normalize(L_whole);
-    float light_distance = length(L_whole);
+    vec3 L = normalize(closest_point);
+    float light_distance = length(L_point);
     if(light_distance < light.range)
     {
-        float cos_theta = clamp(dot(N, L), -0.999, 0.999); // Clamp to avoid edge case 
-	    float sin_sigma = min(light.radius / light_distance, 0.9999f);
+        //float cos_theta = clamp(dot(N, L), -0.999, 0.999); // Clamp to avoid edge case 
+	    //float sin_sigma = min(light.radius / light_distance, 0.9999f);
 	    //float f_light = illuminance_sphere_or_disk(cos_theta, sin_sigma * sin_sigma);
 
         //result.specular = vec3(f_light*f_light);

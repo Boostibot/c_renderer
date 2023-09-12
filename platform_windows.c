@@ -19,15 +19,6 @@ enum { WINDOWS_PLATFORM_FILE_TYPE_PIPE = PLATFORM_FILE_TYPE_PIPE };
 #undef PLATFORM_FILE_TYPE_PIPE
 
 
-void platform_init()
-{
-    platform_perf_counter();
-    platform_startup_epoch_time();
-}
-void platform_deinit()
-{
-    
-}
 
 //=========================================
 // Virtual memory
@@ -556,10 +547,13 @@ void _convert_to_utf8_normalize_cpath(_Buffer* output, const wchar_t* null_termi
     _convert_to_utf8_normalize_path(output, null_terminated_path, new_path_size);
 }
 
-char* platform_translate_error_alloc(Platform_Error error)
+#define _TRANSLATED_ERRORS_SIMULATANEOUS 8
+static char* _translated_errors[_TRANSLATED_ERRORS_SIMULATANEOUS] = {0};
+static int64_t _translated_error_cursor = 0;
+
+const char* platform_translate_error(Platform_Error error)
 {
     LPVOID trasnlated = NULL;
-
     int64_t length = FormatMessageA(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | 
         FORMAT_MESSAGE_FROM_SYSTEM |
@@ -570,13 +564,21 @@ char* platform_translate_error_alloc(Platform_Error error)
         (LPSTR) &trasnlated,
         0, NULL );
     
-    char* out = platform_heap_reallocate(length + 1, NULL, 0, 8);
-    memcpy(out, trasnlated, length + 1);
+    (void) length;
+    LocalFree(_translated_errors[_translated_error_cursor]);
+    _translated_errors[_translated_error_cursor] = trasnlated;
+    _translated_error_cursor = (_translated_error_cursor + 1) % _TRANSLATED_ERRORS_SIMULATANEOUS;
 
-    if(length != 0)
-        LocalFree(trasnlated);
+    return (const char*) trasnlated;
+}
 
-    return (char*) out;
+void _translated_deinit_all()
+{
+    for(int64_t i = 0; i < _TRANSLATED_ERRORS_SIMULATANEOUS; i++)
+    {
+        LocalFree((HLOCAL) _translated_errors[i]);
+        _translated_errors[i] = NULL;
+    }
 }
 
 Platform_Error _error_code(bool state)
@@ -1440,3 +1442,13 @@ Platform_Sandox_Error platform_exception_sandbox(
     return 0;
 }
 
+
+void platform_init()
+{
+    platform_perf_counter();
+    platform_startup_epoch_time();
+}
+void platform_deinit()
+{
+    _translated_deinit_all();
+}

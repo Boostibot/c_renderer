@@ -4,36 +4,14 @@
 #include "array.h"
 #include "hash_index.h"
 #include "hash.h"
+#include "engine_types.h"
 
-typedef struct Vertex
-{
-    Vec3 pos;
-    Vec2 uv;
-    Vec3 norm;
-} Vertex;
 
-typedef struct Full_Vertex
-{
-    Vec3 pos;
-    Vec2 uv;
-    Vec3 norm;
-    Vec3 tan;
-    Vec3 bitan;
-    Vec3 color;
-} Full_Vertex;
-
-typedef struct Triangle_Indeces
-{
-    u32 vertex_i[3];
-} Triangle_Indeces;
-
-DEFINE_ARRAY_TYPE(Vertex, Vertex_Array);
-DEFINE_ARRAY_TYPE(Triangle_Indeces, Triangle_Indeces_Array);
 
 typedef struct Shape
 {
     Vertex_Array vertices;
-    Triangle_Indeces_Array indeces;
+    Triangle_Index_Array indeces;
 } Shape;
 
 void shape_deinit(Shape* shape)
@@ -62,67 +40,66 @@ void shape_tranform(Shape* shape, Mat4 transform)
     }
 }
 
-
 #define E 0.5f
 const Vertex XZ_QUAD_VERTICES[] = {
-     E, 0,  E, {1, 1}, {0, 1, 0},
-    -E, 0,  E, {1, 0}, {0, 1, 0}, 
-    -E, 0, -E, {0, 0}, {0, 1, 0},
-     E, 0, -E, {0, 1}, {0, 1, 0},
+    { E, 0,  E, {1, 1}, {0, 1, 0}},
+    {-E, 0,  E, {1, 0}, {0, 1, 0}}, 
+    {-E, 0, -E, {0, 0}, {0, 1, 0}},
+    { E, 0, -E, {0, 1}, {0, 1, 0}},
 };
 
-const Triangle_Indeces XZ_QUAD_INDECES[] = { 
+const Triangle_Index XZ_QUAD_INDECES[] = { 
     1, 0, 2, 0, 3, 2
 };
 
 const Vertex CUBE_VERTICES[] = {
     // Back face
-    -E, -E, -E,  0.0f, 0.0f, {0, 0, -1}, // Bottom-left
-     E,  E, -E,  1.0f, 1.0f, {0, 0, -1}, // top-right
-     E, -E, -E,  1.0f, 0.0f, {0, 0, -1}, // bottom-right         
-     E,  E, -E,  1.0f, 1.0f, {0, 0, -1}, // top-right
-    -E, -E, -E,  0.0f, 0.0f, {0, 0, -1}, // bottom-left
-    -E,  E, -E,  0.0f, 1.0f, {0, 0, -1}, // top-left
+    {-E, -E, -E,  0, 0, {0, 0, -1}}, // Bottom-left
+    { E,  E, -E,  1, 1, {0, 0, -1}}, // top-right
+    { E, -E, -E,  1, 0, {0, 0, -1}}, // bottom-right         
+    { E,  E, -E,  1, 1, {0, 0, -1}}, // top-right
+    {-E, -E, -E,  0, 0, {0, 0, -1}}, // bottom-left
+    {-E,  E, -E,  0, 1, {0, 0, -1}}, // top-left
     // Front face
-    -E, -E,  E,  0.0f, 0.0f, {0, 0, 1}, // bottom-left
-     E, -E,  E,  1.0f, 0.0f, {0, 0, 1}, // bottom-right
-     E,  E,  E,  1.0f, 1.0f, {0, 0, 1}, // top-right
-     E,  E,  E,  1.0f, 1.0f, {0, 0, 1}, // top-right
-    -E,  E,  E,  0.0f, 1.0f, {0, 0, 1}, // top-left
-    -E, -E,  E,  0.0f, 0.0f, {0, 0, 1}, // bottom-left
+    {-E, -E,  E,  0, 0, {0, 0, 1}}, // bottom-left
+    { E, -E,  E,  1, 0, {0, 0, 1}}, // bottom-right
+    { E,  E,  E,  1, 1, {0, 0, 1}}, // top-right
+    { E,  E,  E,  1, 1, {0, 0, 1}}, // top-right
+    {-E,  E,  E,  0, 1, {0, 0, 1}}, // top-left
+    {-E, -E,  E,  0, 0, {0, 0, 1}}, // bottom-left
     // Left face
-    -E,  E,  E,  1.0f, 0.0f, {-1, 0, 0}, // top-right
-    -E,  E, -E,  1.0f, 1.0f, {-1, 0, 0}, // top-left
-    -E, -E, -E,  0.0f, 1.0f, {-1, 0, 0}, // bottom-left
-    -E, -E, -E,  0.0f, 1.0f, {-1, 0, 0}, // bottom-left
-    -E, -E,  E,  0.0f, 0.0f, {-1, 0, 0}, // bottom-right
-    -E,  E,  E,  1.0f, 0.0f, {-1, 0, 0}, // top-right
+    {-E,  E,  E,  1, 0, {-1, 0, 0}}, // top-right
+    {-E,  E, -E,  1, 1, {-1, 0, 0}}, // top-left
+    {-E, -E, -E,  0, 1, {-1, 0, 0}}, // bottom-left
+    {-E, -E, -E,  0, 1, {-1, 0, 0}}, // bottom-left
+    {-E, -E,  E,  0, 0, {-1, 0, 0}}, // bottom-right
+    {-E,  E,  E,  1, 0, {-1, 0, 0}}, // top-right
     // Right face
-     E,  E,  E,  1.0f, 0.0f, {1, 0, 0}, // top-left
-     E, -E, -E,  0.0f, 1.0f, {1, 0, 0}, // bottom-right
-     E,  E, -E,  1.0f, 1.0f, {1, 0, 0}, // top-right         
-     E, -E, -E,  0.0f, 1.0f, {1, 0, 0}, // bottom-right
-     E,  E,  E,  1.0f, 0.0f, {1, 0, 0}, // top-left
-     E, -E,  E,  0.0f, 0.0f, {1, 0, 0}, // bottom-left     
+    {E,  E,  E,  1, 0, {1, 0, 0}}, // top-left
+    {E, -E, -E,  0, 1, {1, 0, 0}}, // bottom-right
+    {E,  E, -E,  1, 1, {1, 0, 0}}, // top-right         
+    {E, -E, -E,  0, 1, {1, 0, 0}}, // bottom-right
+    {E,  E,  E,  1, 0, {1, 0, 0}}, // top-left
+    {E, -E,  E,  0, 0, {1, 0, 0}}, // bottom-left     
     // Bottom face
-    -E, -E, -E,  0.0f, 1.0f, {0, -1, 0}, // top-right
-     E, -E, -E,  1.0f, 1.0f, {0, -1, 0}, // top-left
-     E, -E,  E,  1.0f, 0.0f, {0, -1, 0}, // bottom-left
-     E, -E,  E,  1.0f, 0.0f, {0, -1, 0}, // bottom-left
-    -E, -E,  E,  0.0f, 0.0f, {0, -1, 0}, // bottom-right
-    -E, -E, -E,  0.0f, 1.0f, {0, -1, 0}, // top-right
+    {-E, -E, -E,  0, 1, {0, -1, 0}}, // top-right
+    { E, -E, -E,  1, 1, {0, -1, 0}}, // top-left
+    { E, -E,  E,  1, 0, {0, -1, 0}}, // bottom-left
+    { E, -E,  E,  1, 0, {0, -1, 0}}, // bottom-left
+    {-E, -E,  E,  0, 0, {0, -1, 0}}, // bottom-right
+    {-E, -E, -E,  0, 1, {0, -1, 0}}, // top-right
     // Top face
-    -E,  E, -E,  0.0f, 1.0f, {0, 1, 0}, // top-left
-     E,  E,  E,  1.0f, 0.0f, {0, 1, 0}, // bottom-right
-     E,  E, -E,  1.0f, 1.0f, {0, 1, 0}, // top-right     
-     E,  E,  E,  1.0f, 0.0f, {0, 1, 0}, // bottom-right
-    -E,  E, -E,  0.0f, 1.0f, {0, 1, 0}, // top-left
-    -E,  E,  E,  0.0f, 0.0f, {0, 1, 0}  // bottom-left        
+    {-E,  E, -E,  0, 1, {0, 1, 0}}, // top-left
+    { E,  E,  E,  1, 0, {0, 1, 0}}, // bottom-right
+    { E,  E, -E,  1, 1, {0, 1, 0}}, // top-right     
+    { E,  E,  E,  1, 0, {0, 1, 0}}, // bottom-right
+    {-E,  E, -E,  0, 1, {0, 1, 0}}, // top-left
+    {-E,  E,  E,  0, 0, {0, 1, 0}}  // bottom-left        
 };
 
 #undef E
 
-const Triangle_Indeces CUBE_INDECES[] = {
+const Triangle_Index CUBE_INDECES[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
 };
 
@@ -178,9 +155,10 @@ typedef enum Winding_Order
 {
     WINDING_ORDER_CLOCKWISE,
     WINDING_ORDER_COUNTER_CLOCKWISE,
+    WINDING_ORDER_INDETERMINATE,
 } Winding_Order;
 
-Winding_Order get_winding_order(Vertex v1, Vertex v2, Vertex v3)
+Winding_Order get_winding_order(const Vertex v1, const Vertex v2, const Vertex v3)
 {
     Vec3 avg_norm = vec3_add(vec3_add(v1.norm, v2.norm), v3.norm);
     avg_norm = vec3_norm(avg_norm);
@@ -190,21 +168,113 @@ Winding_Order get_winding_order(Vertex v1, Vertex v2, Vertex v3)
 
     Vec3 triangle_right_norm = vec3_cross(edge1, edge2);
     f32 similarity = vec3_dot(avg_norm, triangle_right_norm);
-
+    
+    if(is_near_scaledf(similarity, 0, EPSILON))
+        return WINDING_ORDER_INDETERMINATE;
     if(similarity < 0)
         return WINDING_ORDER_COUNTER_CLOCKWISE;
     else
         return WINDING_ORDER_CLOCKWISE;
 }
 
-Winding_Order get_winding_order_index(Vertex* vertices, Triangle_Indeces trinagle)
+Winding_Order get_winding_order_index(const Vertex* vertices, isize vertex_count, Triangle_Index trinagle)
 {
+    CHECK_BOUNDS(trinagle.vertex_i[0], vertex_count);
+    CHECK_BOUNDS(trinagle.vertex_i[1], vertex_count);
+    CHECK_BOUNDS(trinagle.vertex_i[2], vertex_count);
+
     Vertex v1 = vertices[trinagle.vertex_i[0]];
     Vertex v2 = vertices[trinagle.vertex_i[1]];
     Vertex v3 = vertices[trinagle.vertex_i[2]];
 
     return get_winding_order(v1, v2, v3);
 }
+
+u32 shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
+{
+    u64 hashed = vertex_hash64(vertex, 0);
+
+    //try to exactly find it in the hash. will almost always iterate only once.
+    // the chance of hash colision are astronomically low.
+    isize found = hash_index_find(*hash, hashed);
+    while(found != -1)
+    {
+        isize entry = hash->entries[found].value;
+        Vertex found_vertex = vertices->data[entry];
+        bool is_equal = memcpy(&vertex, &found_vertex, sizeof found_vertex);
+        if(is_equal)
+        {
+            return (u32) entry;
+        }
+        else
+        {
+            isize finished_at = 0;
+            found = hash_index_find_next(*hash, hashed, found, &finished_at);
+        }
+    }
+
+    array_push(vertices, vertex);
+    u32 inserted_i = (u32) (vertices->size - 1);
+    hash_index_insert(hash, hashed, inserted_i);
+    return inserted_i;
+}
+
+
+Vec3 calculate_tangent(Vec3 edge1, Vec3 edge2, Vec2 deltaUV1, Vec2 deltaUV2)
+{
+    Vec3 tangent = {0};
+    float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+    tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+    tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+    tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+
+    return tangent;
+}
+
+Vec3 triangle_calculate_tangent(const Vertex v1, const Vertex v2, const Vertex v3)
+{
+    Vec3 edge1 = vec3_sub(v2.pos, v1.pos);
+    Vec3 edge2 = vec3_sub(v3.pos, v1.pos);
+    Vec2 deltaUV1 = vec2_sub(v2.uv, v1.uv);
+    Vec2 deltaUV2 = vec2_sub(v3.uv, v1.uv);  
+
+    return calculate_tangent(edge1, edge2, deltaUV1, deltaUV2);
+}
+
+Triangle_Index triangle_set_winding_order(Winding_Order desired_order, const Vertex* vertices, isize vertex_count, Triangle_Index triangle)
+{
+    Winding_Order current_order = get_winding_order_index(vertices, vertex_count, triangle);
+    Triangle_Index out_triangle = triangle;
+    if(current_order != desired_order)
+        SWAP(&out_triangle.vertex_i[0], &out_triangle.vertex_i[1], u32); 
+    
+    return out_triangle;
+}
+
+void shape_set_winding_order(Winding_Order order, const Vertex* vertices, isize vertex_count, Triangle_Index* traingles, isize triangle_count)
+{
+    for(isize i = 0; i < triangle_count; i++)
+        traingles[i] = triangle_set_winding_order(order, vertices, vertex_count, traingles[i]);
+}
+
+
+//@TODO:
+//Smooths all triangle normals that have angle between them higher than smooth_from_angle. Might have to add additional vertices.
+//Uses smoothing_factor to determine how much influence the adjecent vertices have on the resulting normal. 
+//the smooth_from_angle refers to the angle between the faces from inside the geometry in a convex shape. 
+//Or put other way between corners of a box smooth_from_angle is 90 degrees nto 270. (this means if from angle is 0 all edges will be smoothed out)
+//void shape_assembly_adjust_normals(Hash_Index* hash, Vertex_Array* vertices, Triangle_Index* traingles, isize triangle_count, f32 smooth_from_angle, f32 smoothing_factor, f32 sharpen_to_angle, f32 sharpen_factor)
+//{
+//    
+//}
+
+//@TODO: change iters on sphere creation to more sophisticated budget mechanisms
+typedef struct Face_Budget
+{
+    f32 max_size;
+    i32 max_vertices;
+    i32 max_faces;
+} Face_Budget;
 
 void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset)
 {
@@ -258,12 +328,12 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
     {
         for (u32 x = 0; x < uiters; x++)
         {
-            Triangle_Indeces tri1 = {0}; 
+            Triangle_Index tri1 = {0}; 
             tri1.vertex_i[0] = (y + 1) * (uiters + 1) + x + ubefore;
             tri1.vertex_i[1] = y       * (uiters + 1) + x + ubefore;
             tri1.vertex_i[2] = y       * (uiters + 1) + x + 1 + ubefore;
             
-            Triangle_Indeces tri2 = {0};
+            Triangle_Index tri2 = {0};
             tri2.vertex_i[0] = (y + 1) * (uiters + 1) + x + ubefore;
             tri2.vertex_i[1] = y       * (uiters + 1) + x + 1 + ubefore;
             tri2.vertex_i[2] = (y + 1) * (uiters + 1) + x + 1 + ubefore;
@@ -271,8 +341,8 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
             array_push(&into->indeces, tri1);
             array_push(&into->indeces, tri2);
             
-            ASSERT(get_winding_order_index(into->vertices.data, tri1) == WINDING_ORDER_CLOCKWISE);
-            ASSERT(get_winding_order_index(into->vertices.data, tri2) == WINDING_ORDER_CLOCKWISE);
+            ASSERT(get_winding_order_index(into->vertices.data, into->vertices.size, tri1) == WINDING_ORDER_CLOCKWISE);
+            ASSERT(get_winding_order_index(into->vertices.data, into->vertices.size, tri2) == WINDING_ORDER_CLOCKWISE);
         }
         
     }
@@ -324,7 +394,7 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
 
     //add the initial indeces
     Vertex_Array vertices = {0};
-    Triangle_Indeces_Array indeces = {0};
+    Triangle_Index_Array indeces = {0};
 
     u32 y_segments = (u32) iters;
     u32 x_segments = (u32) iters;
@@ -356,20 +426,47 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
     {
         for (u32 x = 0; x < x_segments; x++)
         {
-            Triangle_Indeces tri1 = {0}; 
+            Triangle_Index tri1 = {0}; 
             tri1.vertex_i[0] = (y + 1) * (x_segments + 1) + x;
             tri1.vertex_i[1] = y       * (x_segments + 1) + x;
             tri1.vertex_i[2] = y       * (x_segments + 1) + x + 1;
             
-            Triangle_Indeces tri2 = {0};
+            Triangle_Index tri2 = {0};
             tri2.vertex_i[0] = (y + 1) * (x_segments + 1) + x;
             tri2.vertex_i[1] = y       * (x_segments + 1) + x + 1;
             tri2.vertex_i[2] = (y + 1) * (x_segments + 1) + x + 1;
             array_push(&indeces, tri1);
             array_push(&indeces, tri2);
 
-            ASSERT(get_winding_order_index(vertices.data, tri1) == WINDING_ORDER_CLOCKWISE);
-            //ASSERT(get_winding_order_index(vertices.data, tri2) == WINDING_ORDER_CLOCKWISE);
+            #ifdef DO_ASSERTS
+            // Vertices must normally have a WINDING_ORDER_CLOCKWISE order, however
+            // when the triangle is degenerate (almost line, or point) their order might be WINDING_ORDER_INDETERMINATE
+            // We assert this.
+            
+            Triangle_Index tris[2] = {tri1, tri2};
+            for(isize i = 0; i < 2; i++)
+            {
+                Vertex v1 = vertices.data[tris[i].vertex_i[0]];
+                Vertex v2 = vertices.data[tris[i].vertex_i[1]];
+                Vertex v3 = vertices.data[tris[i].vertex_i[2]];
+
+                Winding_Order order = get_winding_order(v1, v2, v3);
+                if(order != WINDING_ORDER_CLOCKWISE)
+                {
+                    bool are_near = vec3_is_near(v1.pos, v2.pos, EPSILON)
+                        || vec3_is_near(v1.pos, v3.pos, EPSILON)
+                        || vec3_is_near(v2.pos, v3.pos, EPSILON);
+
+                    ASSERT(are_near);
+                    ASSERT(order == WINDING_ORDER_INDETERMINATE);
+                }
+                else
+                {
+                    ASSERT(order == WINDING_ORDER_CLOCKWISE);
+                }
+            }
+            
+            #endif
         }
         
     }
@@ -379,28 +476,25 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
     return out_shape;
 }
 
-//Shape shapes_make_sphere(isize iters, f32 radius);
 
-void shapes_make_icosahedron()
+#if 0
+Shape shape_make_z_looking_frusthum(f32 aspect, f32 near, f32 far, f32 fov)
 {
-    #define X 0.525731112119133606f
-    #define Z 0.850650808352039932f
-    #define N 0.f
 
-    static const Vec3 vertices[] = {
-        {-X,N,Z}, {X,N,Z}, {-X,N,-Z}, {X,N,-Z},
-        {N,Z,X}, {N,Z,-X}, {N,-Z,X}, {N,-Z,-X},
-        {Z,X,N}, {-Z,X, N}, {Z,-X,N}, {-Z,-X, N}
-    };
-
-    static const Triangle_Indeces triangles[] = {
-        {0,4,1},{0,9,4},{9,5,4},{4,5,8},{4,8,1},
-        {8,10,1},{8,3,10},{5,3,8},{5,2,3},{2,7,3},
-        {7,10,3},{7,6,10},{7,11,6},{11,0,6},{0,1,6},
-        {6,1,10},{9,0,11},{9,11,2},{9,2,5},{7,2,11}
-    };
-
-    #undef X
-    #undef Z
-    #undef N
 }
+
+Shape shape_make_frusthum(f32 aspect, f32 near, f32 far, f32 fov, Vec3 looking_at)
+{
+
+}
+
+Shape shape_make_vertical_capsule(isize iters, f32 radius, f32 radii_distance)
+{
+
+}
+
+Shape shape_make_capsule(isize iters, f32 radius, f32 radii_distance, Vec3 radii_delta)
+{
+
+}
+#endif

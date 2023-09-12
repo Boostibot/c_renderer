@@ -4,30 +4,21 @@
 #include "platform.h"
 #include "allocator.h"
 #include "string.h"
+#include "error.h"
 
-Platform_Error file_read_entire_append_into(String file_path, String_Builder* append_into);
-Platform_Error file_read_entire(String file_path, String_Builder* data);
-Platform_Error file_append_entire(String file_path, String data);
-Platform_Error file_write_entire(String file_path, String data);
-
-Platform_Error file_create(String file_path, bool* was_just_created);
-Platform_Error file_remove(String file_path, bool* was_just_removed);
-void file_translate_error(String_Builder* into, u64 error);
+EXPORT Error file_read_entire_append_into(String file_path, String_Builder* append_into);
+EXPORT Error file_read_entire(String file_path, String_Builder* data);
+EXPORT Error file_append_entire(String file_path, String data);
+EXPORT Error file_write_entire(String file_path, String data);
+EXPORT Error file_create(String file_path, bool* was_just_created);
+EXPORT Error file_remove(String file_path, bool* was_just_removed);
 
 #endif
-
-
-#define LIB_ALL_IMPL
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FILE_IMPL)) && !defined(LIB_FILE_HAS_IMPL)
 #define LIB_FILE_HAS_IMPL
 
-#include "hash_index.h"
-#include "hash_table.h"
-#include "time.h"
-#include "log.h"
-
-Platform_Error file_read_entire_append_into(String file_path, String_Builder* append_into)
+EXPORT Error file_read_entire_append_into(String file_path, String_Builder* append_into)
 {
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
@@ -44,17 +35,16 @@ Platform_Error file_read_entire_append_into(String file_path, String_Builder* ap
     }
 
     array_deinit(&escpaed_file_path);
-    return error;
+    return error_from_platform(error);
 }
 
-
-Platform_Error file_read_entire(String file_path, String_Builder* data)
+EXPORT Error file_read_entire(String file_path, String_Builder* data)
 {
     array_clear(data);
     return file_read_entire_append_into(file_path, data);
 }
 
-Platform_Error file_append_entire(String file_path, String contents)
+EXPORT Error file_append_entire(String file_path, String contents)
 {
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
@@ -71,10 +61,10 @@ Platform_Error file_append_entire(String file_path, String contents)
     }
 
     array_deinit(&escpaed_file_path);
-    return error;
+    return error_from_platform(error);
 }
 
-Platform_Error file_write_entire(String file_path, String contents)
+EXPORT Error file_write_entire(String file_path, String contents)
 {
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
@@ -89,10 +79,10 @@ Platform_Error file_write_entire(String file_path, String contents)
     }
 
     array_deinit(&escpaed_file_path);
-    return error;
+    return error_from_platform(error);
 }
 
-Platform_Error file_create(String file_path, bool* was_just_created)
+EXPORT Error file_create(String file_path, bool* was_just_created)
 {
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
@@ -101,9 +91,10 @@ Platform_Error file_create(String file_path, bool* was_just_created)
     Platform_Error error = platform_file_create(cstring_from_builder(escpaed_file_path), was_just_created);
     
     array_deinit(&escpaed_file_path);
-    return error;
+    return error_from_platform(error);
 }
-Platform_Error file_remove(String file_path, bool* was_just_removed)
+
+EXPORT Error file_remove(String file_path, bool* was_just_removed)
 {
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
@@ -112,20 +103,7 @@ Platform_Error file_remove(String file_path, bool* was_just_removed)
     Platform_Error error = platform_file_remove(cstring_from_builder(escpaed_file_path), was_just_removed);
     
     array_deinit(&escpaed_file_path);
-    return error;
-}
-void file_translate_error(String_Builder* into, u64 error)
-{
-    if(into == NULL)
-        return;
-
-    char* msg = platform_translate_error_alloc(error);
-    String msg_string = string_make(msg);
-
-    builder_append(into, msg_string);
-
-    //@NOTE: Also potential leak here if builder panics => add allocators!
-    platform_heap_reallocate(0, msg, msg_string.size, 8);
+    return error_from_platform(error);
 }
 
 #endif

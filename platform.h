@@ -108,10 +108,8 @@ double  platform_perf_counter_frequency_d(); //returns the frequency of the perf
 // Filesystem
 //=========================================
 
-typedef enum Platform_Error
-{
-    PLATFORM_ERROR_OK = 0
-} Platform_Error;
+typedef uint32_t Platform_Error;
+enum {PLATFORM_ERROR_OK = 0};
 
 typedef enum Platform_File_Type
 {
@@ -149,7 +147,14 @@ typedef struct Platform_Memory_Mapping
     uint64_t state[8];
 } Platform_Memory_Mapping;
 
-char* platform_translate_error_alloc(Platform_Error error);
+
+
+//@TODO: CHANGE!! Alongside all other allocation fucntions. Make this file include its own simple allocator interface perfectly comaptible
+// with the outside one except not needing get stats and not requiring the allocator data to subclassing thing
+
+//Returns a translated error message. The returned pointer is not static and shall NOT be stored as further calls to this functions will invalidate it. 
+//Thus the returned string should be immedietelly printed or copied into a different buffer
+const char* platform_translate_error(Platform_Error error);
 
 //retrieves info about the specified file or directory
 Platform_Error platform_file_info(const char* file_path, Platform_File_Info* info);
