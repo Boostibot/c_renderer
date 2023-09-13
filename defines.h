@@ -65,11 +65,13 @@ typedef double      f64;
     #define FORCE_INLINE __attribute__((always_inline))
     #define NO_INLINE __attribute__((noinline))
     #define THREAD_LOCAL __thread
+    #define ALIGNED(bytes) __attribute__((aligned(bytes)))
 #elif defined(_MSC_VER)
     #define RESTRICT __restrict
     #define FORCE_INLINE __forceinline
     #define NO_INLINE __declspec(noinline)
     #define THREAD_LOCAL __declspec(thread)
+    #define ALIGNED(bytes) __declspec(align(bytes))
 #else
     #define RESTRICT
     #define FORCE_INLINE

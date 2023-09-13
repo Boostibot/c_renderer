@@ -1799,6 +1799,8 @@ void render_mesh_draw_using_postprocess(Render_Mesh screen_quad, const Render_Sh
     render_shader_unuse(shader_screen);
 }
 
+#include "profile.h"
+
 void run_func(void* context)
 {
     LOG_INFO("APP", "run_func enter");
@@ -1836,6 +1838,8 @@ void run_func(void* context)
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
     Render_Capture_Buffers capture_buffers = {0};
     
+    
+
     i32 res_environment = 1024;
     i32 res_irradiance = 32;
     i32 res_prefilter = 128;
@@ -1851,6 +1855,7 @@ void run_func(void* context)
     Shape unit_cube = {0};
     Shape falcon = {0};
 
+    LOG_DEBUG("DEBUG", "freq: %lld", (lld) platform_perf_counter_frequency());
 
     Render_Mesh render_uv_sphere = {0};
     Render_Mesh render_cube_sphere = {0};

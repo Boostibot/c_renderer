@@ -237,6 +237,7 @@
     <ClInclude Include="math.h" />
     <ClInclude Include="obj_loader.h" />
     <ClInclude Include="platform.h" />
+    <ClInclude Include="profile.h" />
     <ClInclude Include="random.h" />
     <ClInclude Include="gl_shader_util.h" />
     <ClInclude Include="shapes.h" />

@@ -66,6 +66,10 @@ inline static int64_t platform_interlocked_excahnge64(volatile int64_t* target, 
 inline static int32_t platform_interlocked_excahnge32(volatile int32_t* target, int32_t value);
 inline static int32_t platform_interlocked_add32(volatile int32_t* target, int32_t value);
 inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64_t value);
+inline static int32_t platform_interlocked_increment32(volatile int32_t* target);
+inline static int64_t platform_interlocked_increment64(volatile int64_t* target);
+inline static int32_t platform_interlocked_decrement32(volatile int32_t* target);
+inline static int64_t platform_interlocked_decrement64(volatile int64_t* target);
 
 //=========================================
 // Timings
@@ -301,6 +305,7 @@ typedef enum {
 #if defined(_MSC_VER)
     #include <stdio.h>
     #include <intrin.h>
+
     #undef platform_trap
     #define platform_trap() __debugbreak() 
 
@@ -347,20 +352,31 @@ typedef enum {
     
     inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64_t value)
     {
-        (void) value; 
-        (void) target;
-        return 0;
-        //return (int64_t) _InterlockedAddLargeStatistic((volatile long long*) target, (long long) value);
+        return (int64_t) _InterlockedExchangeAdd64((volatile long long*) target, (long long) value);
     }
 
     inline static int32_t platform_interlocked_add32(volatile int32_t* target, int32_t value)
     {
-        (void) value; 
-        (void) target;
-        return 0;
-        //return (int32_t) _InterlockedAdd((volatile long*) target, (long) value);
+        return (int32_t) _InterlockedExchangeAdd((volatile long*) target, (long) value);
     }
     
+    inline static int32_t platform_interlocked_increment32(volatile int32_t* target)
+    {
+        return (int32_t) _InterlockedIncrement((volatile long*) target);
+    }
+    inline static int64_t platform_interlocked_increment64(volatile int64_t* target)
+    {
+        return (int64_t) _InterlockedIncrement64((volatile long long*) target);
+    }
+    
+    inline static int32_t platform_interlocked_decrement32(volatile int32_t* target)
+    {
+        return (int32_t) _InterlockedDecrement((volatile long*) target);
+    }
+    inline static int64_t platform_interlocked_decrement64(volatile int64_t* target)
+    {
+        return (int64_t) _InterlockedDecrement64((volatile long long*) target);
+    }
 #endif
 
 #endif
