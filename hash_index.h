@@ -3,6 +3,77 @@
 
 #include "allocator.h"
 
+// A simple and flexible linear-probing-hash style hash index.
+// 
+// We use the term hash index as opposed to hash table because this structure
+// doesnt provide the usual hash table ineterface, it marely stores indeces or pointers
+// to the key-value data elsewhere.
+//
+// =================== REASONING ====================
+// 
+// This approach has certain benefits most importantly enabling to simply
+// write SQL style tables where every single row value can have 
+// its own accelarating Hash_Index (thats where the name comes from). 
+// Consider the following table:
+//
+// OWNER     AGE   NAME         ANIMAL   BIG_CHUNK_OF_DATA
+// "Alice"   7     "Timotheo"   cat      /* blob */
+// "Bob"     3     "Neo"        dog      /* blob */
+// ....
+// 
+// We wish to query rows in O(1) time by owner, name and age. 
+// How do we achieve this with traditional key value hash table? 
+// If the key is OWNER then the owner field will be missing from the row 
+// (which is bad when we query by NAME). If the key is NAME the name 
+// field will be missing. The only solution is to have 3 hash tables:
+// 
+//   owner_table: OWNER -> index
+//   name_table:  NAME -> index
+//   age_table:   AGE -> index
+//
+// and one array:
+// 
+//   rows_array: Array<(OWNER, AGE, NAME, ANIMAL, BIG_CHUNK_OF_DATA)>
+// 
+// Now the problem is we are effectively duplicating most of the data in the table!
+// This is clearly pointless and impractical especially when its fields need to be updated! 
+// 
+// Our approach solves this problem by only considering the hashes of the fields 
+// and not the fields themselves. So we have:
+// 
+//   owner_index: hash -> index
+//   name_index:  hash -> index
+//   age_index:   hash -> index
+//   rows_array:  Array<(OWNER, AGE, NAME, ANIMAL, BIG_CHUNK_OF_DATA)>
+// 
+// Now whenever we lookup row by owner we first hash the owner field
+// (by whtever but always the same hash algorhitm) then use the owner_index 
+// index to find the row. 
+// 
+// Only caveat being a hash colision might occur so we need to remmeber to always check if the 
+// row we were looking for is the one we actually got! Because of this each table will most often implement its
+// own functions (find_by_owner(...), find_by_name(...), find_by_age(...)...).
+// 
+// See hash_table.h for a simple String -> Any hash table implementation
+// 
+// =================== IMPLEMENTATION ====================
+// 
+// We have a simple dynamic array of tuples containing the hashed key and value.
+// Hashed key is 64 bit number (can be 32 bit for better perf). Value is usually 
+// an index but often we want to store pointers. Thus we again use a 64 bit field.
+// 
+// Again if we wanted the best performance (as opposed to usability in C) we would
+// do 32 bit hash and 32 bit value which is an index. This would gratley improve the 
+// cache utilization and thus the lookup speed on larger indeces.
+// 
+// We do linear probing to find our entries. We use two special values of hashes
+// namely 0 (EMPTY) and 1 (GRAVESTONE) to mark empty spots. We rehash really soon
+// (on 50% utilization) to prevent pitfalls of linear probing. 
+// See implementation for details.
+//
+// @TODO: Implement robin-hood hashing for better percantage utilization 
+// @TODO: Implement a 32 bit variant for faster lookup (was not needed yet)
+
 typedef struct Hash_Index_Entry
 {
     uint64_t hash;
@@ -299,6 +370,7 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         ASSERT(hash_index_is_invariant(*table));
         return out;
     }
+
     EXPORT Hash_Index_Entry hash_index_remove(Hash_Index* table, isize found)
     {
         ASSERT(table->size > 0);

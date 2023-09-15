@@ -15,6 +15,9 @@
 #define WEEK_SECONDS ((int64_t) 7 * DAY_SECONDS)
 #define YEAR_SECONDS (int64_t) 31556952
 
+//@TODO: implement platform_perf_counter_frequency_d ourselves!
+//       dont use static inline!
+
 //Returns the time from the startup time in nanoseconds
 static inline int64_t clock_ns()
 {

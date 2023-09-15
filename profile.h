@@ -106,6 +106,9 @@ EXPORT i64 profile_get_running_counters_count();
 EXPORT f64 profile_get_counter_total_running_time_s(Perf_Counter counter);
 EXPORT f64 profile_get_counter_avg_running_time_s(Perf_Counter counter);
 
+//@TODO: use atomic linked list of Perf_Counter instead as __COUNTER__ doesnt work
+// in multiple compilation units environments!
+
 //Starts a counter. Doesnt have any effect on global perf counter stats
 #define PERF_COUNTER_START(name) \
 	enum { PP_CONCAT(__counter__, __LINE__) = __COUNTER__ }; \

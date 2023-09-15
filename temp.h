@@ -5,7 +5,7 @@
 
 //useful: https://catlikecoding.com/unity/tutorials/
 
-f32 vec3_p_len(Vec3 vec, f32 p)
+static f32 vec3_p_len(Vec3 vec, f32 p)
 {
     f32 x = fabsf(vec.x);
     f32 y = fabsf(vec.y);
@@ -16,7 +16,7 @@ f32 vec3_p_len(Vec3 vec, f32 p)
     return result;
 }
 
-Vec3 vec3_p_norm(Vec3 vec, f32 p)
+static Vec3 vec3_p_norm(Vec3 vec, f32 p)
 {
     f32 p_len = vec3_p_len(vec, p);
     ASSERT(p_len != 0);

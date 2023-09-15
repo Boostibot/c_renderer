@@ -6,8 +6,14 @@
 #include "string.h"
 #include "hash.h"
 
+//Very expensive check that iterates all keys and checks if they can be found using 
+// the internal hash. DO NOT USE UNLESS DEBUGGING!
+#ifdef DO_ASSERTS_SLOW
 #define DO_HASH_TABLE_CONSISTENCY_CHECKS
+#endif
 
+// Implements a String -> Value_Type hash table using Hash_Index as a base.
+// Any other tables can be implemented more or less the same.
 #define DEFINE_HASH_TABLE_TYPE(Value_Type, Hash_Table_Type_Name) \
     typedef struct {            \
         Hash_Index index;       \
@@ -18,7 +24,7 @@
                                 \
         i32 value_type_size; /* size in bytes of the Value_Type */   \
         i32 hash_collisions; /* number of missplaced keys in the index */    \
-        u64 seed;            /* seed used to seed all hashes. Can be only changed during rehashing or init*/   \
+        u64 seed;            /* seed used to seed all hashes. Can be only changed during rehashing or init @TODO*/   \
     } Hash_Table_Type_Name;     \
 
 DEFINE_HASH_TABLE_TYPE(uint8_t,  u8_Hash_Table);

@@ -6,7 +6,7 @@
 #include "hash.h"
 #include "engine_types.h"
 
-
+//@TODO: separate to definitions/implementation refactor!
 
 typedef struct Shape
 {
