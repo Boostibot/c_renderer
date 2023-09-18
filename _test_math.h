@@ -11,12 +11,12 @@
 
 #define TEST_MATH_EPSILON (EPSILON*2)
 
-#define TEST_NEAR_FLOAT(a, b, msg) TEST_MSG(is_near_scaledf(a, b, EPSILON*2), msg)
-#define TEST_NEAR_VEC3(a, b, msg) TEST_MSG(vec3_is_near_scaled(a, b, EPSILON*2), msg)
+#define TEST_NEAR_FLOAT(a, b, msg) TEST_MSG(is_near_scaledf(a, b, TEST_MATH_EPSILON), msg)
+#define TEST_NEAR_VEC3(a, b, msg) TEST_MSG(vec3_is_near_scaled(a, b, TEST_MATH_EPSILON), msg)
 
 static int compare_near_scaledf(float a, float b)
 {
-    if(is_near_scaledf(a, b, EPSILON*2))
+    if(is_near_scaledf(a, b, TEST_MATH_EPSILON))
         return 0;
     else if(a <= b)
         return -1;
@@ -47,13 +47,13 @@ static void test_vec3_identities(Vec3 a, Vec3 b)
     const Vec3 v = vec3_cross(n, u);
 
     float x = vec3_dot(n, u);
-    if(is_near_scaledf(x, 0.0f, EPSILON) == false)
+    if(is_near_scaledf(x, 0.0f, TEST_MATH_EPSILON) == false)
     {
         int z = 0;
         (void) z;
     }
     //@NOTE: this check requires larger epsilon even if scaled
-    float large_epsilon = EPSILON*10;
+    float large_epsilon = TEST_MATH_EPSILON*5;
     TEST_MSG(is_near_scaledf(vec3_dot(n, u), 0.0f, large_epsilon), "Ortogonalization shoould produce ortogonal vectors");
     TEST_MSG(is_near_scaledf(vec3_dot(n, v), 0.0f, large_epsilon), "Ortogonalization shoould produce ortogonal vectors");
     TEST_MSG(is_near_scaledf(vec3_dot(v, u), 0.0f, large_epsilon), "Ortogonalization shoould produce ortogonal vectors");
