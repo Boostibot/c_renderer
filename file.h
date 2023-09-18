@@ -5,6 +5,7 @@
 #include "allocator.h"
 #include "string.h"
 #include "error.h"
+#include "profile.h"
 
 EXPORT Error file_read_entire_append_into(String file_path, String_Builder* append_into);
 EXPORT Error file_read_entire(String file_path, String_Builder* data);
@@ -20,6 +21,7 @@ EXPORT Error file_remove(String file_path, bool* was_just_removed);
 
 EXPORT Error file_read_entire_append_into(String file_path, String_Builder* append_into)
 {
+    PERF_COUNTER_START(c);
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
     builder_append(&escpaed_file_path, file_path);
@@ -35,6 +37,7 @@ EXPORT Error file_read_entire_append_into(String file_path, String_Builder* appe
     }
 
     array_deinit(&escpaed_file_path);
+    PERF_COUNTER_END(c);
     return error_from_platform(error);
 }
 
@@ -46,6 +49,7 @@ EXPORT Error file_read_entire(String file_path, String_Builder* data)
 
 EXPORT Error file_append_entire(String file_path, String contents)
 {
+    PERF_COUNTER_START(c);
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
     builder_append(&escpaed_file_path, file_path);
@@ -61,11 +65,13 @@ EXPORT Error file_append_entire(String file_path, String contents)
     }
 
     array_deinit(&escpaed_file_path);
+    PERF_COUNTER_END(c);
     return error_from_platform(error);
 }
 
 EXPORT Error file_write_entire(String file_path, String contents)
 {
+    PERF_COUNTER_START(c);
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
     builder_append(&escpaed_file_path, file_path);
@@ -79,11 +85,13 @@ EXPORT Error file_write_entire(String file_path, String contents)
     }
 
     array_deinit(&escpaed_file_path);
+    PERF_COUNTER_END(c);
     return error_from_platform(error);
 }
 
 EXPORT Error file_create(String file_path, bool* was_just_created)
 {
+    PERF_COUNTER_START(c);
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
     builder_append(&escpaed_file_path, file_path);
@@ -91,11 +99,13 @@ EXPORT Error file_create(String file_path, bool* was_just_created)
     Platform_Error error = platform_file_create(cstring_from_builder(escpaed_file_path), was_just_created);
     
     array_deinit(&escpaed_file_path);
+    PERF_COUNTER_END(c);
     return error_from_platform(error);
 }
 
 EXPORT Error file_remove(String file_path, bool* was_just_removed)
 {
+    PERF_COUNTER_START(c);
     String_Builder escpaed_file_path = {0};
     array_init_backed(&escpaed_file_path, allocator_get_scratch(), 512);
     builder_append(&escpaed_file_path, file_path);
@@ -103,6 +113,7 @@ EXPORT Error file_remove(String file_path, bool* was_just_removed)
     Platform_Error error = platform_file_remove(cstring_from_builder(escpaed_file_path), was_just_removed);
     
     array_deinit(&escpaed_file_path);
+    PERF_COUNTER_END(c);
     return error_from_platform(error);
 }
 

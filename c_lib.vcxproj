@@ -221,8 +221,10 @@
     <ClInclude Include="allocator_debug.h" />
     <ClInclude Include="allocator_failing.h" />
     <ClInclude Include="allocator_malloc.h" />
+    <ClInclude Include="allocator_wrapper.h" />
     <ClInclude Include="array.h" />
     <ClInclude Include="assert.h" />
+    <ClInclude Include="base64.h" />
     <ClInclude Include="defines.h" />
     <ClInclude Include="engine_types.h" />
     <ClInclude Include="error.h" />
@@ -233,9 +235,11 @@
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_index.h" />
     <ClInclude Include="hash_table.h" />
+    <ClInclude Include="img_loader.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="obj_loader.h" />
+    <ClInclude Include="parse.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="profile.h" />
     <ClInclude Include="random.h" />
@@ -244,8 +248,10 @@
     <ClInclude Include="string.h" />
     <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />
+    <ClInclude Include="vformat.h" />
     <ClInclude Include="_test.h" />
     <ClInclude Include="_test_array.h" />
+    <ClInclude Include="_test_base64.h" />
     <ClInclude Include="_test_hash_index.h" />
     <ClInclude Include="_test_hash_table.h" />
     <ClInclude Include="_test_log.h" />

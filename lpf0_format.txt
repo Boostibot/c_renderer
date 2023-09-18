@@ -1,0 +1,327 @@
+LPF0
+
+#=========================================== MOTIVATION ===========================================
+#
+#   JSON is a popular and efficient text format for both humans and disk space (compared to xml). 
+#   However its parsing is verry dificult and rather slow. This is because of main three reasons: 
+#   1: complex whitespace rules
+#   2: escaped sequences (strings)
+#   3: escaped characters
+#
+#   This format is a direct response to those problems. It aims to be simple to implement,
+#   itegrate well with version control expressive enough to represent arbitrary JSON document, 
+#   be higly efficient for parsing and writing, and embarassingly parralelizable. 
+#   It can also represent arbitrary (binary) data easily.
+#
+#   It achives it with the following idea: each line has its own tokenizing context and rigorously defined structure.
+#   In JSON we cannot take a random position inside the format and start parsing, because we never know if we are inside
+#   a string or not. To know that information we need to parse the entire file starting from beggining. 
+#   Here we take the random position scan for a newline character and than can start parsing. This means that we can easily 
+#   parse in parallel or parse just some portion of the file. Further besides the newlines themselves there is no need to do
+#   ANY escaping of contained data. This is an extremely useful property.
+#
+#   Each line starts with some format meta data used for parsing. This portion does not form a part of the contained data
+#   and can be discarded (we only lose structure this way). A special characters (',', ':') mark the end of this segment.
+#   Then follows the user string unescaped as is. Fianlly we discard everything on the line after the ending ';' mark. 
+#   This is useful when writing whitespace sensitive data because most code/text editors dont show newlines in any special way.
+#   Thus without this marker we could leave unwanted whitspace without noticing.
+#
+#   To represent multiline user strings we split them by lines and encode each line separately. The first line starts with the
+#   ':' start marker and the subsequent connected lines start with the ',' continuation marker.
+#
+#   Note that this can be used to write any binary data as well (while the rest of the file still remaining legible!).
+#   We simply split the binary blob by the byte representation of the newline char (byte value 0x2E) and encode as usual.
+#
+#   This format when compressed (without type annotaions) should be on similar levels of data sized as the equivalent json
+#
+#   The fact that we use newlines as the primary organization tool means this format integrates really well with git
+#   and other source control tools.
+
+#=========================================== WALKTHROUGH OF THE FORMAT ===========================================
+
+#This is a comment. All comments are single line.
+#Comments are formed by # character preceeding the : start marker.
+
+#The LPF0 mark on the first line is optional and specifies the fact that this is a version 0 of Line Prefix format
+#LPFO mark is formed by LPF[VERSION] precceding the : start marker. 
+#The mark must be the very first set of bytes in the file exactly as written (uppercase).
+
+#The folowing is an entry (some piece of content of the file). 
+#All entries start directly after the : start marker and span until the next line (the newline character is not part of the entry).
+#(Almost) all characters before the : start marker are skipped. This is notably useful for indetation.
+:Entry1
+    :Entry2
+
+#Multiline entries can be formed by adding another entry directly below it starting after the , continuation marker.
+:First line of entry
+,and the second line
+
+#When whitespace is significant we can use the ; end marker to denote end of an entry
+#All characters after the LAST ; end marker are discarded and can be used as comments 
+#(After this example are 3 spaces which are skipped)
+:First entry;    
+:This is an entry containing the end marker ; character without any problem;
+
+#We can optionally specify the type of entries to be used while parsing. 
+#This is useful for easily extracting and validationg structures inside the format.
+#The type should be immediately preceed what its refering to. 
+#In the case of a simple entry directly preceed the : marker. 
+#Entry has only one type meaning that placing type before the , continuation marker is an (non fatal) error.
+#See common types at the end of this document for a complete list of supported types.
+
+#String entry
+s:String entry 
+
+#Integer entry
+i:-1024;      
+
+#Unsigned integer entry
+u:512;    
+
+#Floating point number entry
+f:13.2
+
+#Boolean entry
+b:true
+b:false
+
+#NIL/NULL entry. Its value should be ignored. Useful inside maps (see below).
+n:
+
+#An array of items is formed by the [ marker preceeding the : marker (or , marker).
+#All entries after that and before the end of the array are entries of the array.
+#An array ends with ] marker preceeding the : start marker
+[
+    :Entry inside an array
+]
+
+#Optionally the entries inside the array can start right after the [ : marker.
+#Even the final entry after the ] : marker is still a part of the array. 
+#See below (All entries are inside the array):
+[   :Entry1 isnide an array
+    :Entry2 isnide an array
+]   :Entry3 isnide an array
+
+#instead of empty arrays spanning two lines the [] marker can be used:
+#This ...
+[
+]
+#Is equivalnet to this...
+[] 
+
+#The [] syntax can also be used for single value arrays:
+#This ...
+[
+    :Entry1
+]
+#Is equivalnet to this...
+[]  :Entry1
+
+#Canonically we use the following formatting for arrays of different sizes (and maps, see below).
+#The arrays bewlo contain 0, 1, 2, 3... entries respectively:
+
+#Zero entry array
+[]
+
+#Single entry array
+[]  :E1
+
+#Two entry array
+[   :E1
+]   :E2
+
+#Three and more entry array
+[   :E1
+    :E2
+    #...
+]   :E3
+
+#A map of entris is formed the exact same way as arrays except uses the { and } markers instead of [ and ] markers respectively
+#Additonally a map must contain EVEN number of entries. Each ODD entry is a KEY and each EVEN entry is a VALUE.
+#Maps containign odd number of entris are invalid. The last single entry is ignored and a non fatal error is raised.
+{   
+    :Key1
+    :Value1
+
+    :Key2
+    :0.123
+}   
+
+#The same syntax can (and should) be used for maps as is used for arrays. 
+#Note that single value map doesnt make sense.
+
+#Zero entry map
+[]
+
+#Two entry map
+[   :K1
+]   :V1
+
+#Three and more entry map
+[   :K1
+    :V1
+    
+    :K2
+]   :V2
+
+#Any value can be used for map keys and values not just flat entries.
+#Using arrays or maps for keys is not common.
+{   
+   :Key1
+    [   :Two value array value
+    ]   :...and the second one
+
+    []  :Single value array key
+    []  :Single value array value
+}
+
+#Finally the whole LPF file is implicitly inside one big array. 
+#This means that the whole LPF is esentially a single LPF value 
+
+#A final example of typical usage of LPF to define a simple material description
+{
+    :name
+        s:Wood;
+    :reosultion
+        i:1024
+    :albedo
+        3f:1 1 1
+    :rougness
+        f:0.59
+    :metallic
+        f:0
+    :ao
+        f:0
+    :emissive
+        f:0
+
+    :albedo_map
+    TEX {   :path
+            :images/wood_albedo.bmp;
+        :gamma
+            f:2.2
+        :tile
+    }        b:false
+    
+    :rougness_map
+    TEX {:path
+            :images/wood_rougness.bmp;
+        :gamma
+            f:1
+        :tile
+    }        b:false
+    
+    :metalic_map
+    TEX {:path
+            :images/wood_metalic.bmp;
+        :gamma
+            f:1
+        :tile
+    }        b:false
+    
+    :ao_map
+    TEX {:path
+            :images/wood_ao.bmp;
+        :gamma
+            f:1
+        :tile
+    }        b:false
+    
+    :emissive_map
+    TEX {:path
+            :images/wood_emissive.bmp;
+        :gamma
+            f:1
+        :tile
+    }        b:false
+}
+
+
+#==== A complete list of common types ====
+#These are just the common default supported types. 
+#Users are velcome to define their own additions as these types dont  
+#change the semantic meaning of the file.
+
+#All types however must not contain any of the following:
+#'[', ']', '{', '}', ',', ':', '#', 'LPF0'
+
+#String entry
+s:String entry 
+
+#Integer entry.
+#The format is: (-)(leading zeroes)digits
+i:-1024      
+
+#Unsigned integer entry
+#The format is (leading zeroes)digits
+u:512    
+
+#Floating point number entry
+#The format is (-)(leading zeroes)digits(.digits) 
+#Things to note about this: 
+#  1: it always uses . indepedent of locale
+#  2: it does require leading digit ie. .5 in place of 0.5 is not allowed
+#  3: it does not permit + in front                           
+f:13.2
+
+#Boolean entry
+b:true
+b:false
+#Can also use 1 for true and 0 for false
+b:1
+b:0
+
+#Utf8 character entry
+c:g
+
+#NIL/NULL entry. Its value should be ignored. 
+#Useful inside maps when the map should act like a hash set instead.
+n:
+
+#Sized types.
+#Same syntax as for unsigned but followed by a number representing the 
+#number of bits to use for representation
+i8:-31
+i16:-23000
+i32:-1024
+i64:-1024
+
+u8:31
+u16:23000
+u32:1024
+u64:1024
+
+b8:true
+b16:true
+b32:true
+b64:true
+
+f16:1.023
+f32:1.023
+f64:1.023
+
+c8:g
+c16:g
+c32:g
+
+#Vector types.
+#Same syntax as for sized/unsized types but prefixed with the count of items inside
+#the vector type. 
+#The syntax is:
+#[n][Type]:[n times value of type Type]
+#Most common vector types are:
+
+#Two compoment common vector
+2f:1.0 2.0
+
+#Three compoment common vector
+3f:1 0 0
+
+#Four compoment common vector or quaternion
+4f:0.5 0.5 0.5 1
+
+#16 compoment vector. Used to represent entire matrices. Formatted for clarity.
+16f:1 0 0 0
+   ,0 1 0 0
+   ,0 0 1 0
+   ,0 0 0 1

@@ -32,6 +32,10 @@ typedef uint64_t    b64;
 typedef float       f32;
 typedef double      f64;
 
+typedef char        c8;
+typedef wchar_t     c16;
+typedef uint32_t    c32;
+
 #define MIN(a, b)   ((a) < (b) ? (a) : (b))
 #define MAX(a, b)   ((a) > (b) ? (a) : (b))
 #define CLAMP(value, low, high) MAX(low, MIN(value, high))

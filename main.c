@@ -3,6 +3,8 @@
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
+#define RUN_TESTS
+
 #include "platform.h"
 #include "string.h"
 #include "hash_index.h"
@@ -547,6 +549,7 @@ Mat4 camera_make_view_matrix(Camera camera)
 }
 
 void run_func(void* context);
+void run_test_func(void* context);
 void error_func(void* context, Platform_Sandox_Error error_code);
 
 int main()
@@ -601,10 +604,15 @@ int main()
 
     gl_debug_output_enable();
 
+    #ifndef RUN_TESTS
     platform_exception_sandbox(
         run_func, window, 
         error_func, window);
-
+    #else
+    platform_exception_sandbox(
+        run_test_func, window, 
+        error_func, window);
+    #endif
     glfwDestroyWindow(window);
     glfwTerminate();
 
@@ -1801,8 +1809,111 @@ void render_mesh_draw_using_postprocess(Render_Mesh screen_quad, const Render_Sh
 
 #include "profile.h"
 
+int perf_counter_compare_total_time_func(const void* a_, const void* b_)
+{
+    Perf_Counter* a = (Perf_Counter*) a_;
+    Perf_Counter* b = (Perf_Counter*) b_;
+    
+    if(profile_get_counter_total_running_time_s(*a) > profile_get_counter_total_running_time_s(*b))
+        return -1;
+    else 
+        return 1;
+}
+
+int perf_counter_compare_file_func(const void* a_, const void* b_)
+{
+    Perf_Counter* a = (Perf_Counter*) a_;
+    Perf_Counter* b = (Perf_Counter*) b_;
+    
+    return strcmp(a->file, b->file);
+}
+
+void log_perf_counters(bool sort_by_name)
+{
+    DEFINE_ARRAY_TYPE(Perf_Counter, _Perf_Counter_Array);
+
+    String common_prefix = {0};
+
+    _Perf_Counter_Array counters = {0};
+    for(Perf_Counter* counter = profile_get_counters(); counter != NULL; counter = counter->next)
+    {
+
+        String curent_file = string_make(counter->file);
+        if(common_prefix.data == NULL)
+            common_prefix = curent_file;
+        else
+        {
+            isize matches_to = 0;
+            isize min_size = MIN(common_prefix.size, curent_file.size);
+            for(; matches_to < min_size; matches_to++)
+            {
+                if(common_prefix.data[matches_to] != curent_file.data[matches_to])
+                    break;
+            }
+
+            common_prefix = string_limit(common_prefix, matches_to);
+        }
+
+        array_push(&counters, *counter);
+    }
+    
+    if(sort_by_name)
+        qsort(counters.data, counters.size, sizeof(Perf_Counter), perf_counter_compare_file_func);
+    else
+        qsort(counters.data, counters.size, sizeof(Perf_Counter), perf_counter_compare_total_time_func);
+    
+    LOG_INFO("APP", "Logging perf counters (still running %lld):", (lld) profile_get_total_running_counters_count());
+    log_group_push();
+    for(isize i = 0; i < counters.size; i++)
+    {
+        Perf_Counter counter = counters.data[i];
+        if(counter.is_detailed)
+        {
+            if(i == counters.size - 1)
+            {
+                (void) profile_get_counter_normalized_standard_deviation_s(counter);
+            }
+
+		    LOG_INFO("APP", "total: %15.8lf avg: %15.8lf runs: %-9lld σ/μ %15.8lf [%15.8lf %15.8lf] (ms) from %20s %-4lld %s \"%s\"", 
+			    profile_get_counter_total_running_time_s(counter)*1000,
+			    profile_get_counter_average_running_time_s(counter)*1000,
+                (lld) counter.runs,
+                profile_get_counter_normalized_standard_deviation_s(counter),
+			    profile_get_counter_min_running_time_s(counter)*1000,
+			    profile_get_counter_max_running_time_s(counter)*1000,
+                counter.file + common_prefix.size,
+			    (lld) counter.line,
+			    counter.function,
+			    counter.name
+		    );
+        }
+        else
+        {
+		    LOG_INFO("APP", "total: %15.8lf avg: %15.8lf runs: %-9lld (ms) from %20s %-4lld %s \"%s\"", 
+			    profile_get_counter_total_running_time_s(counter)*1000,
+			    profile_get_counter_average_running_time_s(counter)*1000,
+                (lld) counter.runs,
+                counter.file + common_prefix.size,
+			    (lld) counter.line,
+			    counter.function,
+			    counter.name
+		    );
+        }
+        if(counter.concurrent_running_counters > 0)
+        {
+            log_group_push();
+            LOG_INFO("APP", "COUNTER LEAKS! Still running %lld", (lld) counter.concurrent_running_counters);
+            log_group_pop();
+        }
+    }
+    log_group_pop();
+
+    array_deinit(&counters);
+}
+
 void run_func(void* context)
 {
+    ASSERT(1);
     LOG_INFO("APP", "run_func enter");
     
     Debug_Allocator debug_alloc = {0};
@@ -1833,19 +1944,18 @@ void run_func(void* context)
     settings->mouse_sensitivity_scale_with_fov_ammount = 1.0f;
     settings->MSAA_samples = 4;
 
+
     mapping_make_default(app->control_mappings);
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
     Render_Capture_Buffers capture_buffers = {0};
-    
-    
-
+	
     i32 res_environment = 1024;
     i32 res_irradiance = 32;
     i32 res_prefilter = 128;
     i32 res_brdf_lut = 512;
 
-    f32 irradicance_sample_delta = 0.025f; //big danger! If set too low pc will lag completely!
+    f32 irradicance_sample_delta = 0.025f;
     f32 default_ao = 0.2f;
 
     Shape uv_sphere = {0};
@@ -1854,8 +1964,6 @@ void run_func(void* context)
     Shape unit_quad = {0};
     Shape unit_cube = {0};
     Shape falcon = {0};
-
-    LOG_DEBUG("DEBUG", "freq: %lld", (lld) platform_perf_counter_frequency());
 
     Render_Mesh render_uv_sphere = {0};
     Render_Mesh render_cube_sphere = {0};
@@ -1919,6 +2027,7 @@ void run_func(void* context)
             || frame_num == 0)
         {
             LOG_INFO("APP", "Refreshing shaders");
+            PERF_COUNTER_START(shader_load_counter);
 
             bool ok = true;
             ok = ok && render_shader_init_from_disk(&shader_solid_color, 
@@ -1970,7 +2079,8 @@ void run_func(void* context)
                 STRING("shaders/uv_debug.frag"), 
                 STRING("shaders/uv_debug.geom"), 
                 STRING(""), STRING("shader_debug"), NULL));
-
+                
+            PERF_COUNTER_END(shader_load_counter);
             ASSERT(ok);
         }
 
@@ -1978,8 +2088,8 @@ void run_func(void* context)
             || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
             || frame_num == 0)
         {
-            
             LOG_INFO("APP", "Refreshing art");
+            PERF_COUNTER_START(art_load_counter);
 
             shape_deinit(&uv_sphere);
             shape_deinit(&cube_sphere);
@@ -2036,7 +2146,8 @@ void run_func(void* context)
                 &cubemap_environment, &capture_buffers, &shader_irradiance, render_cube);
 
             glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
-
+            
+            PERF_COUNTER_END(art_load_counter);
             ASSERT(ok);
         }
 
@@ -2057,6 +2168,7 @@ void run_func(void* context)
 
         if(app->is_in_mouse_mode == false)
         {
+            PERF_COUNTER_START(input_counter);
             f32 fov_sens_modifier = sinf(app->zoom_target_fov);
             //Movement
             {
@@ -2150,6 +2262,7 @@ void run_func(void* context)
                     settings->fov = app->zoom_target_fov;
             }
             
+            PERF_COUNTER_END(input_counter);
         }
 
         
@@ -2166,6 +2279,7 @@ void run_func(void* context)
         
         //================ FIRST PASS ==================
         {
+            PERF_COUNTER_START(first_pass_counter);
             render_screen_frame_buffers_msaa_render_begin(&screen_buffers);
             glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -2317,13 +2431,16 @@ void run_func(void* context)
             }
 
             render_screen_frame_buffers_msaa_render_end(&screen_buffers);
+            PERF_COUNTER_END(first_pass_counter);
         }
 
         // ============== POST PROCESSING PASS ==================
         {
+            PERF_COUNTER_START(second_pass_counter);
             render_screen_frame_buffers_msaa_post_process_begin(&screen_buffers);
             render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, settings->screen_gamma, settings->screen_exposure);
             render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
+            PERF_COUNTER_END(second_pass_counter);
         }
 
         //@HACK: this forsome reason depends on some calculation from the previous frame else it doesnt work dont know why
@@ -2393,7 +2510,8 @@ void run_func(void* context)
     render_cubemap_deinit(&cubemap_prefilter);
 
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
-
+    
+    log_perf_counters(true);
     debug_allocator_deinit(&debug_alloc);
     
 
@@ -2422,13 +2540,15 @@ void error_func(void* context, Platform_Sandox_Error error_code)
 #include "_test_log.h"
 #include "_test_hash_table.h"
 #include "_test_math.h"
+#include "_test_base64.h"
 void run_test_func(void* context)
 {
     (void) context;
-    test_math(10.0);
+    test_array(1.0);
+    test_base64(3.0);
+    test_math(3.0);
     test_hash_table_stress(3.0);
     test_log();
-    test_array(1.0);
     test_hash_index(1.0);
     test_random();
     LOG_INFO("TEST", "All tests passed! uwu");

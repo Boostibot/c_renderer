@@ -51,6 +51,7 @@
 
 #include "time.h"
 #include "string.h"
+#include "profile.h"
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -503,67 +504,69 @@ INTERNAL isize _log_find_init_chanel(String chanel)
 
 INTERNAL void _log_flush_chanel(Log_Chanel_State* chanel_state)
 {
-    if(chanel_state->buffer.size == 0)
-        return;
-
-    String chanel_file = string_from_builder(chanel_state->file_name);
-    isize file_index = -1;
+    PERF_COUNTER_START(counter);
+    if(chanel_state->buffer.size != 0)
+    {
+        String chanel_file = string_from_builder(chanel_state->file_name);
+        isize file_index = -1;
     
-    isize furthest_flush_time_index = 0;
-    double furthest_flush_time = INFINITY;
+        isize furthest_flush_time_index = 0;
+        double furthest_flush_time = INFINITY;
 
-    ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
-    for(isize i = 0; i < global_log_state.open_files_max; i++)
-    {
-        CHECK_BOUNDS(i, global_log_state.open_file_names.size);
-        String open_file = string_from_builder(global_log_state.open_file_names.data[i]);
-        if(string_is_equal(open_file, chanel_file))
-            file_index = i;
-
-        double flush_time = global_log_state.chanels.data[i].last_flush_time;
-        if(furthest_flush_time > flush_time)
+        ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
+        for(isize i = 0; i < global_log_state.open_files_max; i++)
         {
-            furthest_flush_time = flush_time;
-            furthest_flush_time_index = i;
+            CHECK_BOUNDS(i, global_log_state.open_file_names.size);
+            String open_file = string_from_builder(global_log_state.open_file_names.data[i]);
+            if(string_is_equal(open_file, chanel_file))
+                file_index = i;
+
+            double flush_time = global_log_state.chanels.data[i].last_flush_time;
+            if(furthest_flush_time > flush_time)
+            {
+                furthest_flush_time = flush_time;
+                furthest_flush_time_index = i;
+            }
         }
+
+        if(file_index == -1)
+        {
+            file_index = furthest_flush_time_index;
+            CHECK_BOUNDS(file_index, global_log_state.open_files_max);
+
+            FILE* file = (FILE*) global_log_state.open_files.data[file_index];
+            if(file != NULL)
+                fclose(file);
+
+            String_Builder local_path = {0};
+            String dir_path = string_from_builder(global_log_state.system_options.file_directory_path);
+            array_init_backed(&local_path, global_log_state.scratch_allocator, 256);
+            builder_append(&local_path, dir_path);
+            builder_append(&local_path, STRING("/"));
+            builder_append(&local_path, chanel_file);
+
+            platform_directory_create(dir_path.data);
+            file = fopen(local_path.data, "ab");
+
+            assert(file != NULL);
+            bool ok = setvbuf(file, NULL, _IONBF, 0) == 0;
+            assert(ok && "disabeling of buffering must work!");
+
+            global_log_state.open_files.data[file_index] = file;
+            String_Builder* open_file_name = &global_log_state.open_file_names.data[file_index];
+            //if wasnt init inits it to allocator
+            if(open_file_name->allocator == NULL)
+                array_init(open_file_name, global_log_state.default_allocator);
+            array_assign(open_file_name, chanel_file.data, chanel_file.size);
+            array_deinit(&local_path);
+        }
+
+        isize written = fwrite(chanel_state->buffer.data, 1, chanel_state->buffer.size, global_log_state.open_files.data[file_index]);
+        fflush(global_log_state.open_files.data[file_index]); //just to be sure
+        assert(written == chanel_state->buffer.size && "no posix partial write BS");
+        array_clear(&chanel_state->buffer);
     }
-
-    if(file_index == -1)
-    {
-        file_index = furthest_flush_time_index;
-        CHECK_BOUNDS(file_index, global_log_state.open_files_max);
-
-        FILE* file = (FILE*) global_log_state.open_files.data[file_index];
-        if(file != NULL)
-            fclose(file);
-
-        String_Builder local_path = {0};
-        String dir_path = string_from_builder(global_log_state.system_options.file_directory_path);
-        array_init_backed(&local_path, global_log_state.scratch_allocator, 256);
-        builder_append(&local_path, dir_path);
-        builder_append(&local_path, STRING("/"));
-        builder_append(&local_path, chanel_file);
-
-        platform_directory_create(dir_path.data);
-        file = fopen(local_path.data, "ab");
-
-        assert(file != NULL);
-        bool ok = setvbuf(file, NULL, _IONBF, 0) == 0;
-        assert(ok && "disabeling of buffering must work!");
-
-        global_log_state.open_files.data[file_index] = file;
-        String_Builder* open_file_name = &global_log_state.open_file_names.data[file_index];
-        //if wasnt init inits it to allocator
-        if(open_file_name->allocator == NULL)
-            array_init(open_file_name, global_log_state.default_allocator);
-        array_assign(open_file_name, chanel_file.data, chanel_file.size);
-        array_deinit(&local_path);
-    }
-
-    isize written = fwrite(chanel_state->buffer.data, 1, chanel_state->buffer.size, global_log_state.open_files.data[file_index]);
-    fflush(global_log_state.open_files.data[file_index]); //just to be sure
-    assert(written == chanel_state->buffer.size && "no posix partial write BS");
-    array_clear(&chanel_state->buffer);
+    PERF_COUNTER_END(counter);
 }
 
 EXPORT void log_flush_all()
@@ -600,6 +603,7 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
     if(global_log_state.is_init == false)
         return;
         
+    PERF_COUNTER_START(counter);
     ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
     isize size_before = append_to->size;
     String group_separator = string_make(".   ");
@@ -687,13 +691,15 @@ EXPORT void log_format_entry(String_Builder* append_to, Log_Chanel_Entry entry)
 
         curr_line_pos = next_line_pos + 1;
     }
+    PERF_COUNTER_END(counter);
 }
 
 EXPORT void vlog_message(String chanel, u8 log_type, const char* format, va_list args)
 {
     if(global_log_state.is_init == false || global_log_state.error_recusion_depth > _LOG_MAX_RECURSION_DEPTH)
         return;
-        
+ 
+    PERF_COUNTER_START(c);
     ASSERT(global_log_state.open_files_max == global_log_state.open_file_names.size);
     global_log_state.error_recusion_depth += 1;
 
@@ -747,6 +753,7 @@ EXPORT void vlog_message(String chanel, u8 log_type, const char* format, va_list
     array_deinit(&chanel_entry.chanel);
 
     global_log_state.error_recusion_depth -= 1;
+    PERF_COUNTER_END(c);
 }
 
 

@@ -5,19 +5,7 @@
 #include "time.h"
 #include "random.h"
 
-//Maybe move to random or to test
-INTERNAL void random_bits(Random_State* state, void* into, isize size)
-{
-	isize full_randoms = size / 8;
-	isize remainder = size % 8;
-	u64* fulls = (u64*) into;
-	
-	for(isize i = 0; i < full_randoms; i++)
-		fulls[i] = random_u64(state);
 
-	u64 last = random_u64(state);
-	memcpy(&fulls[full_randoms], &last, remainder);
-}
 
 typedef struct Discrete_Distribution
 {

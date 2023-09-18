@@ -62,6 +62,8 @@ inline static int64_t platform_find_first_set_bit(int64_t num);
 inline static int64_t platform_find_last_set_bit(int64_t num);
 inline static int64_t platform_pop_count(int64_t num);
 
+inline static bool platform_interlocked_compare_and_swap64(volatile int64_t* target, int64_t old_value, int64_t new_value);
+inline static bool platform_interlocked_compare_and_swap32(volatile int32_t* target, int32_t old_value, int32_t new_value);
 inline static int64_t platform_interlocked_excahnge64(volatile int64_t* target, int64_t value);
 inline static int32_t platform_interlocked_excahnge32(volatile int32_t* target, int32_t value);
 inline static int32_t platform_interlocked_add32(volatile int32_t* target, int32_t value);
@@ -339,6 +341,16 @@ typedef enum {
     //{
     //
     //}
+    
+    inline static bool platform_interlocked_compare_and_swap64(volatile int64_t* target, int64_t old_value, int64_t new_value)
+    {
+        return _InterlockedCompareExchange64((volatile long long*) target, (long long) new_value, (long long) old_value) == (long long) old_value;
+    }
+
+    inline static bool platform_interlocked_compare_and_swap32(volatile int32_t* target, int32_t old_value, int32_t new_value)
+    {
+        return _InterlockedCompareExchange((volatile long*) target, (long) new_value, (long) old_value) == (long) old_value;
+    }
 
     inline static int64_t platform_interlocked_excahnge64(volatile int64_t* target, int64_t value)
     {

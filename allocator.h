@@ -3,6 +3,7 @@
 
 #include "defines.h"
 #include "assert.h"
+#include "profile.h"
 #include <string.h>
 
 // This module introduces a framework for dealing with memory and allocation used by every other system.
@@ -151,11 +152,22 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 
     EXPORT void* allocator_try_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
     {
+        PERF_COUNTER_START(c);
+        ASSERT(new_size >= 0 && old_size >= 0 && is_power_of_two(align) && "provided arguments must be valid!");
+        void* out = NULL;
         //if is dealloc and old_ptr is NULL do nothing. 
         //This is equivalent to free(NULL)
-        if(new_size == 0 && old_ptr == NULL)
-            return NULL;
-        return from_allocator->allocate(from_allocator, new_size, old_ptr, old_size, align, called_from);
+        if(new_size != 0 || old_ptr != NULL)
+        {
+            ASSERT((u64) from_allocator != 0xFFFFFFFFFFFFFFFF);
+            (void) from_allocator->get_stats(from_allocator);
+
+            int x = 10; (void) x;
+            out = from_allocator->allocate(from_allocator, new_size, old_ptr, old_size, align, called_from);
+        }
+            
+        PERF_COUNTER_END(c);
+        return out;
     }
 
     EXPORT void* allocator_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)

@@ -137,8 +137,8 @@ INTERNAL void test_hash_index_stress(f64 max_seconds)
 					u64 removed_index = random_range(0, truth_val_array.size);
 					u64 last_index = truth_val_array.size - 1;
 
-					CHECK_BOUNDS(truth_key_array.size, (isize) removed_index);
-					CHECK_BOUNDS(truth_val_array.size, (isize) removed_index);
+					CHECK_BOUNDS((isize) removed_index, truth_key_array.size);
+					CHECK_BOUNDS((isize) removed_index, truth_val_array.size);
 					u64 key = truth_key_array.data[removed_index];
 					u64 val = truth_val_array.data[removed_index];
 

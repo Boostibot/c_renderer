@@ -285,23 +285,24 @@ EXPORT void _array_set_capacity(void* array, isize item_size, isize capacity, So
     isize new_byte_size = item_size * capacity;
     if(base->allocator == NULL)
         base->allocator = allocator_get_default();
-
+        
+    Allocator* alloc = _set_allocator_bits(base->allocator, false);
     if(_array_is_backed(array, item_size))
     {
         isize copy_size = old_byte_size;
         if(copy_size > new_byte_size)
             copy_size = new_byte_size;
 
-        void* new_data = allocator_allocate(base->allocator, new_byte_size, DEF_ALIGN, from);
+        void* new_data = allocator_allocate(alloc, new_byte_size, DEF_ALIGN, from);
         memmove(new_data, base->data, copy_size);
         base->data = (uint8_t*) new_data;
     }
     else
     {
-        base->data = (uint8_t*) allocator_reallocate(base->allocator, new_byte_size, base->data, old_byte_size, DEF_ALIGN, from);
+        base->data = (uint8_t*) allocator_reallocate(alloc, new_byte_size, base->data, old_byte_size, DEF_ALIGN, from);
     }
-
-    base->allocator = _set_allocator_bits(base->allocator, false);
+    
+    base->allocator = alloc;
 
     //Clear the allocated to 0
     if(new_byte_size > old_byte_size)

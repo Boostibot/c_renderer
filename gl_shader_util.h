@@ -72,6 +72,7 @@ String translate_shader_error(u32 code, void* context)
 
 Error render_shader_init(Render_Shader* shader, const char* vertex, const char* fragment, const char* geometry, String name, String_Builder* error, isize* error_at_stage)
 {
+    PERF_COUNTER_START(c);
     static u32 shader_error_module = 0;
     if(shader_error_module == 0)
         shader_error_module = error_system_register_module(translate_shader_error, STRING("shader_util.h"), NULL);
@@ -147,16 +148,18 @@ Error render_shader_init(Render_Shader* shader, const char* vertex, const char* 
 
     shader->shader = shader_program;
     shader->name = builder_from_string(name);
+    
+    PERF_COUNTER_END(c);
 
     if(success == false)
         return error_make(shader_error_module, 1);
     else
         return error_make(shader_error_module, 0);
-        
 }
 
 Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_path, String fragment_path, String geometry_path, String prepend, String name, String_Builder* error)
 {
+    PERF_COUNTER_START(c);
     Allocator* scratch = allocator_get_scratch();
     String_Builder temp = {scratch};
 
@@ -274,7 +277,8 @@ Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_p
     array_deinit(&geometry_source);
     array_deinit(&geometry_source);
     array_deinit(&temp);
-
+    
+    PERF_COUNTER_END(c);
     return compile_error;
 }
     
@@ -301,6 +305,7 @@ void render_shader_unuse(const Render_Shader* shader)
 
 GLint render_shader_get_uniform_location(const Render_Shader* shader, const char* uniform)
 {
+    PERF_COUNTER_START(c);
     GLint location = glGetUniformLocation(shader->shader, uniform);
     if(location == -1)
     {
@@ -327,6 +332,7 @@ GLint render_shader_get_uniform_location(const Render_Shader* shader, const char
         if(is_power_of_two_zero((*error_count)++))
             LOG_ERROR("RENDER", "failed to find uniform location %-25s shader: " STRING_FMT, uniform, STRING_PRINT(shader->name));
     }
+    PERF_COUNTER_END(c);
 
     return location;
 }

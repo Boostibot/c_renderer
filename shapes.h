@@ -5,6 +5,7 @@
 #include "hash_index.h"
 #include "hash.h"
 #include "engine_types.h"
+#include "profile.h"
 
 //@TODO: separate to definitions/implementation refactor!
 
@@ -14,31 +15,61 @@ typedef struct Shape
     Triangle_Index_Array indeces;
 } Shape;
 
-void shape_deinit(Shape* shape)
+typedef struct Shape_Assembly
 {
-    array_deinit(&shape->vertices);
-    array_deinit(&shape->indeces);
-}
+    Vertex_Array vertices;
+    Triangle_Index_Array indeces;
+    Hash_Index vertices_hash;
+} Shape_Assembly;
 
-Shape shape_duplicate(Shape from)
+typedef enum Winding_Order
 {
-    Shape out = {0};
-    array_copy(&out.vertices, from.vertices);
-    array_copy(&out.indeces, from.indeces);
-    return out;
-}
+    WINDING_ORDER_CLOCKWISE,
+    WINDING_ORDER_COUNTER_CLOCKWISE,
+    WINDING_ORDER_INDETERMINATE, 
+    //in the cases where the resulting normal is extremely close to 0
+    //this heppesnt when the triangle is almost a line/point
+} Winding_Order;
 
-void shape_tranform(Shape* shape, Mat4 transform)
-{
-    Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
+void shape_deinit(Shape* shape);
+Shape shape_duplicate(Shape from);
+void shape_tranform(Shape* shape, Mat4 transform);
 
-    for(isize i = 0; i < shape->vertices.size; i++)
-    {
-        Vertex* vertex = &shape->vertices.data[i];
-        vertex->pos = mat4_apply(transform, vertex->pos);
-        vertex->norm = mat4_mul_vec3(normal_matrix, vertex->norm);
-    }
-}
+u64 vertex_hash64(Vertex vertex, u64 seed);
+Shape shapes_make_unit_quad();
+Shape shapes_make_unit_cube();
+Shape shapes_make_cube(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset);
+Shape shapes_make_quad(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset);
+
+void shape_assembly_deinit(Shape* shape);
+void shape_assembly_init_from_shape(Shape_Assembly* assembly, Shape* shape);
+void shape_assembly_add_vertex(Shape_Assembly* assembly, Vertex vertex);
+u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex);
+
+Vec3 calculate_tangent(Vec3 edge1, Vec3 edge2, Vec2 deltaUV1, Vec2 deltaUV2);
+Winding_Order calculate_winding_order(Vec3 p1, Vec3 p2, Vec3 p3, Vec3 norm1, Vec3 norm2, Vec3 norm3);
+
+Winding_Order triangle_get_winding_order(const Vertex v1, const Vertex v2, const Vertex v3);
+Winding_Order triangle_get_winding_order_at_index(const Vertex* vertices, isize vertex_count, Triangle_Index trinagle);
+Vec3 triangle_calculate_tangent(const Vertex v1, const Vertex v2, const Vertex v3);
+Triangle_Index triangle_set_winding_order(Winding_Order desired_order, const Vertex* vertices, isize vertex_count, Triangle_Index triangle);
+void shape_set_winding_order(Winding_Order order, const Vertex* vertices, isize vertex_count, Triangle_Index* traingles, isize triangle_count);
+
+void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset);
+Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset);
+Shape shapes_make_cube_sphere(isize iters, f32 radius);
+Shape shapes_make_voleyball_sphere(isize iters, f32 radius);
+Shape shapes_make_uv_sphere(isize iters, f32 radius);
+Shape shape_make_z_looking_frusthum(f32 aspect, f32 near, f32 far, f32 fov);
+Shape shape_make_frusthum(f32 aspect, f32 near, f32 far, f32 fov, Vec3 looking_at);
+Shape shape_make_vertical_capsule(isize iters, f32 radius, f32 radii_distance);
+Shape shape_make_capsule(isize iters, f32 radius, f32 radii_distance, Vec3 radii_delta);
+
+extern const Vertex XZ_QUAD_VERTICES[4];
+extern const Triangle_Index XZ_QUAD_INDECES[2];
+
+extern const Vertex CUBE_VERTICES[36];
+extern const Triangle_Index CUBE_INDECES[12];
 
 #define E 0.5f
 const Vertex XZ_QUAD_VERTICES[] = {
@@ -103,11 +134,42 @@ const Triangle_Index CUBE_INDECES[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
 };
 
+void shape_deinit(Shape* shape)
+{
+    array_deinit(&shape->vertices);
+    array_deinit(&shape->indeces);
+}
+
+Shape shape_duplicate(Shape from)
+{
+    Shape out = {0};
+    array_copy(&out.vertices, from.vertices);
+    array_copy(&out.indeces, from.indeces);
+    return out;
+}
+
+void shape_tranform(Shape* shape, Mat4 transform)
+{
+    PERF_COUNTER_START(c);
+
+    Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
+
+    for(isize i = 0; i < shape->vertices.size; i++)
+    {
+        Vertex* vertex = &shape->vertices.data[i];
+        vertex->pos = mat4_apply(transform, vertex->pos);
+        vertex->norm = mat4_mul_vec3(normal_matrix, vertex->norm);
+    }
+
+    PERF_COUNTER_END(c);
+}
+
 u64 vertex_hash64(Vertex vertex, u64 seed)
 {
     u64 out = hash64_murmur(&vertex, sizeof vertex, seed);
     return out;
 }
+
 
 Shape shapes_make_unit_quad()
 {
@@ -151,14 +213,8 @@ Shape shapes_make_quad(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset)
     return quad;
 }
 
-typedef enum Winding_Order
-{
-    WINDING_ORDER_CLOCKWISE,
-    WINDING_ORDER_COUNTER_CLOCKWISE,
-    WINDING_ORDER_INDETERMINATE,
-} Winding_Order;
 
-Winding_Order get_winding_order(const Vertex v1, const Vertex v2, const Vertex v3)
+Winding_Order triangle_get_winding_order(const Vertex v1, const Vertex v2, const Vertex v3)
 {
     Vec3 avg_norm = vec3_add(vec3_add(v1.norm, v2.norm), v3.norm);
     avg_norm = vec3_norm(avg_norm);
@@ -177,7 +233,7 @@ Winding_Order get_winding_order(const Vertex v1, const Vertex v2, const Vertex v
         return WINDING_ORDER_CLOCKWISE;
 }
 
-Winding_Order get_winding_order_index(const Vertex* vertices, isize vertex_count, Triangle_Index trinagle)
+Winding_Order triangle_get_winding_order_at_index(const Vertex* vertices, isize vertex_count, Triangle_Index trinagle)
 {
     CHECK_BOUNDS(trinagle.vertex_i[0], vertex_count);
     CHECK_BOUNDS(trinagle.vertex_i[1], vertex_count);
@@ -187,11 +243,12 @@ Winding_Order get_winding_order_index(const Vertex* vertices, isize vertex_count
     Vertex v2 = vertices[trinagle.vertex_i[1]];
     Vertex v3 = vertices[trinagle.vertex_i[2]];
 
-    return get_winding_order(v1, v2, v3);
+    return triangle_get_winding_order(v1, v2, v3);
 }
 
-u32 shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
+u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
 {
+    PERF_COUNTER_START(c);
     u64 hashed = vertex_hash64(vertex, 0);
 
     //try to exactly find it in the hash. will almost always iterate only once.
@@ -204,6 +261,7 @@ u32 shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex v
         bool is_equal = memcpy(&vertex, &found_vertex, sizeof found_vertex);
         if(is_equal)
         {
+            PERF_COUNTER_END(c);
             return (u32) entry;
         }
         else
@@ -216,6 +274,8 @@ u32 shape_assembly_add_vertex(Hash_Index* hash, Vertex_Array* vertices, Vertex v
     array_push(vertices, vertex);
     u32 inserted_i = (u32) (vertices->size - 1);
     hash_index_insert(hash, hashed, inserted_i);
+
+    PERF_COUNTER_END(c);
     return inserted_i;
 }
 
@@ -243,7 +303,7 @@ Vec3 triangle_calculate_tangent(const Vertex v1, const Vertex v2, const Vertex v
 
 Triangle_Index triangle_set_winding_order(Winding_Order desired_order, const Vertex* vertices, isize vertex_count, Triangle_Index triangle)
 {
-    Winding_Order current_order = get_winding_order_index(vertices, vertex_count, triangle);
+    Winding_Order current_order = triangle_get_winding_order_at_index(vertices, vertex_count, triangle);
     Triangle_Index out_triangle = triangle;
     if(current_order != desired_order)
         SWAP(&out_triangle.vertex_i[0], &out_triangle.vertex_i[1], u32); 
@@ -268,6 +328,8 @@ void shape_set_winding_order(Winding_Order order, const Vertex* vertices, isize 
 //    
 //}
 
+
+
 //@TODO: change iters on sphere creation to more sophisticated budget mechanisms
 typedef struct Face_Budget
 {
@@ -280,7 +342,8 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
 {
     if(iters <= 0)
         return;
-
+        
+    PERF_COUNTER_START(c);
     isize vertices_before = into->vertices.size;
     isize indeces_before = into->indeces.size;
 
@@ -341,11 +404,12 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
             array_push(&into->indeces, tri1);
             array_push(&into->indeces, tri2);
             
-            ASSERT(get_winding_order_index(into->vertices.data, into->vertices.size, tri1) == WINDING_ORDER_CLOCKWISE);
-            ASSERT(get_winding_order_index(into->vertices.data, into->vertices.size, tri2) == WINDING_ORDER_CLOCKWISE);
+            ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.size, tri1) == WINDING_ORDER_CLOCKWISE);
+            ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.size, tri2) == WINDING_ORDER_CLOCKWISE);
         }
         
     }
+    PERF_COUNTER_END(c);
 }
 
 Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset)
@@ -357,6 +421,7 @@ Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Ve
 
 Shape shapes_make_cube_sphere(isize iters, f32 radius)
 {
+    PERF_COUNTER_START(c);
     Shape out = {0};
     array_reserve(&out.indeces, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
@@ -367,12 +432,14 @@ Shape shapes_make_cube_sphere(isize iters, f32 radius)
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, -1, 0), vec3(-1, 0, 0), vec3_of(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3_of(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(-1, 0, 0), vec3_of(0));
-
+    
+    PERF_COUNTER_END(c);
     return out;
 }
 
 Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
 {
+    PERF_COUNTER_START(c);
     Shape out = {0};
     array_reserve(&out.indeces, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
@@ -383,12 +450,14 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, -1, 0), vec3(-1, 0, 0), vec3_of(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3_of(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(0, -1, 0), vec3_of(0));
-
+    
+    PERF_COUNTER_END(c);
     return out;
 }
 
 Shape shapes_make_uv_sphere(isize iters, f32 radius)
 {
+    PERF_COUNTER_START(c);
     ASSERT(radius > 0);
     ASSERT(iters >= 0);
 
@@ -450,7 +519,7 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
                 Vertex v2 = vertices.data[tris[i].vertex_i[1]];
                 Vertex v3 = vertices.data[tris[i].vertex_i[2]];
 
-                Winding_Order order = get_winding_order(v1, v2, v3);
+                Winding_Order order = triangle_get_winding_order(v1, v2, v3);
                 if(order != WINDING_ORDER_CLOCKWISE)
                 {
                     bool are_near = vec3_is_near(v1.pos, v2.pos, EPSILON)
@@ -473,28 +542,6 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
 
     out_shape.indeces = indeces;
     out_shape.vertices = vertices;
+    PERF_COUNTER_END(c);
     return out_shape;
 }
-
-
-#if 0
-Shape shape_make_z_looking_frusthum(f32 aspect, f32 near, f32 far, f32 fov)
-{
-
-}
-
-Shape shape_make_frusthum(f32 aspect, f32 near, f32 far, f32 fov, Vec3 looking_at)
-{
-
-}
-
-Shape shape_make_vertical_capsule(isize iters, f32 radius, f32 radii_distance)
-{
-
-}
-
-Shape shape_make_capsule(isize iters, f32 radius, f32 radii_distance, Vec3 radii_delta)
-{
-
-}
-#endif

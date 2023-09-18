@@ -8,6 +8,7 @@
 #include "log.h"
 #include "error.h"
 #include "shapes.h"
+#include "profile.h"
 
 #define OBJ_LOADER_CHANNEL "ASSET"
 
@@ -47,13 +48,115 @@ typedef struct Obj_Parser_Error
     Obj_Parser_Error_On statement;
 } Obj_Parser_Error;
 
+typedef struct Obj_Texture_Info {
+    String_Builder path;        
+    Vec3 offset;                //-o u (v (w))
+    Vec3 scale;                 //-s u (v (w))
+    Vec3 turbulance;            //-t u (v (w)) //is some kind of perturbance in the specified direction
+    i32 texture_resolution;     //-texres [i32 power of two]
+    f32 mipmap_sharpness_boost; //-boost [f32]
+    f32 bump_multiplier;        //-bm [f32]
+
+    f32 modify_brigthness;      //-mm [f32 base/brightness] [f32 gain/contrast]
+    f32 modify_contrast;        //-mm [f32 base/brightness] [f32 gain/contrast]
+
+    bool is_repeating;          //-clamp  [on | off]
+    bool blend_u;               //-blendu [on | off]
+    bool blend_v;               //-blendv [on | off]
+    char use_channel;           //-imfchan [r | g | b | m | l | z]  
+} Obj_Texture_Info;
+
+typedef enum Obj_Illumination_Mode
+{
+    OBJ_ILLUMINATION_COLOR_AND_AMBIENT_OFF = 0,
+    OBJ_ILLUMINATION_COLOR_AND_AMBIENT_ON = 1,
+    OBJ_ILLUMINATION_HIGHLIGH_ON = 2,
+} Obj_Illumination_Mode;
+
+typedef struct Obj_Material_Info {
+    String_Builder name;                    //newmtl [name]
+    Vec3 ambient_color;                     //Ka [vec3]
+    Vec3 diffuse_color;                     //Kd [vec3]
+    Vec3 specular_color;                    //Ks [vec3]
+    f32 specular_exponent;                  //Ns [f32]
+    f32 opacity;                            //d/Tr [f32] //fully transparent is: d=0 and Tr=1 
+    
+    Vec3 only_for_transparent_transmission_filter_color;    //Tf [vec3] / Tf xyz [vec3]
+    f32 only_for_transparent_optical_density;               //Ni [f32]
+    i32 illumination_mode;                                  //illum [0, 10]
+
+    Obj_Texture_Info map_ambient;                //map_Ka [options] [name]
+    Obj_Texture_Info map_ambient_diffuse;        //map_Kd
+    Obj_Texture_Info map_specular_color;         //map_Ks
+    Obj_Texture_Info map_specular_highlight;     //map_Ns 
+    Obj_Texture_Info map_alpha;                  //map_d
+    Obj_Texture_Info map_bump;                   //map_bump/bump
+    Obj_Texture_Info map_displacement;           //disp
+    Obj_Texture_Info map_stencil;                //decal
+
+    Obj_Texture_Info map_pbr_rougness;           //Pr/map_Pr [options] [name]
+    Obj_Texture_Info map_pbr_metallic;           //Pm/map_Pm
+    Obj_Texture_Info map_pbr_sheen;              //Ps/map_Ps
+    Obj_Texture_Info map_pbr_clearcoat_thickness;//Pc
+    Obj_Texture_Info map_pbr_clearcoat_rougness; //Pcr
+    Obj_Texture_Info map_pbr_emmisive;           //Ke/map_Ke
+    Obj_Texture_Info map_pbr_anisotropy;         //aniso
+    Obj_Texture_Info map_pbr_anisotropy_rotation;//anisor
+    Obj_Texture_Info map_pbr_normal;             //norm
+
+    Obj_Texture_Info map_rma; //RMA material (roughness, metalness, ambient occlusion)
+    Obj_Texture_Info map_orm; //alternate definition of map_RMA
+} Obj_Material_Info;
+
+typedef struct Obj_Group_Info {
+    String_Builder name;    //o [String]
+    String_Builder groups;  //g [space separeted groups names]
+    i32 smoothing_index;    //s [index > 0] //to set smoothing
+                            //s [0 | off] //to set no smoothing
+    f32 merge_group_resolution; //mg [i32 smoothing_index] [f32 distance]
+
+    String_Builder material; //usemtl [String material_name]
+} Obj_Group_Info;
+
+typedef struct Obj_Group {
+    Triangle_Index_Array triangles;
+    Obj_Group_Info info;
+} Obj_Group;
+
+DEFINE_ARRAY_TYPE(Triangle_Index_Array, Triangle_Index_Array_Array);
 DEFINE_ARRAY_TYPE(Obj_Parser_Error, Obj_Parser_Error_Array);
+DEFINE_ARRAY_TYPE(Obj_Group, Obj_Group_Array);
+DEFINE_ARRAY_TYPE(Obj_Group_Info, Obj_Group_Info_Array);
+DEFINE_ARRAY_TYPE(Obj_Material_Info, Obj_Material_Info_Array);
+
+typedef struct Obj_Model {
+    Vertex_Array vertices;
+    Hash_Index vertices_hash;
+    Obj_Group_Array groups;
+    Obj_Material_Info_Array materials;
+} Obj_Model;
+
+EXPORT void obj_texture_info_deinit(Obj_Texture_Info* info);
+EXPORT void obj_group_info_deinit(Obj_Group_Info* info);
+EXPORT void obj_group_deinit(Obj_Group* info);
+EXPORT void obj_model_deinit(Obj_Model* info);
+
+EXPORT void obj_texture_info_init(Obj_Texture_Info* info, Allocator* alloc);
+EXPORT void obj_group_info_init(Obj_Group_Info* info, Allocator* alloc);
+EXPORT void obj_group_init(Obj_Group* info, Allocator* alloc);
+EXPORT void obj_model_init(Obj_Model* info, Allocator* alloc);
 
 EXPORT const char* obj_parser_error_on_to_string(Obj_Parser_Error_On statement);
 EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement);
 
-EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
-EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
+EXPORT Error obj_load_obj_only(Obj_Model* out, String obj_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
+EXPORT Error obj_load_mtl_only(Obj_Material_Info_Array* out, String obj_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
+
+EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
+EXPORT Error obj_parse_mtl(Obj_Material_Info_Array* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
+
+//Loads obj model along with all of its required materials
+EXPORT Error obj_load(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
 
 #endif
 
@@ -101,6 +204,8 @@ EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement)
 
 EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Error_Array* error_or_null, bool log_errors)
 {
+    PERF_COUNTER_START(c);
+
     //one based indeces into the appropraite arrays.
     //If value is 0 means not present.
     typedef struct Obj_Vertex_Index
@@ -118,6 +223,7 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
     #define FORMAT_TEMP "%32s"
     char temp[32] = {0};
     Error had_error = {0};
+    bool first_logged_error = true;
 
     Allocator* scratch = allocator_get_scratch();
     Obj_Vertex_Index_Array obj_indeces_array = {scratch};
@@ -373,8 +479,15 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
 
             if(log_errors)
             {
+                if(first_logged_error)
+                {
+                    LOG_WARN(OBJ_LOADER_CHANNEL, "obj_parser_parse() encountered errors:");
+                    log_group_push();
+                    first_logged_error = false;
+                }
+
                 const char* error_text = obj_parser_error_on_to_string(statement);
-                LOG_WARN(OBJ_LOADER_CHANNEL, "obj_parser_parse() encountered malformed statement %s while parsing line %lld:\n%s", error_text, (lld) line_number, line_builder.data);
+                LOG_WARN(OBJ_LOADER_CHANNEL, "malformed statement %s while parsing line %lld:\n%s", error_text, (lld) line_number, line_builder.data);
             }
         }
     } 
@@ -398,7 +511,15 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
         if(index.norm_i1 < 0 || index.norm_i1 > norm_or_null.size)
         {
             if(log_errors)
-                LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_parse() norm index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.norm_i1);
+            {
+                if(first_logged_error)
+                {
+                    LOG_WARN(OBJ_LOADER_CHANNEL, "obj_parser_parse() encountered errors:");
+                    log_group_push();
+                    first_logged_error = false;
+                }
+                LOG_ERROR(OBJ_LOADER_CHANNEL, "norm index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.norm_i1);
+            }
             had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_ON_INVALID_INDEX);
         }
         else
@@ -409,7 +530,15 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
         if(index.pos_i1 < 0 || index.pos_i1 > pos_or_null.size)
         {
             if(log_errors)
-                LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_parse() pos index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.pos_i1);
+            {
+                if(first_logged_error)
+                {
+                    LOG_WARN(OBJ_LOADER_CHANNEL, "obj_parser_parse() encountered errors:");
+                    log_group_push();
+                    first_logged_error = false;
+                }
+                LOG_ERROR(OBJ_LOADER_CHANNEL, "pos index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.pos_i1);
+            }
             had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_ON_INVALID_INDEX);
             discard_triangle = true;
         }
@@ -421,7 +550,15 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
         if(index.uv_i1 < 0 || index.uv_i1 > uv_or_null.size)
         {
             if(log_errors)
-                LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_parse() uv index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.uv_i1);
+            {
+                if(first_logged_error)
+                {
+                    LOG_WARN(OBJ_LOADER_CHANNEL, "obj_parser_parse() encountered errors:");
+                    log_group_push();
+                    first_logged_error = false;
+                }
+                LOG_ERROR(OBJ_LOADER_CHANNEL, "uv index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.uv_i1);
+            }
             had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_ON_INVALID_INDEX);
         }
         else
@@ -431,7 +568,7 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
 
         obj_indeces_array.data[i] = index;
         
-        u32 final_index = shape_assembly_add_vertex(&shape_assembly, &append_to->vertices, composed_vertex);
+        u32 final_index = shape_assembly_add_vertex_custom(&shape_assembly, &append_to->vertices, composed_vertex);
         u32 mod = i%3;
         triangle.vertex_i[mod] = final_index;
         if(mod == 2)
@@ -442,13 +579,18 @@ EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Er
         }
     }
     
+    if(first_logged_error == false)
+        log_group_pop();
     hash_index_deinit(&shape_assembly);
     array_deinit(&line_builder);
+
+    PERF_COUNTER_END(c);
     return had_error;
 }
 
 EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error_Array* error_or_null, bool log_errors)
 {
+    PERF_COUNTER_START(c);
     Allocator* scratch = allocator_get_scratch();
     String_Builder obj_data = {scratch};
     Error read_state = file_read_entire(obj_path, &obj_data);
@@ -460,6 +602,7 @@ EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error
     }
 
     Error parse_state = ERROR_OR(read_state) obj_parser_parse(append_to, string_from_builder(obj_data), error_or_null, log_errors);
+    PERF_COUNTER_END(c);
     return parse_state;
 }
 #endif

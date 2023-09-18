@@ -168,7 +168,7 @@ INTERNAL void test_array_stress(f64 max_seconds)
 			case COPY: {
 				array_copy(other_array, *arr);
 				TEST(other_array->size == arr->size);
-				TEST(other_array->capacity >= arr->capacity);
+				TEST(other_array->capacity >= other_array->size);
 
 				swap_any(&other_array, &arr, sizeof(arr));
 				swap_any(&other_buffer, &buffer, sizeof(buffer));

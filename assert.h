@@ -51,7 +51,9 @@ void platform_abort();
 
 //Pre-Processor (PP) utils
 #define PP_CONCAT2(a, b) a ## b
-#define PP_CONCAT(a, b) PP_CONCAT2(a, b)
+#define PP_CONCAT3(a, b, c)     PP_CONCAT2(PP_CONCAT2(a, b), c)
+#define PP_CONCAT4(a, b, c, d)  PP_CONCAT2(PP_CONCAT3(a, b, c), d)
+#define PP_CONCAT(a, b)         PP_CONCAT2(a, b)
 #define PP_ID(x) x
 
 //if CONDITION_DEFINE is defined: expands to x, 

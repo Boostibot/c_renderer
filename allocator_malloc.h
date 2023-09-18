@@ -8,7 +8,7 @@
 // to traverse all active allocations. Offers basic corectness checking.
 // 
 // Provides compatibility between the allocator approach and the C style approach (using malloc/realloc/free)
-// which is useful when talking to APIs that dont pass sizes/alignments into their allocation callbacks (such as glfw)
+// which is useful when talking to APIs that dont pass sizes/alignments into their allocation callbacks (such as glfw, stb image)
 
 #include "allocator.h"
 
@@ -18,6 +18,8 @@ typedef struct Malloc_Allocator
 {
     Allocator allocator;
     const char* name;
+
+    Allocator* parent; //parent allocator. If parent is null uses malloc/free
 
     isize bytes_allocated;
     isize max_bytes_allocated;
@@ -64,17 +66,35 @@ EXPORT void  malloc_allocator_free(Malloc_Allocator* self, void* old_ptr);
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ALLOCATOR_MALLOC_IMPL)) && !defined(LIB_ALLOCATOR_MALLOC_HAS_IMPL)
 #define LIB_ALLOCATOR_MALLOC_HAS_IMPL
 
+    #include "profile.h"
+
     //the way this file is written this can simple be changed to malloc
     #ifdef MALLOC_ALLOCATOR_NAKED
         #include <stdlib.h>
-        #define MALLOC_ALLOCATOR_MALLOC(size, align) malloc(size)
-        #define MALLOC_ALLOCATOR_FREE(size, pointer, align) free(pointer)
+        #define MALLOC_ALLOCATOR_MALLOC(size) malloc(size)
+        #define MALLOC_ALLOCATOR_FREE(pointer, size) free(pointer)
     #else
         #include "platform.h"
-        #define MALLOC_ALLOCATOR_MALLOC(size, align) platform_heap_reallocate(size, NULL, 0, align)
-        #define MALLOC_ALLOCATOR_FREE(size, pointer, align) platform_heap_reallocate(0, pointer, size, align)
+        #define MALLOC_ALLOCATOR_MALLOC(size) platform_heap_reallocate(size, NULL, 0, DEF_ALIGN)
+        #define MALLOC_ALLOCATOR_FREE(pointer, size) platform_heap_reallocate(0, pointer, size, DEF_ALIGN)
     #endif
     
+    INTERNAL void* _malloc_allocator_parent_allocate(Malloc_Allocator* self, isize size, Source_Info source)
+    {
+        if(self->parent != NULL)
+            return self->parent->allocate(self->parent, size, NULL, 0, DEF_ALIGN, source);
+        else
+            return MALLOC_ALLOCATOR_MALLOC(size);
+    }
+    
+    INTERNAL void _malloc_allocator_parent_free(Malloc_Allocator* self, void* pointer, isize size, Source_Info source)
+    {
+        if(self->parent != NULL)
+            self->parent->allocate(self->parent, 0, pointer, size, DEF_ALIGN, source);
+        else
+            MALLOC_ALLOCATOR_FREE(pointer, size);
+    }
+
     INTERNAL void _malloc_allocator_assert_block_coherency(Malloc_Allocator* self, Malloc_Allocator_Block_Header* block)
     {
         (void) self;
@@ -134,16 +154,20 @@ EXPORT void  malloc_allocator_free(Malloc_Allocator* self, void* old_ptr);
 
     EXPORT void* malloc_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from)
     {
+        PERF_COUNTER_START(c);
         (void) called_from;
         Malloc_Allocator* self = (Malloc_Allocator*) (void*) self_;
         void* out_ptr = NULL;
 
         if(new_size != 0)
         {
-            void* actual_new_ptr = MALLOC_ALLOCATOR_MALLOC(new_size + align + sizeof(Malloc_Allocator_Block_Header), DEF_ALIGN);
+            void* actual_new_ptr = _malloc_allocator_parent_allocate(self, new_size + align + sizeof(Malloc_Allocator_Block_Header), called_from);
             //if error return error
             if(actual_new_ptr == NULL)
+            {
+                PERF_COUNTER_END(c);
                 return NULL;
+            }
 
             out_ptr = align_forward((u8*) actual_new_ptr + sizeof(Malloc_Allocator_Block_Header), align);
 
@@ -197,8 +221,7 @@ EXPORT void  malloc_allocator_free(Malloc_Allocator* self, void* old_ptr);
             isize smaller_size = new_size < old_size ? new_size : old_size;
             memcpy(out_ptr, old_ptr, smaller_size);
 
-            MALLOC_ALLOCATOR_FREE(old_size + align + sizeof(Malloc_Allocator_Block_Header), (u8*) old_ptr - old_block_ptr->heap_block_offset, DEF_ALIGN);
-            
+            _malloc_allocator_parent_free(self, (u8*) old_ptr - old_block_ptr->heap_block_offset, old_size + align + sizeof(Malloc_Allocator_Block_Header), called_from);
         }
         
         if(old_ptr == NULL)
@@ -211,7 +234,8 @@ EXPORT void  malloc_allocator_free(Malloc_Allocator* self, void* old_ptr);
         self->bytes_allocated += new_size - old_size;
         if(self->max_bytes_allocated < self->bytes_allocated)
             self->max_bytes_allocated = self->bytes_allocated;
-
+            
+        PERF_COUNTER_END(c);
         return out_ptr;
     }
 

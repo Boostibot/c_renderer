@@ -53,6 +53,7 @@
 #include "hash.h"
 #include "time.h"
 #include "log.h"
+#include "profile.h"
 
 typedef struct Debug_Allocator          Debug_Allocator;
 typedef struct Debug_Allocation         Debug_Allocation;
@@ -151,8 +152,8 @@ typedef struct Debug_Allocation
     isize align;
     Source_Info allocation_source;
     Source_Info deallocation_source;
-    double allocation_time_s;
-    double deallocation_time_s;
+    f64 allocation_time_s;
+    f64 deallocation_time_s;
     ptr_Array allocation_trace;
     ptr_Array deallocation_trace;
 } Debug_Allocation;
@@ -214,7 +215,7 @@ typedef struct Debug_Allocation_Header
     i32 align;
     i32 block_start_offset;
     Source_Info allocation_source;
-    double allocation_time_s;
+    f64 allocation_time_s;
 } Debug_Allocation_Header;
 
 EXPORT void debug_allocator_init(Debug_Allocator* debug, Allocator* parent, Debug_Allocator_Options options)
@@ -746,6 +747,8 @@ INTERNAL bool _debug_allocator_is_aligned(void* ptr, isize alignment)
 
 EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr_, isize old_size, isize align, Source_Info called_from)
 {
+    PERF_COUNTER_START(c);
+
     //This function executes the following steps. 
     // The order is crucial because we need to ensure that: 
     //  1: all inputs are checked
@@ -772,7 +775,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     // prints the allocation (optional)
     // updates statistics
 
-    double curr_time = clock_s();
+    f64 curr_time = clock_s();
     Debug_Allocator* self = (Debug_Allocator*) (void*) self_;
     _debug_allocator_is_invariant(self);
 
@@ -811,11 +814,17 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
         isize interpenetration = 0;
         Debug_Allocator_Panic_Reason reason = _debug_allocator_check_block(self, old_ptr, &interpenetration, &hash_found);
         if(reason != DEBUG_ALLOC_PANIC_NONE)
+        {
+            PERF_COUNTER_END(c);
             return _debug_allocator_panic(self, reason, old_ptr, called_from);
+        }
 
         if(pre.header->size != old_size 
             || pre.header->align != align)
+        {    
+            PERF_COUNTER_END(c);
             return _debug_allocator_panic(self, DEBUG_ALLOC_PANIC_INVALID_PARAMS, old_ptr, called_from);
+        }
 
         old_block_ptr = _debug_allocator_get_placed_block(self, old_ptr);
     }
@@ -826,6 +835,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     if(new_block_ptr == NULL && new_size != 0)
     {
         debug_allocator_deinit_allocation(&old_allocation);
+        PERF_COUNTER_END(c);
         return NULL;
     }
     
@@ -889,6 +899,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
         self->reallocation_count += 1;
     
     _debug_allocator_is_invariant(self);
+    PERF_COUNTER_END(c);
     return new_ptr;
 }
 

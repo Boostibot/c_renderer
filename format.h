@@ -1,117 +1,194 @@
 #ifndef LIB_FORMAT
 #define LIB_FORMAT
 
-#include "string.h"
-#include <stdarg.h>
+#include "vformat.h"
+#include "base64.h"
 
-EXPORT void vformat_append_into(String_Builder* append_to, const char* format, va_list args);
-EXPORT void vformat_append_into_sized(String_Builder* append_to, String format, va_list args);
+#define PREFORMAT_LEAST_BUFFER_SIZE 64
 
-EXPORT void format_append_into(String_Builder* append_to, const char* format, ...);
-EXPORT void format_append_into_sized(String_Builder* append_to, String format, ...);
+//Extremely performant int to string conversion function. Source: fmtlib format_decimal()
+//Writes some number of digits into the buffer. 
+//The buffer needs to be at least PREFORMAT_LEAST_BUFFER_SIZE sized.
+//Saves range [written_from, written_to) in which the result is stored
+EXPORT void preformat_decimal(char* buffer, uint64_t value, int64_t size, uint64_t* written_from, uint64_t* written_to) 
+{
+    // Converts value in the range [0, 100) to a string.
+    #define TWO_DIGITS_TO_STRING(value)             \
+        &"0001020304050607080910111213141516171819" \
+         "2021222324252627282930313233343536373839" \
+         "4041424344454647484950515253545556575859" \
+         "6061626364656667686970717273747576777879" \
+         "8081828384858687888990919293949596979899"[(value) * 2] \
 
-EXPORT void vformat_into(String_Builder* into, const char* format, va_list args);
-EXPORT void vformat_into_sized(String_Builder* into, String format, va_list args);
+    char* out = buffer + size;
+    while (value >= 100) 
+    {
+        // Integer division is slow so do it for a group of two digits instead
+        // of for every digit. The idea comes from the talk by Alexandrescu
+        // "Three Optimization Tips for C++". See speed-test for a comparison.
+        out -= 2;
+        const char* two_digits = TWO_DIGITS_TO_STRING(value % 100);
+        memcpy(out, two_digits, 2);
+        value /= 100;
+    }
 
-EXPORT void format_into(String_Builder* into, const char* format, ...);
-EXPORT void format_into_sized(String_Builder* into, String format, ...);
+    if (value < 10) 
+    {   
+        out -= 1;
+        *out = (char) ('0' + value);
+    }
+    else
+    {
+        out -= 2;
+        const char* two_digits = TWO_DIGITS_TO_STRING(value);
+        memcpy(out, two_digits, 2);
+    }
 
-#define CSTRING_ESCAPE(s) (s) == NULL ? "" : (s)
+    #undef TWO_DIGITS_TO_STRING
 
-#define STRING_FMT "%.*s"
-#define STRING_PRINT(string) (string).size, (string).data
+    *written_from = (uint64_t) (out - buffer);
+    *written_to = size;
+}
 
-#define SOURCE_INFO_FMT "( %s : %lld )"
-#define SOURCE_INFO_PRINT(source_info) cstring_escape((source_info).file), (source_info).line
+//Writes some number of digits into the buffer. 
+//The buffer needs to be at least PREFORMAT_LEAST_BUFFER_SIZE sized.
+//Saves range [written_from, written_to) in which the result is stored
+EXPORT void preformat_uint(char* buffer, uint64_t num, int64_t size, uint8_t base, const char digits[64], uint64_t* written_from, uint64_t* written_to)
+{
+    ASSERT(base <= 36 && base >= 2);
+    int used_size = 0;
+    uint64_t last = num;
+    while(true)
+    {
+        uint64_t div = last / base;
+        uint64_t last_digit = last % base;
 
-#define STACK_TRACE_FMT "%-30s " SOURCE_INFO_FMT
-#define STACK_TRACE_PRINT(trace) cstring_escape((trace).function), SOURCE_INFO_PRINT(trace)
+        buffer[size - 1 - used_size] = digits[last_digit];
+        used_size ++;
 
-typedef long long int lld;
+        last = div;
+        if(last == 0)
+            break;
+    }
+
+    *written_from = size - used_size;
+    *written_to = size;
+}
+
+
+//we dont use / and order this differently from base64 standard encoding because / is not filesystem compatible
+//the 65th char is the separator. There we stick to customs and use =. 
+//(We need 66 chars because C strings are null terminated and I dont want to type each char idividually)
+const char CUSTOM_BASE64_DIGITS[66] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_+=";
+
+EXPORT void format_udecimal_into(String_Builder* into, u64 num)
+{
+    char buffer[PREFORMAT_LEAST_BUFFER_SIZE + 2]; //explicitly unitilialized
+    buffer[PREFORMAT_LEAST_BUFFER_SIZE + 1] = '\0'; //null terminated
+    uint64_t from; //explicitly unitilialized
+    uint64_t to; //explicitly unitilialized
+
+    preformat_decimal(buffer, num, PREFORMAT_LEAST_BUFFER_SIZE + 1, &from, &to);
+    array_append(into, buffer + from, to - from);
+}
+
+EXPORT void format_decimal_into(String_Builder* into, i64 num)
+{
+    char buffer[PREFORMAT_LEAST_BUFFER_SIZE + 2]; //explicitly unitilialized
+    buffer[PREFORMAT_LEAST_BUFFER_SIZE + 1] = '\0'; //null terminated
+    uint64_t from; //explicitly unitilialized
+    uint64_t to; //explicitly unitilialized
+
+    preformat_decimal(buffer, llabs(num), PREFORMAT_LEAST_BUFFER_SIZE + 1, &from, &to);
+    if(num < 0)
+        buffer[--from] = '-';
+
+    array_append(into, buffer + from, to - from);
+}
+
+EXPORT void format_int_into(String_Builder* into, i64 num, u8 base)
+{
+    if(base == 10)
+    {
+        format_decimal_into(into, num);
+    }
+    else
+    {
+        char buffer[PREFORMAT_LEAST_BUFFER_SIZE + 2]; //explicitly unitilialized
+        buffer[PREFORMAT_LEAST_BUFFER_SIZE + 1] = '\0'; //null terminated
+        uint64_t from; //explicitly unitilialized
+        uint64_t to; //explicitly unitilialized
+
+        preformat_uint(buffer, llabs(num), PREFORMAT_LEAST_BUFFER_SIZE + 1, base, CUSTOM_BASE64_DIGITS, &from, &to);
+        if(num < 0)
+            buffer[--from] = '-';
+        array_append(into, buffer + from, to - from);
+    }
+}
+
+EXPORT void format_uint_into(String_Builder* into, u64 num, u8 base)
+{
+    if(base == 10)
+    {
+        format_udecimal_into(into, num);
+    }
+    else
+    {
+        char buffer[PREFORMAT_LEAST_BUFFER_SIZE + 2]; //explicitly unitilialized
+        buffer[PREFORMAT_LEAST_BUFFER_SIZE + 1] = '\0'; //null terminated
+        uint64_t from; //explicitly unitilialized
+        uint64_t to; //explicitly unitilialized
+
+        preformat_uint(buffer, num, PREFORMAT_LEAST_BUFFER_SIZE + 1, base, CUSTOM_BASE64_DIGITS, &from, &to);
+        array_append(into, buffer + from, to - from);
+    }
+}
+
+EXPORT void base64_encode_append_into(String_Builder* into, const void* data, isize len, const uint8_t encoding[BASE64_ENCODING_SIZE])
+{
+    isize size_before = into->size;
+    isize needed = base64_encode_max_output_length(len);
+    array_resize(into, size_before + needed);
+
+    isize actual_size = base64_encode(into->data + size_before, data, len, encoding);
+    array_resize(into, size_before + actual_size);
+}
+
+EXPORT bool base64_decode_append_into(String_Builder* into, const void* data, isize len, const uint8_t decoding[BASE64_DECODING_SIZE])
+{
+    isize size_before = into->size;
+    isize needed = base64_decode_max_output_length(len);
+    array_resize(into, size_before + needed);
+    
+    isize error_at = 0;
+    isize actual_size = base64_decode(into->data + size_before, data, len, decoding, &error_at);
+    if(error_at == -1)
+    {
+        array_resize(into, size_before + actual_size);
+        return true;
+    }
+    else
+    {
+        array_resize(into, size_before);
+        return false;
+    }
+}
+
+EXPORT void base64_encode_into(String_Builder* into, const void* data, isize len, const uint8_t encoding[BASE64_ENCODING_SIZE])
+{
+    array_clear(into);
+    base64_encode_append_into(into, data, len, encoding);
+}
+
+EXPORT bool base64_decode_into(String_Builder* into, const void* data, isize len, const uint8_t decoding[BASE64_DECODING_SIZE])
+{
+    array_clear(into);
+    return base64_decode_append_into(into, data, len, decoding);
+}
+
 #endif // !LIB_FORMAT
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_IMPL)) && !defined(LIB_FORMAT_HAS_IMPL)
 #define LIB_FORMAT_HAS_IMPL
-    #include <stdio.h>
-
-    EXPORT void vformat_append_into(String_Builder* append_to, const char* format, va_list args)
-    {
-        //an attempt to estimate the needed size so we dont need to call vsnprintf twice
-        isize format_size = strlen(format);
-        isize estimated_size = format_size + 10 + format_size/4;
-        isize base_size = append_to->size; 
-        array_resize(append_to, base_size + estimated_size);
-
-        va_list args_copy;
-        va_copy(args_copy, args);
-        isize count = vsnprintf(append_to->data + base_size, (size_t) (append_to->size - base_size), format, args);
-        
-        if(count > estimated_size)
-        {
-            array_resize(append_to, base_size + count + 3);
-            count = vsnprintf(append_to->data + base_size, (size_t) (append_to->size - base_size), format, args);
-        }
     
-        //if(count != 0)
-            //ASSERT(append_to->data[base_size + count - 1] != '\0');
-
-        array_resize(append_to, base_size + count);
-        return;
-    }
-
-    EXPORT void vformat_append_into_sized(String_Builder* append_to, String format, va_list args)
-    {
-        String_Builder escaped = {0};
-        array_init_backed(&escaped, allocator_get_scratch(), 1024);
-        builder_append(&escaped, format);
-    
-        vformat_append_into(append_to, cstring_from_builder(escaped), args);
-
-        array_deinit(&escaped);
-    }
-
-    EXPORT void format_append_into(String_Builder* append_to, const char* format, ...)
-    {
-        va_list args;
-        va_start(args, format);
-        vformat_append_into(append_to, format, args);
-        va_end(args);
-    }
-
-    EXPORT void format_append_into_sized(String_Builder* append_to, String format, ...)
-    {
-        va_list args;
-        va_start(args, format);
-        vformat_append_into_sized(append_to, format, args);
-        va_end(args);
-    }
-    
-    EXPORT void vformat_into(String_Builder* into, const char* format, va_list args)
-    {
-        array_clear(into);
-        vformat_append_into(into, format, args);
-    }
-
-    EXPORT void vformat_into_sized(String_Builder* into, String format, va_list args)
-    {
-        array_clear(into);
-        vformat_append_into_sized(into, format, args);
-    }
-
-    EXPORT void format_into(String_Builder* into, const char* format, ...)
-    {
-        va_list args;
-        va_start(args, format);
-        vformat_into(into, format, args);
-        va_end(args);
-    }
-
-    EXPORT void format_into_sized(String_Builder* into, String format, ...)
-    {
-        va_list args;
-        va_start(args, format);
-        vformat_into_sized(into, format, args);
-        va_end(args);
-    }
-
 #endif
