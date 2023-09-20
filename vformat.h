@@ -57,6 +57,9 @@ typedef long long int lld;
         //if(count != 0)
             //ASSERT(append_to->data[base_size + count - 1] != '\0');
 
+        //Sometimes apparently the standard linrary screws up and returns negative...
+        if(count < 0)
+            count = 0;
         array_resize(append_to, base_size + count);
         
         PERF_COUNTER_END(c);

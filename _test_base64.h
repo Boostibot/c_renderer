@@ -14,9 +14,9 @@ typedef enum Base64_Decode_State{
     BASE64_DECODE_NEQ,
 } Base64_Decode_State;
 
-INTERNAL void test_base64_stress(f64 max_seconds, const u8 encoding[BASE64_ENCODING_SIZE], const u8 decoding[BASE64_DECODING_SIZE]);
-INTERNAL void test_base64_encode(Base64_Encode_State encode_state, const u8 encoding[BASE64_ENCODING_SIZE], const char* input, const char* expected);
-INTERNAL void test_base64_decode(Base64_Decode_State decode_state, const u8 decoding[BASE64_DECODING_SIZE], const char* input, const char* expected);
+INTERNAL void test_base64_stress(f64 max_seconds, Base64_Encoding encoding, Base64_Decoding decoding);
+INTERNAL void test_base64_encode(Base64_Encode_State encode_state, Base64_Encoding encoding, const char* input, const char* expected);
+INTERNAL void test_base64_decode(Base64_Decode_State decode_state, Base64_Decoding decoding, const char* input, const char* expected);
 
 INTERNAL void test_base64(f64 max_seconds)
 {
@@ -86,7 +86,7 @@ INTERNAL void test_base64(f64 max_seconds)
 
 }
 
-INTERNAL void test_base64_encode(Base64_Encode_State encode_state, const u8 encoding[BASE64_ENCODING_SIZE], const char* input, const char* expected)
+INTERNAL void test_base64_encode(Base64_Encode_State encode_state, Base64_Encoding encoding, const char* input, const char* expected)
 {
     String input_ = string_make(input);
     String expected_ = string_make(expected);
@@ -102,7 +102,7 @@ INTERNAL void test_base64_encode(Base64_Encode_State encode_state, const u8 enco
 }
 
 
-INTERNAL void test_base64_decode(Base64_Decode_State decode_state, const u8 decoding[BASE64_DECODING_SIZE], const char* input, const char* expected)
+INTERNAL void test_base64_decode(Base64_Decode_State decode_state, Base64_Decoding decoding, const char* input, const char* expected)
 {
     String input_ = string_make(input);
     String expected_ = string_make(expected);
@@ -121,10 +121,10 @@ INTERNAL void test_base64_decode(Base64_Decode_State decode_state, const u8 deco
     array_deinit(&decoded_buffer);
 }
 
-INTERNAL void test_base64_stress(f64 max_seconds, const u8 encoding[BASE64_ENCODING_SIZE], const u8 decoding[BASE64_DECODING_SIZE])
+INTERNAL void test_base64_stress(f64 max_seconds, Base64_Encoding encoding, Base64_Decoding decoding)
 {
     enum {
-        MAX_SIZE = 16, 
+        MAX_SIZE = 1024*8, 
         MAX_BLOCKS = 10,
         MAX_ITERS = 1000*1000,
         MIN_ITERS = 10,
@@ -140,8 +140,6 @@ INTERNAL void test_base64_stress(f64 max_seconds, const u8 encoding[BASE64_ENCOD
     array_reserve(&encoded, base64_encode_max_output_length(random_data.capacity) + MAX_BLOCKS*10);
     array_reserve(&decoded, base64_decode_max_output_length(encoded.capacity));
     array_reserve(&decoded_block, base64_decode_max_output_length(encoded.capacity) / MAX_BLOCKS);
-
-    bool do_blocks = encoding[BASE64_ENCODING_DO_PAD_CHAR_I] == 'P';
     
 	f64 start = clock_s();
 	for(isize i = 0; i < MAX_ITERS; i++)
@@ -152,7 +150,10 @@ INTERNAL void test_base64_stress(f64 max_seconds, const u8 encoding[BASE64_ENCOD
         array_clear(&random_data);
         array_clear(&encoded);
         isize num_blocks = 1;
-        if(do_blocks)
+
+        //If we do_pad we also test decodaing up to MAX_BLOCKS concatenated blocks
+        //Else we only test the blocks indiviually
+        if(encoding.do_pad)
             num_blocks = random_range(1, MAX_BLOCKS + 1);
 
         for(isize j = 0; j < num_blocks; j++)
@@ -178,7 +179,7 @@ INTERNAL void test_base64_stress(f64 max_seconds, const u8 encoding[BASE64_ENCOD
 
         //Decode the whole concatenation of blocks and test if the data was preserved
         //if do_blocks == false => num_blocks = 1 => this would do the same thing as the per block check 
-        if(do_blocks) 
+        if(encoding.do_pad) 
         {
             base64_decode_into(&decoded, encoded.data, encoded.size, decoding);
             TEST_MSG(builder_is_equal(decoded, random_data), "The whole encoded block must match!");

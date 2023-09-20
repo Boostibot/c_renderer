@@ -837,7 +837,7 @@ EXPORT void assertion_report(const char* expression, const char* file, int line,
         LOG_FATAL("TEST", "with message:\n", message);
         va_list args;
         va_start(args, message);
-        log_message(STRING("TEST"), LOG_TYPE_FATAL, message, args);
+        vlog_message(STRING("TEST"), LOG_TYPE_FATAL, message, args);
         va_end(args);
     }
         

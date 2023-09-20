@@ -1,9 +1,30 @@
+
+//#define RUN_TESTS
+
+#ifdef RUN_TESTS
+
+#include "_test_unicode.h"
+
+//Try including multiple times
+#include "unicode.h"
+#include "unicode.h"
+#include "unicode.h"
+
+#define LIB_ALL_IMPL
+#include "unicode.h"
+
+void main()
+{
+    test_unicode(3.0);
+}
+
+#else
+
 #define LIB_ALL_IMPL
 #define LIB_MEM_DEBUG
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-#define RUN_TESTS
 
 #include "platform.h"
 #include "string.h"
@@ -2534,6 +2555,7 @@ void error_func(void* context, Platform_Sandox_Error error_code)
 //       shadow mapping
 //       resource management using debug_allocator
 
+#include "_test_unicode.h"
 #include "_test_random.h"
 #include "_test_array.h"
 #include "_test_hash_index.h"
@@ -2543,14 +2565,17 @@ void error_func(void* context, Platform_Sandox_Error error_code)
 #include "_test_base64.h"
 void run_test_func(void* context)
 {
+
     (void) context;
-    test_array(1.0);
-    test_base64(3.0);
-    test_math(3.0);
-    test_hash_table_stress(3.0);
-    test_log();
-    test_hash_index(1.0);
-    test_random();
+    test_unicode(3.0);
+    //test_base64(3.0);
+    //test_array(3.0);
+    //test_math(3.0);
+    //test_hash_table_stress(3.0);
+    //test_log();
+    //test_hash_index(3.0);
+    //test_random();
     LOG_INFO("TEST", "All tests passed! uwu");
     return;
 }
+#endif

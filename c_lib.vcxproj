@@ -248,6 +248,7 @@
     <ClInclude Include="string.h" />
     <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />
+    <ClInclude Include="unicode.h" />
     <ClInclude Include="vformat.h" />
     <ClInclude Include="_test.h" />
     <ClInclude Include="_test_array.h" />
@@ -257,6 +258,7 @@
     <ClInclude Include="_test_log.h" />
     <ClInclude Include="_test_math.h" />
     <ClInclude Include="_test_random.h" />
+    <ClInclude Include="_test_unicode.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\blinn_phong.frag" />

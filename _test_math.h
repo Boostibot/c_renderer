@@ -6,7 +6,7 @@
 
 #ifndef TEST_MSG
 #include <assert.h>
-#define TEST_MSG(a, msg) assert((a) && (msg))
+#define TEST_MSG(a, msg, ...) (!(a) ? printf((msg), ##__VA_ARGS__), assert((a) && (msg)) : (void) 0)
 #endif // !TEST_MSG
 
 #define TEST_MATH_EPSILON (EPSILON*2)

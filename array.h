@@ -185,7 +185,6 @@ EXPORT void _array_clear(void* array, isize item_size);
 
 EXPORT bool _array_is_invariant(const void* array, isize item_size)
 {
-    (void) item_size;
     u8_Array* base = (u8_Array*) array;
     bool is_capaicty_correct = 0 <= base->capacity;
     bool is_size_correct = (0 <= base->size && base->size < base->capacity);
@@ -193,7 +192,8 @@ EXPORT bool _array_is_invariant(const void* array, isize item_size)
         is_size_correct = true;
 
     bool is_data_correct = (base->data == NULL) == (base->capacity == 0);
-    bool result = is_capaicty_correct && is_size_correct && is_data_correct;
+    bool item_size_correct = item_size > 0;
+    bool result = is_capaicty_correct && is_size_correct && is_data_correct && item_size_correct;
     ASSERT(result);
     return result;
 }
@@ -220,9 +220,6 @@ EXPORT Allocator* _array_get_allocator(const void* array, isize item_size)
     return _set_allocator_bits(base->allocator, false);
 }
 
-//@TODO: make separate for normal and backed
-//@TODO: make it so specifying the allocator is necessary
-//@TODO: make allocator call more compact
 EXPORT void _array_init(void* array, isize item_size, Allocator* allocator, Source_Info from)
 {
     (void) item_size;
@@ -236,7 +233,7 @@ EXPORT void _array_init_backed(void* array, isize item_size, Allocator* allocato
     u8_Array* base = (u8_Array*) array;
     _array_deinit(array, item_size, from);
 
-    if(backing_item_count != 0)
+    if(backing_item_count > 0)
     {
         base->data = backing;
         base->capacity = backing_item_count;
@@ -266,8 +263,8 @@ EXPORT void _array_deinit(void* array, isize item_size, Source_Info from)
 EXPORT void _array_set_capacity(void* array, isize item_size, isize capacity, Source_Info from)
 {
     u8_Array* base = (u8_Array*) array;
-    ASSERT(item_size > 0 && capacity >= 0 && item_size > 0);
     ASSERT(_array_is_invariant(array, item_size));
+    ASSERT(capacity >= 0);
 
     if(capacity == 0)
     {
@@ -320,9 +317,10 @@ EXPORT void _array_set_capacity(void* array, isize item_size, isize capacity, So
 
 EXPORT void _array_grow_capacity(void* array, isize item_size, isize capacity_at_least, Source_Info from)
 {
-    u8_Array* base = (u8_Array*) array;
     ASSERT(_array_is_invariant(array, item_size));
+    ASSERT(capacity_at_least >= 0);
     
+    u8_Array* base = (u8_Array*) array;
     isize new_capacity = base->capacity;
     while(new_capacity < capacity_at_least)
         new_capacity = new_capacity * 3/2 + 8;
@@ -345,6 +343,7 @@ EXPORT void _array_resize(void* array, isize item_size, isize to_size, Source_In
 EXPORT void _array_reserve(void* array, isize item_size, isize to_fit, bool do_growth, Source_Info from)
 {
     ASSERT(_array_is_invariant(array, item_size));
+    ASSERT(to_fit >= 0);
     u8_Array* base = (u8_Array*) array;
     if(base->capacity > to_fit)
         return;
