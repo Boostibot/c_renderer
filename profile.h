@@ -71,8 +71,17 @@ void main()
 
 #define PROFILE_DO_ONLY_DETAILED_COUNTERS
 
+//typedef struct Perf_Counter Perf_Counter;
+//typedef void (*Perf_Counter_User_Format_Func)(const Perf_Counter* counter, String_Builder* into);
+
 typedef struct Perf_Counter
 {
+	//Sometimes we want to add some extra piece of data we track to our counters
+	//such as: number of hash collisions, number of times a certain branch was taken etc.
+	//We cannot track this 
+	//void* user_format_context;
+	//Perf_Counter_User_Format_Func* user_format_func;
+
 	struct Perf_Counter* next;
 	i32 line;
 	i32 concurrent_running_counters; 
@@ -107,6 +116,7 @@ typedef struct Perf_Counter_Running
 EXPORT Perf_Counter_Running perf_counter_start(Perf_Counter* my_counter, i32 line, const char* file, const char* function, const char* name);
 EXPORT void perf_counter_end(Perf_Counter_Running* running);
 EXPORT void perf_counter_end_detailed(Perf_Counter_Running* running);
+EXPORT f64 perf_counter_get_ellapsed(Perf_Counter_Running running);
 
 EXPORT Perf_Counter* profile_get_counters();
 EXPORT i64 profile_get_total_running_counters_count();
@@ -131,8 +141,8 @@ EXPORT f64 profile_get_counter_normalized_standard_deviation_s(Perf_Counter coun
 // ========= MACRO IMPLMENTATION ==========
 	#define _IF_NOT_PERF_START_DO_PERF_COUNTERS(name) Perf_Counter_Running name = {0}
 	#define _IF_NOT_PERF_START_(name) \
-		ALIGNED(64) static Perf_Counter PP_CONCAT(__perf_counter__ , __LINE__) = {0}; \
-		Perf_Counter_Running name = perf_counter_start(&PP_CONCAT(__perf_counter__ , __LINE__), __LINE__, __FILE__, __FUNCTION__, #name)
+		ALIGNED(64) static Perf_Counter _##name = {0}; \
+		Perf_Counter_Running name = perf_counter_start(&_##name, __LINE__, __FILE__, __FUNCTION__, #name)
 
 	#define _IF_NOT_PERF_END_DO_PERF_COUNTERS(name) (void) name
 	#define _IF_NOT_PERF_END_(name) perf_counter_end(&name)
@@ -167,6 +177,14 @@ EXPORT f64 profile_get_counter_normalized_standard_deviation_s(Perf_Counter coun
 		#endif
 
 		return running;
+	}
+	
+	EXPORT f64 perf_counter_get_ellapsed(Perf_Counter_Running running)
+	{
+		i64 delta = platform_perf_counter() - running.start;
+		f64 freq = platform_perf_counter_frequency_d();
+
+		return (f64) delta / freq;
 	}
 
 	FORCE_INLINE INTERNAL i64 _perf_counter_end(Perf_Counter_Running* running, bool detailed)

@@ -734,11 +734,13 @@ EXPORT void vlog_message(String chanel, u8 log_type, const char* format, va_list
         console_filtered = chanel_state->gives_to_console;
     if(opts->file_use_filter)
         file_filtered = chanel_state->gives_to_central_file;
+    
 
     if(console_filtered && console_bit_set)
     {
         fwrite(message.data, 1, message.size, stdout);
     }
+
     
     if(file_filtered && file_bit_set)
     {
@@ -747,7 +749,6 @@ EXPORT void vlog_message(String chanel, u8 log_type, const char* format, va_list
         //_log_chanel_state_init(central_state, STRING(""));
         _log_print_to_chanel(central_state, string_from_builder(message));
     }
-
     array_deinit(&message);
     array_deinit(&chanel_entry.message);
     array_deinit(&chanel_entry.chanel);

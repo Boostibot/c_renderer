@@ -1,7 +1,6 @@
 #pragma once
 
-#define _TEST_UNICODE_TYPE_SET 1
-
+#ifdef _TEST_UNICODE_TYPE_SET
 //builtin types
 #if _TEST_UNICODE_TYPE_SET == 1
 
@@ -39,6 +38,7 @@
 //Default types
 #else
 
+#endif
 #endif
 
 //Add our example so we can run it

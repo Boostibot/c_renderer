@@ -21,7 +21,7 @@ void main()
 #else
 
 #define LIB_ALL_IMPL
-#define LIB_MEM_DEBUG
+//#define LIB_MEM_DEBUG
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -41,8 +41,9 @@ void main()
 #include "gl_debug_output.h"
 #include "shapes.h"
 #include "obj_loader.h"
+#include "image_loader.h"
 
-#include "stb/stb_image.h"
+//#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
 
 typedef enum Control_Name
@@ -888,7 +889,7 @@ typedef struct Render_Mesh
     GLuint ebo;
 
     GLuint vertex_count;
-    GLuint index_count;
+    GLuint triangle_count;
 } Render_Mesh;
 
 typedef struct Bitmap
@@ -1172,7 +1173,7 @@ bool render_cubemap_init_from_disk(Render_Cubemap* render, String front, String 
     return state;
 }
 
-void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize indeces_count, String name)
+void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Index* triangles, isize triangles_count, String name)
 {
     memset(mesh, 0, sizeof *mesh);
 
@@ -1185,7 +1186,7 @@ void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_
     glBufferData(GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indeces_count * sizeof(Triangle_Index), indeces, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangles_count * sizeof(Triangle_Index), triangles, GL_STATIC_DRAW);
     
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
@@ -1204,13 +1205,13 @@ void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_
     glBindVertexArray(0);   
     
     builder_append(&mesh->name, name);
-    mesh->index_count = (GLuint) indeces_count;
+    mesh->triangle_count = (GLuint) triangles_count;
     mesh->vertex_count = (GLuint) vertices_count;
 }
 
 void render_mesh_init_from_shape(Render_Mesh* mesh, Shape shape, String name)
 {
-    render_mesh_init(mesh, shape.vertices.data, shape.vertices.size, shape.indeces.data, shape.indeces.size, name);
+    render_mesh_init(mesh, shape.vertices.data, shape.vertices.size, shape.triangles.data, shape.triangles.size, name);
 }
 
 void render_mesh_deinit(Render_Mesh* mesh)
@@ -1225,7 +1226,7 @@ void render_mesh_deinit(Render_Mesh* mesh)
 void render_mesh_draw(Render_Mesh mesh)
 {
     glBindVertexArray(mesh.vao);
-    glDrawElements(GL_TRIANGLES, mesh.index_count * 3, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, mesh.triangle_count * 3, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 }
 
@@ -2125,7 +2126,7 @@ void run_func(void* context)
             unit_quad = shapes_make_unit_quad();
 
             bool ok = true;
-            ok = ok && error_ok(obj_parser_load(&falcon, STRING("resources/models/falcon.obj"), NULL, true));
+            ok = ok && error_ok(obj_parser_load(&falcon, STRING("resources/models/sponza.obj"), NULL, true));
 
             render_mesh_init_from_shape(&render_uv_sphere, uv_sphere, STRING("uv_sphere"));
             render_mesh_init_from_shape(&render_cube_sphere, cube_sphere, STRING("cube_sphere"));
@@ -2149,6 +2150,50 @@ void run_func(void* context)
             ok = ok && render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
             ok = ok && render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
             render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(default_ao), 1, STRING("rustediron2_ao"));
+
+            Image test_image = {0};
+            Error test_error = image_read_from_file(&test_image, STRING("resources/rustediron2/rustediron2_basecolor.png"), 0, PIXEL_FORMAT_U8);
+
+
+
+            {
+                Image tester_image  = {0};
+                tester_image.pixel_size = 2;
+                tester_image.format = PIXEL_FORMAT_U16;
+
+                image_resize(&tester_image, 4, 4);
+                for(isize i = 0; i < tester_image.width * tester_image.height; i++)
+                {
+                    u16* data = (u16*) (void*) &tester_image.pixels[i * 2];
+                    *data = (u16) i;
+                }
+
+                Image to_image = {0};
+                to_image.pixel_size = 2;
+                to_image.format = PIXEL_FORMAT_U16;
+                image_resize(&to_image, 2, 2);
+
+
+                Image_View from_imagev = image_view_portion(image_view_from_image(&tester_image), 1, 1, 2, 2);
+                Image_View to_imagev = image_view_from_image(&to_image);
+
+                image_view_copy(&to_imagev, from_imagev, 0, 0);
+
+                TEST(((u16*) (void*) to_imagev.pixels)[0] == 5);
+                TEST(((u16*) (void*) to_imagev.pixels)[1] == 6);
+                TEST(((u16*) (void*) to_imagev.pixels)[2] == 9);
+                TEST(((u16*) (void*) to_imagev.pixels)[3] == 10);
+
+            }
+            Image_View test_view = image_view_portion(image_view_from_image(&test_image), 20, 20, 256, 256);
+
+            LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(test_error)));
+
+            Error write_error = image_write_to_file(test_view, STRING("resources/rustediron2/rustediron2_basecolor_small.png"));
+            LOG_INFO("ASSET", "Write "STRING_FMT, STRING_PRINT(error_code(write_error)));
+
+            image_deinit(&test_image);
+
 
             ok = ok && render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
             
@@ -2414,7 +2459,7 @@ void run_func(void* context)
 
             //render falcon
             {
-                Mat4 model = mat4_translate(mat4_scaling(vec3_of(1)), vec3(20, 0, 20));
+                Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.01f)), vec3(20, 0, 20));
                 render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
             }
 

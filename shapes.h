@@ -7,20 +7,22 @@
 #include "engine_types.h"
 #include "profile.h"
 
-//@TODO: separate to definitions/implementation refactor!
 
 typedef struct Shape
 {
     Vertex_Array vertices;
-    Triangle_Index_Array indeces;
+    Triangle_Index_Array triangles;
 } Shape;
 
 typedef struct Shape_Assembly
 {
     Vertex_Array vertices;
-    Triangle_Index_Array indeces;
+    Triangle_Index_Array triangles;
     Hash_Index vertices_hash;
 } Shape_Assembly;
+
+
+
 
 typedef enum Winding_Order
 {
@@ -137,14 +139,14 @@ const Triangle_Index CUBE_INDECES[] = {
 void shape_deinit(Shape* shape)
 {
     array_deinit(&shape->vertices);
-    array_deinit(&shape->indeces);
+    array_deinit(&shape->triangles);
 }
 
 Shape shape_duplicate(Shape from)
 {
     Shape out = {0};
     array_copy(&out.vertices, from.vertices);
-    array_copy(&out.indeces, from.indeces);
+    array_copy(&out.triangles, from.triangles);
     return out;
 }
 
@@ -177,7 +179,7 @@ Shape shapes_make_unit_quad()
     isize vertex_count = STATIC_ARRAY_SIZE(XZ_QUAD_VERTICES);
     isize index_count = STATIC_ARRAY_SIZE(XZ_QUAD_INDECES);
     array_append(&out.vertices, XZ_QUAD_VERTICES, vertex_count);
-    array_append(&out.indeces, XZ_QUAD_INDECES, index_count);
+    array_append(&out.triangles, XZ_QUAD_INDECES, index_count);
 
     return out;
 }
@@ -190,7 +192,7 @@ Shape shapes_make_unit_cube()
     isize vertex_count = STATIC_ARRAY_SIZE(CUBE_VERTICES);
     isize index_count = STATIC_ARRAY_SIZE(CUBE_INDECES);
     array_append(&out.vertices, CUBE_VERTICES, vertex_count);
-    array_append(&out.indeces, CUBE_INDECES, index_count);
+    array_append(&out.triangles, CUBE_INDECES, index_count);
 
     return out;
 }
@@ -251,32 +253,39 @@ u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, V
     PERF_COUNTER_START(c);
     u64 hashed = vertex_hash64(vertex, 0);
 
-    //try to exactly find it in the hash. will almost always iterate only once.
-    // the chance of hash colision are astronomically low.
-    isize found = hash_index_find(*hash, hashed);
-    while(found != -1)
+    //The index of a new vertex if it was to be inserted
+    isize inserted_i = vertices->size;
+    isize found = hash_index_find_or_insert(hash, hashed, (u64) inserted_i);
+    isize entry = (isize) hash->entries[found].value;
+
+    //If we just inserted add it to the array.
+    if(entry == inserted_i)
     {
-        isize entry = hash->entries[found].value;
+        array_push(vertices, vertex);
+    }
+    else
+    {
+        //If it is the right one and return its index.
+        //We still check for exact equality of the vertex. It will almost always
+        //succeed because the chances of hash colision are astronomically low.
+        CHECK_BOUNDS(entry, vertices->size);
         Vertex found_vertex = vertices->data[entry];
-        bool is_equal = memcpy(&vertex, &found_vertex, sizeof found_vertex);
-        if(is_equal)
+        bool is_equal = memcmp(&vertex, &found_vertex, sizeof found_vertex) == 0;
+        if(is_equal == false)
         {
-            PERF_COUNTER_END(c);
-            return (u32) entry;
-        }
-        else
-        {
-            isize finished_at = 0;
-            found = hash_index_find_next(*hash, hashed, found, &finished_at);
+            //if hash collision add the hash again.
+            PERF_COUNTER_START(hash_collisions);
+            hash_index_insert(hash, hashed, inserted_i);
+            array_push(vertices, vertex);
+            entry = inserted_i;
+            PERF_COUNTER_END(hash_collisions);
         }
     }
-
-    array_push(vertices, vertex);
-    u32 inserted_i = (u32) (vertices->size - 1);
-    hash_index_insert(hash, hashed, inserted_i);
-
+    
+    CHECK_BOUNDS(entry, vertices->size);
     PERF_COUNTER_END(c);
-    return inserted_i;
+    return (u32) entry;
+
 }
 
 
@@ -345,7 +354,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
         
     PERF_COUNTER_START(c);
     isize vertices_before = into->vertices.size;
-    isize indeces_before = into->indeces.size;
+    isize indeces_before = into->triangles.size;
 
     const Vec3 origin = vec3(0, 0, 0);
     const Vec3 corners[4] = {
@@ -358,7 +367,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
     const f32 y_angle = vec3_angle_between(vec3_sub(corners[0], origin), vec3_sub(corners[1], origin));
     const f32 x_angle = vec3_angle_between(vec3_sub(corners[2], origin), vec3_sub(corners[3], origin));
     
-    array_reserve(&into->indeces, indeces_before + (iters) * (iters) * 2);
+    array_reserve(&into->triangles, indeces_before + (iters) * (iters) * 2);
     array_reserve(&into->vertices, vertices_before + (iters + 1) * (iters + 1));
     
     const Mat4 local_matrix = mat4_local_matrix(side_front, side_normal, offset);
@@ -401,8 +410,8 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
             tri2.vertex_i[1] = y       * (uiters + 1) + x + 1 + ubefore;
             tri2.vertex_i[2] = (y + 1) * (uiters + 1) + x + 1 + ubefore;
 
-            array_push(&into->indeces, tri1);
-            array_push(&into->indeces, tri2);
+            array_push(&into->triangles, tri1);
+            array_push(&into->triangles, tri2);
             
             ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.size, tri1) == WINDING_ORDER_CLOCKWISE);
             ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.size, tri2) == WINDING_ORDER_CLOCKWISE);
@@ -423,7 +432,7 @@ Shape shapes_make_cube_sphere(isize iters, f32 radius)
 {
     PERF_COUNTER_START(c);
     Shape out = {0};
-    array_reserve(&out.indeces, (iters) * (iters) * 2 * 6);
+    array_reserve(&out.triangles, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
 
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 1, 0), vec3(1, 0, 0), vec3_of(0));
@@ -441,7 +450,7 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
 {
     PERF_COUNTER_START(c);
     Shape out = {0};
-    array_reserve(&out.indeces, (iters) * (iters) * 2 * 6);
+    array_reserve(&out.triangles, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
 
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 1, 0), vec3(1, 0, 0), vec3_of(0));
@@ -461,9 +470,9 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
     ASSERT(radius > 0);
     ASSERT(iters >= 0);
 
-    //add the initial indeces
+    //add the initial triangles
     Vertex_Array vertices = {0};
-    Triangle_Index_Array indeces = {0};
+    Triangle_Index_Array triangles = {0};
 
     u32 y_segments = (u32) iters;
     u32 x_segments = (u32) iters;
@@ -504,8 +513,8 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
             tri2.vertex_i[0] = (y + 1) * (x_segments + 1) + x;
             tri2.vertex_i[1] = y       * (x_segments + 1) + x + 1;
             tri2.vertex_i[2] = (y + 1) * (x_segments + 1) + x + 1;
-            array_push(&indeces, tri1);
-            array_push(&indeces, tri2);
+            array_push(&triangles, tri1);
+            array_push(&triangles, tri2);
 
             #ifdef DO_ASSERTS
             // Vertices must normally have a WINDING_ORDER_CLOCKWISE order, however
@@ -540,7 +549,7 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
         
     }
 
-    out_shape.indeces = indeces;
+    out_shape.triangles = triangles;
     out_shape.vertices = vertices;
     PERF_COUNTER_END(c);
     return out_shape;

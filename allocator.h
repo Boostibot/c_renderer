@@ -159,10 +159,6 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
         //This is equivalent to free(NULL)
         if(new_size != 0 || old_ptr != NULL)
         {
-            ASSERT((u64) from_allocator != 0xFFFFFFFFFFFFFFFF);
-            (void) from_allocator->get_stats(from_allocator);
-
-            int x = 10; (void) x;
             out = from_allocator->allocate(from_allocator, new_size, old_ptr, old_size, align, called_from);
         }
             

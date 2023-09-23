@@ -230,12 +230,14 @@
     <ClInclude Include="error.h" />
     <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
+    <ClInclude Include="geometry_manager.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="gl_debug_output.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_index.h" />
     <ClInclude Include="hash_table.h" />
-    <ClInclude Include="img_loader.h" />
+    <ClInclude Include="image.h" />
+    <ClInclude Include="image_loader.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="obj_loader.h" />

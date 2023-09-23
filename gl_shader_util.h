@@ -327,7 +327,7 @@ GLint render_shader_get_uniform_location(const Render_Shader* shader, const char
             hash_index_reserve(&error_hash_index, 32);
         }
 
-        isize found = hash_index_find_or_insert(&error_hash_index, final_hash);
+        isize found = hash_index_find_or_insert(&error_hash_index, final_hash, 0);
         u64* error_count = &error_hash_index.entries[found].value;
         if(is_power_of_two_zero((*error_count)++))
             LOG_ERROR("RENDER", "failed to find uniform location %-25s shader: " STRING_FMT, uniform, STRING_PRINT(shader->name));

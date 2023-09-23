@@ -33,12 +33,11 @@ EXPORT String string_tail(String string, isize from); //keeps only charcters fro
 EXPORT String string_limit(String string, isize max_size); //if the string is longer than max_size trims it to max_size else returns it unchanged 
 EXPORT String string_range(String string, isize from, isize to); //returns a string containing characters staring from from and ending in to ( [from, to) interval )
 EXPORT String string_portion(String string, isize from, isize size); //returns a string containing size characters staring from ( [from, from + size) interval )
+EXPORT bool   string_is_equal(String a, String b); //Returns true if the contents and sizes of the strings match
 EXPORT bool   string_is_prefixed_with(String string, String prefix); 
 EXPORT bool   string_is_postfixed_with(String string, String postfix);
-EXPORT bool   string_is_equal(String a, String b); //Returns true if the contents and sizes of the strings match
-EXPORT bool   string_is_equal_at(String larger_string, isize from_index, String smaller_string);
+EXPORT bool   string_has_substring_at(String larger_string, isize from_index, String smaller_string); //Retursn true if larger_string has smaller_string at index from_index
 EXPORT int    string_compare(String a, String b); //Compares sizes and then lexographically the contents. Shorter strings are placed before longer ones.
-EXPORT int    string_compare_at(String larger_string, isize from_index, String smaller_string);
 EXPORT isize  string_find_first(String string, String search_for, isize from); 
 EXPORT isize  string_find_last_from(String in_str, String search_for, isize from);
 EXPORT isize  string_find_last(String string, String search_for); 
@@ -48,6 +47,7 @@ EXPORT isize  string_find_last_from_char(String in_str, char search_for, isize f
 EXPORT isize  string_find_last_char(String string, char search_for); 
 
 EXPORT void             builder_append(String_Builder* builder, String string); //Appends a string
+EXPORT void             builder_assign(String_Builder* builder, String string); //Sets the contents of the builder to be equal to string
 EXPORT String_Builder   builder_from_string(String string); //Allocates a String_Builder from String. The String_Builder needs to be deinit just line any other ???_Array type!
 EXPORT String_Builder   builder_from_cstring(const char* cstring); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
 EXPORT String_Builder   builder_from_string_alloc(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
@@ -98,7 +98,7 @@ EXPORT String_Array string_split(String to_split, String split_by);
 
     EXPORT String string_portion(String string, isize from, isize size)
     {
-        return string_head(string_tail(string, size), from);
+        return string_head(string_tail(string, from), size);
     }
 
     EXPORT String string_make(const char* cstring)
@@ -182,6 +182,40 @@ EXPORT String_Array string_split(String to_split, String split_by);
         return -1;
     }
 
+    EXPORT isize string_find_last_char_from(String string, char search_for, isize from)
+    {
+        for(isize i = from + 1; i-- > 0; )
+            if(string.data[i] == search_for)
+                return i;
+
+        return -1;
+    }
+    
+    EXPORT isize string_find_last_char(String string, char search_for)
+    {
+        return string_find_last_char_from(string, search_for, string.size - 1);
+    }
+
+    EXPORT int string_compare(String a, String b)
+    {
+        if(a.size > b.size)
+            return -1;
+        if(a.size < b.size)
+            return 1;
+
+        int res = memcmp(a.data, b.data, a.size);
+        return res;
+    }
+    
+    EXPORT bool string_is_equal(String a, String b)
+    {
+        if(a.size != b.size)
+            return false;
+
+        bool eq = memcmp(a.data, b.data, a.size) == 0;
+        return eq;
+    }
+
     EXPORT bool string_is_prefixed_with(String string, String prefix)
     {
         if(string.size < prefix.size)
@@ -199,35 +233,14 @@ EXPORT String_Array string_split(String to_split, String split_by);
         String trimmed = string_tail(string, postfix.size);
         return string_is_equal(trimmed, postfix);
     }
-    
-    EXPORT int string_compare_at(String larger_string, isize from_index, String smaller_string)
-    {
-        ASSERT(from_index >= 0);
-        isize rem_size = larger_string.size - from_index;
-        isize diff = rem_size - smaller_string.size;
-        if(diff != 0)
-            return (int) diff;
 
-        int res = memcmp(larger_string.data + from_index, smaller_string.data, rem_size);
-        return res;
-    }
+    EXPORT bool string_has_substring_at(String larger_string, isize from_index, String smaller_string)
+    {
+        if(larger_string.size - from_index < smaller_string.size)
+            return false;
 
-    EXPORT int string_compare(String a, String b)
-    {
-        int res = string_compare_at(a, 0, b);
-        return res;
-    }
-    
-    EXPORT bool string_is_equal_at(String larger_string, isize from_index, String smaller_string)
-    {
-        bool eq = string_compare_at(larger_string, from_index, smaller_string) == 0;
-        return eq;
-    }
-
-    EXPORT bool string_is_equal(String a, String b)
-    {
-        bool eq = string_compare(a, b) == 0;
-        return eq;
+        String portion = string_portion(larger_string, from_index, smaller_string.size);
+        return string_is_equal(portion, smaller_string);
     }
 
     EXPORT const char* cstring_escape(const char* string)
@@ -260,6 +273,11 @@ EXPORT String_Array string_split(String to_split, String split_by);
     EXPORT void builder_append(String_Builder* builder, String string)
     {
         array_append(builder, string.data, string.size);
+    }
+
+    EXPORT void builder_assign(String_Builder* builder, String string)
+    {
+        array_assign(builder, string.data, string.size);
     }
 
     EXPORT String_Builder builder_from_string_alloc(String string, Allocator* allocator)

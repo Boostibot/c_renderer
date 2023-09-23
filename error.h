@@ -130,7 +130,7 @@ EXPORT String error_code(Error error)
     if(registered->translator == NULL)
         return ERROR_SYSTEM_STRING_INVALID_TRANSLATOR;
     else    
-        return ERROR_SYSTEM_STRING_INVALID_TRANSLATOR;
+        return registered->translator(error.code, registered->context);
 }
 
 EXPORT String error_module(Error error)
@@ -203,7 +203,7 @@ EXPORT Error_Module* error_system_get_module(u32 module)
         return NULL;
 
     _Error_Module* wrapper = &global_error_system.modules.data[module - 1];
-    if(wrapper->is_gravestone == false)
+    if(wrapper->is_gravestone)
         return NULL;
     else
         return &wrapper->registered;

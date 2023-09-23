@@ -95,7 +95,7 @@ EXPORT void  hash_index_clear(Hash_Index* to_table);
 EXPORT isize hash_index_find(Hash_Index table, uint64_t hash);
 EXPORT isize hash_index_find_first(Hash_Index table, uint64_t hash, isize* finished_at);
 EXPORT isize hash_index_find_next(Hash_Index table, uint64_t hash, isize prev_found, isize* finished_at);
-EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash);
+EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash, uint64_t value_if_inserted);
 EXPORT isize hash_index_rehash(Hash_Index* table, isize to_size); //rehashes 
 EXPORT void  hash_index_reserve(Hash_Index* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
 EXPORT isize hash_index_insert(Hash_Index* table, uint64_t hash, uint64_t value);
@@ -305,7 +305,7 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         return _lin_probe_hash_find_from(table.entries, table.entries_count, hash, prev_found + 1, finished_at);
     }
 
-    EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash)
+    EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash, uint64_t value_if_inserted)
     {
         hash_index_reserve(table, table->size + 1);
         isize finish_at = 0;
@@ -318,7 +318,9 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         {
             ASSERT(finish_at < table->entries_count);
             table->entries[finish_at].hash = escaped;
+            table->entries[finish_at].value = value_if_inserted;
             table->size += 1;
+            found = finish_at;
         }
 
         return found;

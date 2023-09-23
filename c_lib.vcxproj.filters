@@ -128,7 +128,7 @@
     <ClInclude Include="profile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="img_loader.h">
+    <ClInclude Include="image_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="allocator_wrapper.h">
@@ -150,6 +150,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="_test_unicode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="geometry_manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

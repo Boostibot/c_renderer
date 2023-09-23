@@ -38,10 +38,10 @@ EXPORT void wrapper_allocator_deinit(Wrapper_Allocator* allocator);
 EXPORT void* wrapper_allocator_allocate(Allocator* self, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
 EXPORT Allocator_Stats wrapper_allocator_get_stats(Allocator* self);
 
-//These functions are the stateless interface. Even though their signatures dont exactly match their C counterparts providing align = 8 and filling called_from
-// to any value transforms them appropriately. 
+//These functions are the stateless interface. Even though their signatures dont exactly match their C counterparts they can be used in that way with 
+// the folowing: align = DEF_ALIGN, called_from = SOURCE_INFO(), using_allocator = wrapper_allocator_get_default()
 EXPORT void* wrapper_allocator_malloc(Allocator* using_allocator, isize new_size, isize align, Source_Info called_from);
-EXPORT void* wrapper_allocator_realloc(void* ptr, isize new_size, Source_Info called_from);
+EXPORT void* wrapper_allocator_realloc(Allocator* using_allocator, void* ptr, isize new_size, isize align, Source_Info called_from);
 EXPORT void wrapper_allocator_free(void* ptr, Source_Info called_from);
 
 //Since Wrapper_Allocator is stateless we can just have global allocators that take on the form of one of the default allocators.
@@ -75,7 +75,6 @@ INTERNAL void* wrapper_allocator_allocate_custom(Allocator* using_allocator, isi
     PERF_COUNTER_START(c);
     isize actual_new_size = 0;
     isize actual_old_size = 0;
-    isize recovered_old_size = 0;
     isize actual_align = align;
     void* actual_old_ptr = NULL;
 
@@ -83,7 +82,6 @@ INTERNAL void* wrapper_allocator_allocate_custom(Allocator* using_allocator, isi
     {
         Wrapper_Allocator_Block* old_block_ptr = (Wrapper_Allocator_Block*) old_ptr - 1;
         ASSERT_SLOW(old_block_ptr->size > 0);
-        ASSERT_SLOW(old_block_ptr->align >= sizeof(Wrapper_Allocator_Block));
         ASSERT_SLOW(old_block_ptr->allocated_from != NULL);
         ASSERT_SLOW(is_power_of_two(old_block_ptr->align));
 
@@ -122,11 +120,13 @@ INTERNAL void* wrapper_allocator_allocate_custom(Allocator* using_allocator, isi
         out_ptr = (u8*) actual_new_ptr + actual_align;
         Wrapper_Allocator_Block* new_block_ptr = (Wrapper_Allocator_Block*) out_ptr - 1;
         new_block_ptr->allocated_from = using_allocator;
-        new_block_ptr->size = new_size;
-        new_block_ptr->align = actual_align;
+        new_block_ptr->size = (u32) new_size;
+        new_block_ptr->align = (u32) align;
+        ASSERT(align != 0);
+        ASSERT(using_allocator != NULL);
     }
 
-    PERF_COUNTER_START(END);
+    PERF_COUNTER_END(c);
     return out_ptr;
 }
 
@@ -161,15 +161,17 @@ EXPORT void* wrapper_allocator_allocate(Allocator* self_, isize new_size, void* 
 
 EXPORT void* wrapper_allocator_malloc(Allocator* using_allocator, isize new_size, isize align, Source_Info called_from)
 {
-    ASSERT(new_size > 0);
-    void* out_ptr = wrapper_allocator_allocate_custom(NULL, new_size, NULL, 0, align, called_from, WRAPPER_ALLOC_USE_FOUND_ARGUMENTS);
+    void* out_ptr = NULL;
+    if(new_size != 0)
+        out_ptr = wrapper_allocator_allocate_custom(using_allocator, new_size, NULL, 0, align, called_from, WRAPPER_ALLOC_USE_FOUND_ARGUMENTS);
+    return out_ptr;
 }
 
-EXPORT void* wrapper_allocator_realloc(void* ptr, isize new_size, Source_Info called_from)
+EXPORT void* wrapper_allocator_realloc(Allocator* using_allocator, void* ptr, isize new_size, isize align, Source_Info called_from)
 {
     void* out_ptr = NULL;
     if(ptr != NULL || new_size != 0)
-        out_ptr = wrapper_allocator_allocate_custom(NULL, new_size, ptr, 0, 0, called_from, WRAPPER_ALLOC_USE_FOUND_ARGUMENTS);
+        out_ptr = wrapper_allocator_allocate_custom(using_allocator, new_size, ptr, 0, align, called_from, WRAPPER_ALLOC_USE_FOUND_ARGUMENTS);
 
     return out_ptr;
 }
