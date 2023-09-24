@@ -465,7 +465,7 @@ EXPORT const char* obj_parser_error_on_to_string(Obj_Parser_Error_On statement)
     }
 }
 
-INTERNAL String translate_obj_parser_error(u32 code, void* context)
+INTERNAL String obj_parser_translate_error(u32 code, void* context)
 {
     (void) context;
     return string_make(obj_parser_error_on_to_string((Obj_Parser_Error_On) code));
@@ -475,7 +475,7 @@ EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement)
 {
     static u32 shader_error_module = 0;
     if(shader_error_module == 0)
-        shader_error_module = error_system_register_module(translate_obj_parser_error, STRING("obj_parser.h"), NULL);
+        shader_error_module = error_system_register_module(obj_parser_translate_error, STRING("obj_parser.h"), NULL);
 
     return error_make(shader_error_module, statement);
 }
@@ -1084,7 +1084,7 @@ EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error
     Obj_Model model = {0};
     String_Builder obj_data = {0};
     Error read_state = file_read_entire(obj_path, &obj_data);
-    if(!error_ok(read_state) && log_errors)
+    if(!error_is_ok(read_state) && log_errors)
     {
         String error_string = error_code(read_state);
         LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_load() failed to read file " STRING_FMT " with error " STRING_FMT, 

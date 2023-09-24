@@ -40,7 +40,7 @@ void main()
 #include "gl_shader_util.h"
 #include "gl_debug_output.h"
 #include "shapes.h"
-#include "obj_loader.h"
+#include "format_obj.h"
 #include "image_loader.h"
 
 //#include "stb/stb_image.h"
@@ -855,7 +855,7 @@ void render_screen_frame_buffers_msaa_render_end(Render_Screen_Frame_Buffers_MSA
 
 void render_screen_frame_buffers_msaa_post_process_begin(Render_Screen_Frame_Buffers_MSAA* buffer)
 {
-    // 2. now blit multisampled buffer(s) to normal colorbuffer of intermediate FBO. Image is stored in screenTexture
+    // 2. now blit multisampled buffer(s) to normal colorbuffer of intermediate FBO. Image_Builder is stored in screenTexture
     glBindFramebuffer(GL_READ_FRAMEBUFFER, buffer->frame_buff);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, buffer->intermediate_frame_buff);
     glBlitFramebuffer(0, 0, buffer->width, buffer->height, 0, 0, buffer->width, buffer->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -892,29 +892,14 @@ typedef struct Render_Mesh
     GLuint triangle_count;
 } Render_Mesh;
 
-typedef struct Bitmap
-{
-    u8* data;
-    i32 width;
-    i32 height;
-    u8 channels;
-    bool is_floats;
-
-    i32 from_x;
-    i32 to_x;
-    
-    i32 from_y;
-    i32 to_y;
-
-    String_Builder name;
-} Bitmap;
-
 typedef struct Render_Texture
 {
     GLuint texture;
     isize width;
     isize height;
     
+    GLuint pixel_format;
+    GLuint channel_count;
     String_Builder name;
 } Render_Texture;
 
@@ -936,22 +921,50 @@ void render_texture_deinit(Render_Texture* render)
     memset(&render, 0, sizeof(render));
 }
 
-void render_texture_init(Render_Texture* render, Bitmap bitmap, String name)
+GLenum render_pixel_format_from_image_pixel_format(isize pixel_format)
 {
-    GLenum bitmap_format = bitmap.is_floats ? GL_FLOAT : GL_UNSIGNED_BYTE;
-    GLenum format = GL_RGB;
-    switch(bitmap.channels)
+    switch(pixel_format)
     {
-        case 1: format = GL_RED; break;
-        case 2: format = GL_RG; break;
-        case 3: format = GL_RGB; break;
-        case 4: format = GL_RGBA; break;
-        default: format = GL_RGB; break;
+        case PIXEL_FORMAT_U8:  return GL_UNSIGNED_BYTE;
+        case PIXEL_FORMAT_U16: return GL_UNSIGNED_SHORT;
+        case PIXEL_FORMAT_F32: return GL_FLOAT;
+        default: ASSERT(false); return 0;
+    }
+}
+
+GLenum render_channel_format_from_image_builder_channel_count(isize channel_count)
+{
+    switch(channel_count)
+    {
+        case 1: return GL_RED;
+        case 2: return GL_RG;
+        case 3: return GL_RGB;
+        case 4: return GL_RGBA;
+        default: ASSERT(false); return 0;
+    }
+}
+void render_texture_init(Render_Texture* render, Image image, String name, GLenum internal_format_or_zero)
+{
+    GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.pixel_format);
+    GLenum channel_format = render_channel_format_from_image_builder_channel_count(image_channel_count(image));
+
+    Image_Builder contiguous = {0};
+
+    //not contigous in memory => make contiguous copy
+    if(image_is_contiguous(image) == false)
+    {
+        image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
+        image = image_from_builder(contiguous);
     }
 
+    if(internal_format_or_zero == 0)
+        internal_format_or_zero = channel_format;
+
     render_texture_deinit(render);
-    render->height = bitmap.height;
-    render->width = bitmap.width;
+    render->height = image.height;
+    render->width = image.width;
+    render->pixel_format = pixel_format;
+    render->channel_count = (u32) image_channel_count(image);
     render->name = builder_from_string(name);
     glGenTextures(1, &render->texture);
     glBindTexture(GL_TEXTURE_2D, render->texture);
@@ -959,42 +972,16 @@ void render_texture_init(Render_Texture* render, Bitmap bitmap, String name)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, bitmap_format, bitmap.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_format_or_zero, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
-} 
 
-void render_texture_init_hdr(Render_Texture* render, Bitmap bitmap, String name)
-{
-    GLenum bitmap_format = bitmap.is_floats ? GL_FLOAT : GL_UNSIGNED_BYTE;
-    GLenum format = GL_RGB;
-    switch(bitmap.channels)
-    {
-        case 1: format = GL_RED; break;
-        case 2: format = GL_RG; break;
-        case 3: format = GL_RGB; break;
-        case 4: format = GL_RGBA; break;
-        default: format = GL_RGB; break;
-    }
-
-    render_texture_deinit(render);
-    render->height = bitmap.height;
-    render->width = bitmap.width;
-    render->name = builder_from_string(name);
-    glGenTextures(1, &render->texture);
-    glBindTexture(GL_TEXTURE_2D, render->texture);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, bitmap_format, bitmap.data);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    image_builder_deinit(&contiguous);
 } 
 
 void render_texture_init_from_single_pixel(Render_Texture* render, Vec4 color, u8 channels, String name)
 {
-    Bitmap bitmap = {0};
+    Image image = {0};
     u8 channel_values[4] = {
         (u8) (255*CLAMP(color.x, 0, 1)), 
         (u8) (255*CLAMP(color.y, 0, 1)), 
@@ -1002,14 +989,15 @@ void render_texture_init_from_single_pixel(Render_Texture* render, Vec4 color, u
         (u8) (255*CLAMP(color.w, 0, 1)), 
     };
 
-    bitmap.data = channel_values;
-    bitmap.channels = channels;
-    bitmap.width = 1;
-    bitmap.height = 1;
-    bitmap.to_x = 1;
-    bitmap.to_y = 1;
+    image.pixels = channel_values;
+    image.pixel_size = channels;
+    image.pixel_format = PIXEL_FORMAT_U8;
+    image.width = 1;
+    image.height = 1;
+    image.containing_width = 1;
+    image.containing_height = 1;
 
-    render_texture_init(render, bitmap, name);
+    render_texture_init(render, image, name, 0);
 }
 
 void render_texture_use(const Render_Texture* render, isize slot)
@@ -1032,10 +1020,13 @@ void render_cubemap_deinit(Render_Cubemap* render)
     memset(&render, 0, sizeof(render));
 }
 
-void render_cubemap_init(Render_Cubemap* render, const Bitmap bitmaps[6], String name)
+void render_cubemap_init(Render_Cubemap* render, const Image images[6], String name)
 {
     for (isize i = 0; i < 6; i++)
-        ASSERT(bitmaps[i].data != NULL && "cannot miss data");
+    {
+        ASSERT(image_pixel_count(images[i]) != 0);
+        ASSERT(images[i].pixels != NULL && "cannot miss data");
+    }
 
     render_cubemap_deinit(render);
     render->name = builder_from_string(name);
@@ -1048,21 +1039,23 @@ void render_cubemap_init(Render_Cubemap* render, const Bitmap bitmaps[6], String
 
     for (isize i = 0; i < 6; i++)
     {
-        Bitmap bitmap = bitmaps[i];
-        render->heights[i] = bitmap.height;
-        render->widths[i] = bitmap.width;
+        Image image = images[i];
+        render->heights[i] = image.height;
+        render->widths[i] = image.width;
 
-        GLenum format = GL_RGB;
-        switch(bitmap.channels)
+        Image_Builder contiguous = {0};
+        if(image_is_contiguous(image) == false)
         {
-            case 1: format = GL_R; break;
-            case 2: format = GL_RG; break;
-            case 3: format = GL_RGB; break;
-            case 4: format = GL_RGBA; break;
-            default: format = GL_RGB; break;
+            image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
+            image = image_from_builder(contiguous);
         }
         
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + (GLenum) i, 0, format, (GLsizei) bitmap.width, (GLsizei) bitmap.height, 0, format, GL_UNSIGNED_BYTE, bitmap.data);
+        GLenum channel_format = render_channel_format_from_image_builder_channel_count(image_channel_count(image));
+        GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.pixel_format);
+        //glTexImage2D(GL_TEXTURE_2D, 0, internal_format_or_zero, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + (GLenum) i, 0, channel_format, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
+
+        image_builder_deinit(&contiguous);
     }
 
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -1083,94 +1076,59 @@ void render_cubemap_unuse(const Render_Cubemap* render)
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
-void bitmap_deinit(Bitmap* bitmap)
+Error render_texture_init_from_disk(Render_Texture* tetxure, String path, String name)
 {
-    stbi_image_free(bitmap->data);
-    array_deinit(&bitmap->name);
-    memset(bitmap, 0, sizeof *bitmap);
+    Image_Builder image_builder = {0};
+    
+    Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
+    Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+    allocator_set(prev_allocs);
+    
+    ASSERT(error_is_ok(error));
+    if(error_is_ok(error))
+        render_texture_init(tetxure, image_from_builder(image_builder), name, 0);
+
+    image_builder_deinit(&image_builder);
+
+    return error;
 }
 
-#define BITMAP_FROM_DISK_FLIP 1
-#define BITMAP_FROM_DISK_FLOATS 2
-
-bool bitmap_init_from_disk(Bitmap* bitmap, String path, int flags)
+Error render_texture_init_hdr_from_disk(Render_Texture* tetxure, String path, String name)
 {
-    bitmap_deinit(bitmap);
-    bitmap->name = builder_from_string(path);
+    Image_Builder image_builder = {0};
+    
+    Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
+    Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_F32, IMAGE_LOAD_FLAG_FLIP_Y);
+    allocator_set(prev_allocs);
+    
+    ASSERT(error_is_ok(error));
+    if(error_is_ok(error))
+        render_texture_init(tetxure, image_from_builder(image_builder), name, GL_RGB16F);
 
-    String_Builder escaped = {0};
-    array_init_backed(&escaped, allocator_get_scratch(), 256);
-    builder_append(&escaped, path);
-
-    bool flip = !!(flags & BITMAP_FROM_DISK_FLIP);
-    bool is_floats = !!(flags & BITMAP_FROM_DISK_FLOATS);
-
-    // load and generate the texture
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(flip);
-    unsigned char *data = stbi_load(cstring_from_builder(escaped), &width, &height, &channels, 0);
-
-    if(data)
-    {
-        bitmap->data = data;
-        bitmap->width = width;
-        bitmap->height = height;
-        bitmap->channels = (u8) channels;
-        bitmap->is_floats = is_floats;
-
-        bitmap->to_x = width;
-        bitmap->to_y = height;
-    }
-    else
-    {
-        LOG_ERROR("ASSET", "Failed to open a file: \"" STRING_FMT "\"", path);
-        ASSERT(false);
-    }
-
-    array_deinit(&escaped);
-    return data != NULL;
+    image_builder_deinit(&image_builder);
+    
+    return error;
 }
 
-bool render_texture_init_from_disk(Render_Texture* tetxure, String path, String name)
+Error render_cubemap_init_from_disk(Render_Cubemap* render, String front, String back, String top, String bot, String right, String left, String name)
 {
-    Bitmap bitmap = {0};
-    bool state = bitmap_init_from_disk(&bitmap, path, BITMAP_FROM_DISK_FLIP);
-    ASSERT(state);
-    render_texture_init(tetxure, bitmap, name);
-    bitmap_deinit(&bitmap);
-
-    return state;
-}
-
-bool render_texture_init_hdr_from_disk(Render_Texture* tetxure, String path, String name)
-{
-    Bitmap bitmap = {0};
-    bool state = bitmap_init_from_disk(&bitmap, path, BITMAP_FROM_DISK_FLIP | BITMAP_FROM_DISK_FLOATS);
-    ASSERT(state);
-    render_texture_init_hdr(tetxure, bitmap, name);
-    bitmap_deinit(&bitmap);
-
-    return state;
-}
-
-
-bool render_cubemap_init_from_disk(Render_Cubemap* render, String front, String back, String top, String bot, String right, String left, String name)
-{
-    Bitmap face_bitmaps[6] = {0};
+    Image_Builder face_image_builders[6] = {0};
+    Image face_images[6] = {0};
     String face_paths[6] = {right, left, top, bot, front, back};
 
-    bool state = true;
+    Error error = {0};
     for (isize i = 0; i < 6; i++)
-        state = state && bitmap_init_from_disk(&face_bitmaps[i], face_paths[i], 0);
-
-    render_cubemap_init(render, face_bitmaps, name);
+    {
+        error = ERROR_OR(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+        face_images[i] = image_from_builder(face_image_builders[i]);
+    }
+    
+    render_cubemap_init(render, face_images, name);
     
     for (isize i = 0; i < 6; i++)
-        bitmap_deinit(&face_bitmaps[i]);
+        image_builder_deinit(&face_image_builders[i]);
 
-    return state;
+    return error;
 }
 
 void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Index* triangles, isize triangles_count, String name)
@@ -1263,15 +1221,15 @@ void render_capture_buffers_init(Render_Capture_Buffers* capture, i32 prealloc_w
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-INTERNAL void _make_capture_projections(Mat4* capture_projection, Mat4 capture_views[6])
+INTERNAL void _make_capture_projections(Mat4* capture_projection, Mat4 capture_images[6])
 {
     *capture_projection = mat4_perspective_projection(TAU/4, 1.0f, 0.1f, 10.0f);
-    capture_views[0] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
-    capture_views[1] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3(-1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
-    capture_views[2] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  1.0f,  0.0f), vec3(0.0f,  0.0f,  1.0f));
-    capture_views[3] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f, -1.0f,  0.0f), vec3(0.0f,  0.0f, -1.0f));
-    capture_views[4] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f,  1.0f), vec3(0.0f, -1.0f,  0.0f));
-    capture_views[5] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f, -1.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_images[0] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_images[1] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3(-1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_images[2] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  1.0f,  0.0f), vec3(0.0f,  0.0f,  1.0f));
+    capture_images[3] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f, -1.0f,  0.0f), vec3(0.0f,  0.0f, -1.0f));
+    capture_images[4] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f,  1.0f), vec3(0.0f, -1.0f,  0.0f));
+    capture_images[5] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f, -1.0f), vec3(0.0f, -1.0f,  0.0f));
 }
 
 
@@ -1305,8 +1263,8 @@ void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cu
     glDisable(GL_CULL_FACE);
     
     Mat4 capture_projection = {0};
-    Mat4 capture_views[6] = {0};
-    _make_capture_projections(&capture_projection, capture_views);
+    Mat4 capture_images[6] = {0};
+    _make_capture_projections(&capture_projection, capture_images);
 
     render_shader_use(shader_equi_to_cubemap);
     render_shader_set_mat4(shader_equi_to_cubemap, "projection", capture_projection);
@@ -1319,7 +1277,7 @@ void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cu
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_environment->texture, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        render_shader_set_mat4(shader_equi_to_cubemap, "view", capture_views[i]);
+        render_shader_set_mat4(shader_equi_to_cubemap, "view", capture_images[i]);
         render_mesh_draw(cube_mesh);
     }
     render_shader_unuse(shader_equi_to_cubemap);
@@ -1362,8 +1320,8 @@ void render_cubemap_init_irradiance_from_environment(
     // -----------------------------------------------------------------------------
     
     Mat4 capture_projection = {0};
-    Mat4 capture_views[6] = {0};
-    _make_capture_projections(&capture_projection, capture_views);
+    Mat4 capture_images[6] = {0};
+    _make_capture_projections(&capture_projection, capture_images);
 
     render_shader_use(shader_irradiance_gen);
     render_shader_set_mat4(shader_irradiance_gen, "projection", capture_projection);
@@ -1378,7 +1336,7 @@ void render_cubemap_init_irradiance_from_environment(
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_irradiance->texture, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-        render_shader_set_mat4(shader_irradiance_gen, "view", capture_views[i]);
+        render_shader_set_mat4(shader_irradiance_gen, "view", capture_images[i]);
         render_mesh_draw(cube_mesh);
     }
     render_cubemap_unuse(cubemap_environment);
@@ -1414,8 +1372,8 @@ void render_cubemap_init_prefilter_from_environment(
     // pbr: run a quasi monte-carlo simulation on the environment lighting to create a prefilter (cube)map.
     // ----------------------------------------------------------------------------------------------------
     Mat4 capture_projection = {0};
-    Mat4 capture_views[6] = {0};
-    _make_capture_projections(&capture_projection, capture_views);
+    Mat4 capture_images[6] = {0};
+    _make_capture_projections(&capture_projection, capture_images);
 
     render_shader_use(shader_prefilter);
     render_shader_set_mat4(shader_prefilter, "projection", capture_projection);
@@ -1441,7 +1399,7 @@ void render_cubemap_init_prefilter_from_environment(
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             
-            render_shader_set_mat4(shader_prefilter, "view", capture_views[i]);
+            render_shader_set_mat4(shader_prefilter, "view", capture_images[i]);
             render_mesh_draw(cube_mesh);
         }
     }
@@ -2041,7 +1999,7 @@ void run_func(void* context)
             LOG_INFO("APP", "Resizing");
             render_screen_frame_buffers_msaa_deinit(&screen_buffers);
             render_screen_frame_buffers_msaa_init(&screen_buffers, app->window_framebuffer_width, app->window_framebuffer_height, settings->MSAA_samples);
-            glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
+            glViewport(0, 0, screen_buffers.width, screen_buffers.height);
         }
         
         if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
@@ -2050,60 +2008,60 @@ void run_func(void* context)
         {
             LOG_INFO("APP", "Refreshing shaders");
             PERF_COUNTER_START(shader_load_counter);
-
-            bool ok = true;
-            ok = ok && render_shader_init_from_disk(&shader_solid_color, 
+            
+            Error error = {0};
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_solid_color, 
                 STRING("shaders/solid_color.vert"), 
                 STRING("shaders/solid_color.frag"), 
                 STRING("shader_solid_color"));
-            ok = ok && render_shader_init_from_disk(&shader_depth_color, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_depth_color, 
                 STRING("shaders/depth_color.vert"), 
                 STRING("shaders/depth_color.frag"), 
                 STRING("shader_depth_color"));
-            ok = ok && render_shader_init_from_disk(&shader_screen, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_screen, 
                 STRING("shaders/screen.vert"), 
                 STRING("shaders/screen.frag"), 
                 STRING("shader_screen"));
-            ok = ok && render_shader_init_from_disk(&shader_blinn_phong, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_blinn_phong, 
                 STRING("shaders/blinn_phong.vert"), 
                 STRING("shaders/blinn_phong.frag"), 
                 STRING("shader_blinn_phong"));
-            ok = ok && render_shader_init_from_disk(&shader_skybox, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_skybox, 
                 STRING("shaders/skybox.vert"), 
                 STRING("shaders/skybox.frag"), 
                 STRING("shader_skybox"));
-            ok = ok && render_shader_init_from_disk(&shader_pbr, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr, 
                 STRING("shaders/pbr.vert"), 
                 STRING("shaders/pbr.frag"), 
                 STRING("shader_pbr"));
-            ok = ok && render_shader_init_from_disk(&shader_equi_to_cubemap, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_equi_to_cubemap, 
                 STRING("shaders/equi_to_cubemap.vert"), 
                 STRING("shaders/equi_to_cubemap.frag"), 
                 STRING("shader_equi_to_cubemap"));
-            ok = ok && render_shader_init_from_disk(&shader_irradiance, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_irradiance, 
                 STRING("shaders/irradiance_convolution.vert"), 
                 STRING("shaders/irradiance_convolution.frag"), 
                 STRING("shader_irradiance"));
-            ok = ok && render_shader_init_from_disk(&shader_prefilter, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_prefilter, 
                 STRING("shaders/prefilter.vert"), 
                 STRING("shaders/prefilter.frag"), 
                 STRING("shader_prefilter"));
-            ok = ok && render_shader_init_from_disk(&shader_brdf_lut, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_brdf_lut, 
                 STRING("shaders/brdf_lut.vert"), 
                 STRING("shaders/brdf_lut.frag"), 
                 STRING("shader_brdf_lut"));
-            ok = ok && render_shader_init_from_disk(&shader_pbr_mapped, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr_mapped, 
                 STRING("shaders/pbr_mapped.vert"), 
                 STRING("shaders/pbr_mapped.frag"), 
                 STRING("shader_pbr_mapped"));
-            ok = ok && error_ok(render_shader_init_from_disk_custom(&shader_debug, 
+            error = ERROR_OR(error) render_shader_init_from_disk_custom(&shader_debug, 
                 STRING("shaders/uv_debug.vert"), 
                 STRING("shaders/uv_debug.frag"), 
                 STRING("shaders/uv_debug.geom"), 
-                STRING(""), STRING("shader_debug"), NULL));
+                STRING(""), STRING("shader_debug"), NULL);
                 
             PERF_COUNTER_END(shader_load_counter);
-            ASSERT(ok);
+            ASSERT(error_is_ok(error));
         }
 
         if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
@@ -2113,6 +2071,7 @@ void run_func(void* context)
             LOG_INFO("APP", "Refreshing art");
             PERF_COUNTER_START(art_load_counter);
 
+            PERF_COUNTER_START(art_counter_shapes);
             shape_deinit(&uv_sphere);
             shape_deinit(&cube_sphere);
             shape_deinit(&screen_quad);
@@ -2124,9 +2083,10 @@ void run_func(void* context)
             screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
             unit_cube = shapes_make_unit_cube();
             unit_quad = shapes_make_unit_quad();
+            PERF_COUNTER_END(art_counter_shapes);
 
-            bool ok = true;
-            ok = ok && error_ok(obj_parser_load(&falcon, STRING("resources/models/sponza.obj"), NULL, true));
+            Error error = {0};
+            error = ERROR_OR(error) obj_parser_load(&falcon, STRING("resources/models/sponza.obj"), NULL, true);
 
             render_mesh_init_from_shape(&render_uv_sphere, uv_sphere, STRING("uv_sphere"));
             render_mesh_init_from_shape(&render_cube_sphere, cube_sphere, STRING("cube_sphere"));
@@ -2135,9 +2095,9 @@ void run_func(void* context)
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_falcon, falcon, STRING("unit_cube"));
 
-            ok = ok && render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
-            ok = ok && render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
-            ok = ok && render_cubemap_init_from_disk(&cubemap_skybox, 
+            error = ERROR_OR(error) render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            error = ERROR_OR(error) render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
+            error = ERROR_OR(error) render_cubemap_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
                 STRING("resources/skybox_back.jpg"), 
                 STRING("resources/skybox_top.jpg"), 
@@ -2145,57 +2105,24 @@ void run_func(void* context)
                 STRING("resources/skybox_right.jpg"), 
                 STRING("resources/skybox_left.jpg"), STRING("skybox"));
                 
-            ok = ok && render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
-            ok = ok && render_texture_init_from_disk(&material_metal.texture_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
-            ok = ok && render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
-            ok = ok && render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
+            PERF_COUNTER_START(art_counter_single_tex);
+            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
+            PERF_COUNTER_END(art_counter_single_tex);
+            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
+            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
+            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
             render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(default_ao), 1, STRING("rustediron2_ao"));
+            
 
-            Image test_image = {0};
-            Error test_error = image_read_from_file(&test_image, STRING("resources/rustediron2/rustediron2_basecolor.png"), 0, PIXEL_FORMAT_U8);
+            Image_Builder test_image = {0};
+            Error read_error = image_read_from_file(&test_image, STRING("resources/floor.jpg"), 0, PIXEL_FORMAT_U8, 0);
+            LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
 
-
-
-            {
-                Image tester_image  = {0};
-                tester_image.pixel_size = 2;
-                tester_image.format = PIXEL_FORMAT_U16;
-
-                image_resize(&tester_image, 4, 4);
-                for(isize i = 0; i < tester_image.width * tester_image.height; i++)
-                {
-                    u16* data = (u16*) (void*) &tester_image.pixels[i * 2];
-                    *data = (u16) i;
-                }
-
-                Image to_image = {0};
-                to_image.pixel_size = 2;
-                to_image.format = PIXEL_FORMAT_U16;
-                image_resize(&to_image, 2, 2);
-
-
-                Image_View from_imagev = image_view_portion(image_view_from_image(&tester_image), 1, 1, 2, 2);
-                Image_View to_imagev = image_view_from_image(&to_image);
-
-                image_view_copy(&to_imagev, from_imagev, 0, 0);
-
-                TEST(((u16*) (void*) to_imagev.pixels)[0] == 5);
-                TEST(((u16*) (void*) to_imagev.pixels)[1] == 6);
-                TEST(((u16*) (void*) to_imagev.pixels)[2] == 9);
-                TEST(((u16*) (void*) to_imagev.pixels)[3] == 10);
-
-            }
-            Image_View test_view = image_view_portion(image_view_from_image(&test_image), 20, 20, 256, 256);
-
-            LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(test_error)));
-
-            Error write_error = image_write_to_file(test_view, STRING("resources/rustediron2/rustediron2_basecolor_small.png"));
+            Error write_error = image_write_to_file(image_from_builder(test_image), STRING("resources/floor.ppm"));
             LOG_INFO("ASSET", "Write "STRING_FMT, STRING_PRINT(error_code(write_error)));
+            image_builder_deinit(&test_image);
 
-            image_deinit(&test_image);
-
-
-            ok = ok && render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
+            error = ERROR_OR(error) render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
             
 
             render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
@@ -2203,18 +2130,23 @@ void run_func(void* context)
             f32 use_gamma = 2.0f;
             if(control_is_down(&app->controls, CONTROL_DEBUG_3))
                 use_gamma = 1.0f;
-
+                
+            PERF_COUNTER_START(art_counter_environment);
             render_cubemap_init_environment_from_environment_texture(
                 &cubemap_environment, res_environment, res_environment, &texture_environment, use_gamma, 
                 &capture_buffers, &shader_equi_to_cubemap, render_cube);
+            PERF_COUNTER_END(art_counter_environment);
+            
+            PERF_COUNTER_START(art_counter_irafiance);
             render_cubemap_init_irradiance_from_environment(
                 &cubemap_irradiance, res_irradiance, res_irradiance, irradicance_sample_delta,
                 &cubemap_environment, &capture_buffers, &shader_irradiance, render_cube);
+            PERF_COUNTER_END(art_counter_irafiance);
 
             glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
             
             PERF_COUNTER_END(art_load_counter);
-            ASSERT(ok);
+            ASSERT(error_is_ok(error));
         }
 
         if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
@@ -2391,7 +2323,6 @@ void run_func(void* context)
                 if(app->is_in_uv_debug_mode)
                     render_mesh_draw_using_uv_debug(render_cube_sphere, &shader_debug, projection, view, model);
             }
-
             
             //render pbr sphere
             {
@@ -2514,12 +2445,21 @@ void run_func(void* context)
             || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
             || frame_num == 0)
         {
+            
+            PERF_COUNTER_START(art_counter_prefileter);
             render_cubemap_init_prefilter_from_environment(
                 &cubemap_prefilter, res_prefilter, res_prefilter,
                 &cubemap_environment, &capture_buffers, &shader_prefilter, render_cube);
+            PERF_COUNTER_END(art_counter_prefileter);
+            
+            PERF_COUNTER_START(art_counter_brdf_lut);
             render_texture_init_BRDF_LUT(
                 &texture_brdf_lut, res_brdf_lut, res_brdf_lut,
                 &capture_buffers, &shader_brdf_lut, render_quad);
+            PERF_COUNTER_END(art_counter_brdf_lut);
+            
+            log_perf_counters(true);
+
             glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
         }
 

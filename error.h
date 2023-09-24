@@ -50,21 +50,23 @@ STATIC_ASSERT(sizeof(errno_t) == sizeof(u32)); //"error size must be compatible!
 #define ERROR_SYSTEM_STRING_NO_MODULE          STRING("")
 #define ERROR_SYSTEM_STRING_INVALID_MODULE     STRING("error.h: invalid module number")
 #define ERROR_SYSTEM_STRING_INVALID_TRANSLATOR STRING("error.h: missing translator for module")
+#define ERROR_SYSTEM_STRING_UNEXPECTED_ERROR   STRING("Unexpected error code for this module. This is likely a result of a bug.")
 
+EXPORT Error error_ok(); //returns the okay error code. 
 EXPORT Error error_make(u32 module, u32 code);
 EXPORT Error error_or(Error first, Error second); //If first has error return it. Else returns second. Effectively returns first || second.
 EXPORT Error error_from_platform(Platform_Error error);
 EXPORT Error error_from_stdlib(errno_t error);
 
-EXPORT bool error_ok(Error error); //returns wheter the error is okay ie is not error at all.
+EXPORT bool error_is_ok(Error error); //returns wheter the error is okay ie is not error at all.
 EXPORT String error_code(Error error); //returns the translated text of the error that occured. The returned string must not be stored anywhere! (this means either directly printed or immediately copied)
 EXPORT String error_module(Error error); //returns the name of the module the error belongs to. The returned string must not be stored anywhere!
 
 EXPORT void error_code_into(String_Builder* into, Error error);
 EXPORT void error_module_into(String_Builder* into, Error error);
 
-
-#define ERROR_OR(first) !error_ok((first)) ? (first) : 
+#define ERROR_OK        BRACE_INIT(Error){0, 0}
+#define ERROR_OR(err)  ((err).code != 0) ? (err) : 
 //use like:
 // Error my_error = {0};
 // my_error = ERROR_OR(my_error) function_returning_error(1);
@@ -113,7 +115,7 @@ typedef struct _Error_System
 
 static _Error_System global_error_system = {0};
 
-EXPORT bool error_ok(Error error)
+EXPORT bool error_is_ok(Error error)
 {
     return error.code == 0;
 }
@@ -252,7 +254,7 @@ EXPORT Error error_make(u32 module, u32 code)
 
 EXPORT Error error_or(Error first, Error second)
 {
-    if(!error_ok(first))
+    if(!error_is_ok(first))
         return first;
     else
         return second;

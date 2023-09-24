@@ -156,7 +156,7 @@ EXPORT void* wrapper_allocator_allocate(Allocator* self_, isize new_size, void* 
     }
 
     ASSERT(using_allocator != NULL && using_allocator != self_ && "wrapper allocator must not be used as default when use mode is not WRAPPER_ALLOCATOR_USE_ALLOCATOR_PARENT!");
-    return wrapper_allocator_allocate_custom(using_allocator, new_size, old_ptr, old_size, align, called_from, WRAPPER_ALLOC_USE_PROVIDED_ARGUMENTS);
+    return wrapper_allocator_allocate_custom(using_allocator, new_size, old_ptr, old_size, align, called_from, WRAPPER_ALLOC_USE_FOUND_ARGUMENTS);
 }
 
 EXPORT void* wrapper_allocator_malloc(Allocator* using_allocator, isize new_size, isize align, Source_Info called_from)

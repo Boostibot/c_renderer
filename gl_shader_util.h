@@ -179,7 +179,7 @@ Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_p
 
     Error compile_error = ERROR_OR(vertex_error) ERROR_OR(fragment_error) geomtery_error;
     isize error_at_compilation_stage = 0; 
-    if(error_ok(compile_error))
+    if(error_is_ok(compile_error))
     {
         //Else tries to build the program
         // if an error ocurs here it gets written to error
@@ -193,18 +193,18 @@ Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_p
     }
         
     //Error reporting ... that is longer than the function itself :/
-    if(!error_ok(compile_error))
+    if(!error_is_ok(compile_error))
     {
         #if defined(DO_LOG) && defined(DO_LOG_ERROR)
             String_Builder vertex_error_string = {scratch};
             String_Builder fragment_error_string = {scratch};
             String_Builder geometry_error_string = {scratch};
 
-            if(!error_ok(vertex_error))
+            if(!error_is_ok(vertex_error))
                 error_code_into(&vertex_error_string, vertex_error);
-            if(!error_ok(fragment_error))
+            if(!error_is_ok(fragment_error))
                 error_code_into(&fragment_error_string, fragment_error);
-            if(!error_ok(geomtery_error))
+            if(!error_is_ok(geomtery_error))
                 error_code_into(&geometry_error_string, geomtery_error);
 
             //if has error print the translated version
@@ -256,13 +256,13 @@ Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_p
 
             if(error)
             {
-                if(!error_ok(vertex_error))
+                if(!error_is_ok(vertex_error))
                     array_copy(error, vertex_error_string);
-                else if(!error_ok(fragment_error))
+                else if(!error_is_ok(fragment_error))
                     array_copy(error, fragment_error_string);
-                else if(!error_ok(geomtery_error))
+                else if(!error_is_ok(geomtery_error))
                     array_copy(error, geometry_error_string);
-                else if(!error_ok(compile_error))
+                else if(!error_is_ok(compile_error))
                     array_copy(error, temp);
             }
 
@@ -282,13 +282,13 @@ Error render_shader_init_from_disk_custom(Render_Shader* shader, String vertex_p
     return compile_error;
 }
     
-bool render_shader_init_from_disk(Render_Shader* shader, String vertex_path, String fragment_path, String name)
+Error render_shader_init_from_disk(Render_Shader* shader, String vertex_path, String fragment_path, String name)
 {
     //String_Builder name = {0};
     //array_init_backed(&name, allocator_get_scratch(), 256);
     //format_into(&name, "vert: " STRING_FMT " frag: " STRING_FMT, STRING_PRINT(vertex_path), STRING_PRINT(fragment_path));
 
-    return error_ok(render_shader_init_from_disk_custom(shader, vertex_path, fragment_path, STRING(""), STRING(""), name, NULL));
+    return render_shader_init_from_disk_custom(shader, vertex_path, fragment_path, STRING(""), STRING(""), name, NULL);
 }
 
 void render_shader_use(const Render_Shader* shader)

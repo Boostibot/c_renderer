@@ -230,6 +230,7 @@
     <ClInclude Include="error.h" />
     <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
+    <ClInclude Include="format_netbpm.h" />
     <ClInclude Include="geometry_manager.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="gl_debug_output.h" />
@@ -240,7 +241,7 @@
     <ClInclude Include="image_loader.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="math.h" />
-    <ClInclude Include="obj_loader.h" />
+    <ClInclude Include="format_obj.h" />
     <ClInclude Include="parse.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="profile.h" />
@@ -257,6 +258,7 @@
     <ClInclude Include="_test_base64.h" />
     <ClInclude Include="_test_hash_index.h" />
     <ClInclude Include="_test_hash_table.h" />
+    <ClInclude Include="_test_image.h" />
     <ClInclude Include="_test_log.h" />
     <ClInclude Include="_test_math.h" />
     <ClInclude Include="_test_random.h" />
