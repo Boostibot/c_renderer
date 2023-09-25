@@ -1831,7 +1831,7 @@ void log_perf_counters(bool sort_by_name)
                     break;
             }
 
-            common_prefix = string_limit(common_prefix, matches_to);
+            common_prefix = string_safe_head(common_prefix, matches_to);
         }
 
         array_push(&counters, *counter);
@@ -2094,8 +2094,10 @@ void run_func(void* context)
             render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_falcon, falcon, STRING("unit_cube"));
-
+            
+            PERF_COUNTER_START(art_counter_single_tex);
             error = ERROR_OR(error) render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            PERF_COUNTER_END(art_counter_single_tex);
             error = ERROR_OR(error) render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
             error = ERROR_OR(error) render_cubemap_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
@@ -2105,9 +2107,7 @@ void run_func(void* context)
                 STRING("resources/skybox_right.jpg"), 
                 STRING("resources/skybox_left.jpg"), STRING("skybox"));
                 
-            PERF_COUNTER_START(art_counter_single_tex);
             error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
-            PERF_COUNTER_END(art_counter_single_tex);
             error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
             error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
             error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
@@ -2115,12 +2115,23 @@ void run_func(void* context)
             
 
             Image_Builder test_image = {0};
+            Image_Builder test_image2 = {0};
             Error read_error = image_read_from_file(&test_image, STRING("resources/floor.jpg"), 0, PIXEL_FORMAT_U8, 0);
             LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
 
-            Error write_error = image_write_to_file(image_from_builder(test_image), STRING("resources/floor.ppm"));
+            Error write_error = image_write_to_file(image_from_builder(test_image), STRING("resources/floor.pam"));
             LOG_INFO("ASSET", "Write "STRING_FMT, STRING_PRINT(error_code(write_error)));
+            
+            PERF_COUNTER_START(art_counter_single_simple_tex);
+            read_error = image_read_from_file(&test_image2, STRING("resources/floor.pam"), 0, PIXEL_FORMAT_U8, 0);
+            PERF_COUNTER_END(art_counter_single_simple_tex);
+            LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
+
+            ASSERT(image_builder_all_pixels_size(test_image) == image_builder_all_pixels_size(test_image2));
+            ASSERT(memcmp(test_image.pixels, test_image2.pixels, image_builder_all_pixels_size(test_image)));
+
             image_builder_deinit(&test_image);
+            image_builder_deinit(&test_image2);
 
             error = ERROR_OR(error) render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
             

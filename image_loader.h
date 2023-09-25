@@ -80,7 +80,7 @@ INTERNAL Error _image_loader_to_error(const char* error_string)
     if(error_module == 0)
     {
         hash_index_init(&error_hash, allocator_get_static());
-        error_module = error_system_register_module(_image_loader_translate_error, STRING("stb_image.h"), &error_hash);
+        error_module = error_system_register_module(_image_loader_translate_error, STRING("image_loader.h"), &error_hash);
     }
 
     //We assume no hash collisions.
@@ -97,46 +97,70 @@ INTERNAL Error _image_loader_to_error(const char* error_string)
 
 EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize desired_channels, Image_Pixel_Format format, i32 flags)
 {
-    int width = 0;
-    int height = 0;
-    int channels = 0;
 
     Error error = {0};
-    void* allocated = NULL;
     
-    stbi_set_flip_vertically_on_load((flags & IMAGE_LOAD_FLAG_FLIP_Y) > 0);
-    switch(format)
+    Netbpm_Format netbpm_format = netbpm_format_classify(data);
+    if(netbpm_format != NETBPM_FORMAT_NONE)
     {
-        case PIXEL_FORMAT_U8:
-            allocated = stbi_load_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
-            break;
+        switch(netbpm_format)
+        {
+            case NETBPM_FORMAT_PPM: error = netbpm_format_ppm_read_into(image, data); break;
+            case NETBPM_FORMAT_PGM: error = netbpm_format_pgm_read_into(image, data); break;
+            case NETBPM_FORMAT_PFM: error = netbpm_format_pfm_read_into(image, data); break;
+            case NETBPM_FORMAT_PFMG: error = netbpm_format_pfmg_read_into(image, data); break;
+            case NETBPM_FORMAT_PAM: error = netbpm_format_pam_read_into(image, data); break;
 
-        case PIXEL_FORMAT_U16:
-            allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
-            break;
-
-        case PIXEL_FORMAT_F32:
-            allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
-            break;
-
-        case PIXEL_FORMAT_U24:
-        case PIXEL_FORMAT_U32:
-        default: 
-            ASSERT(false);
-            break;
-    }
-
-    if(allocated)
-    {
-        image_builder_init(image, wrapper_allocator_get_default(), channels, format);
-        image->pixels = (u8*) allocated;
-        image->width = (i32) width;
-        image->height = (i32) height;
+            case NETBPM_FORMAT_NONE:
+            case NETBPM_FORMAT_PBM_ASCII:
+            case NETBPM_FORMAT_PGM_ASCII:
+            case NETBPM_FORMAT_PPM_ASCII:
+            case NETBPM_FORMAT_PBM:
+            default: error = _image_loader_to_error("unsupported netbpm format"); break;
+        }
     }
     else
     {
-        error = _image_loader_to_error(stbi_failure_reason());
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        void* allocated = NULL;
+        stbi_set_flip_vertically_on_load((flags & IMAGE_LOAD_FLAG_FLIP_Y) > 0);
+
+        switch(format)
+        {
+            case PIXEL_FORMAT_U8:
+                allocated = stbi_load_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+                break;
+
+            case PIXEL_FORMAT_U16:
+                allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+                break;
+
+            case PIXEL_FORMAT_F32:
+                allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+                break;
+
+            case PIXEL_FORMAT_U24:
+            case PIXEL_FORMAT_U32:
+            default: 
+                ASSERT(false);
+                break;
+        }
+        
+        if(allocated)
+        {
+            image_builder_init(image, wrapper_allocator_get_default(), channels, format);
+            image->pixels = (u8*) allocated;
+            image->width = (i32) width;
+            image->height = (i32) height;
+        }
+        else
+        {
+            error = _image_loader_to_error(stbi_failure_reason());
+        }
     }
+
 
     return error;
 }
@@ -232,7 +256,7 @@ EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File
             else if(image_channel_count(image) > 3)
                 out_error = _image_loader_to_error(error_msg_bad_chanel_count);
             else
-                out_error = netbpm_format_pfm_write_append(into, image, 1.0f);
+                out_error = netbpm_format_pfm_write_into(into, image, 1.0f);
         } break;
 
         case IMAGE_LOAD_FILE_FORMAT_PPM: {
@@ -241,11 +265,14 @@ EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File
             else if(image_channel_count(image) > 3)
                 out_error = _image_loader_to_error(error_msg_bad_chanel_count);
             else
-                out_error = netbpm_format_ppm_write_append(into, image);
+                out_error = netbpm_format_ppm_write_into(into, image);
         } break;
             
+        case IMAGE_LOAD_FILE_FORMAT_PAM: {
+            out_error = netbpm_format_pam_write_into(into, image);
+        } break;
+
         case IMAGE_LOAD_FILE_FORMAT_NONE:
-        case IMAGE_LOAD_FILE_FORMAT_PAM:
         default: 
             out_error = _image_loader_to_error(error_msg_bad_file_format);
         break;

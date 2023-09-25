@@ -231,7 +231,7 @@ int64_t platform_local_epoch_time()
     GetSystemTimeAsFileTime(&filetime);
     FILETIME local_filetime = {0};
     bool okay = FileTimeToLocalFileTime(&filetime, &local_filetime);
-    assert(okay);
+    assert(okay); (void) okay;
     int64_t epoch_time = _filetime_to_epoch_time(local_filetime);
     return epoch_time;
 }

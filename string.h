@@ -30,7 +30,8 @@ EXPORT String string_from_builder(String_Builder builder);
 EXPORT String string_make(const char* cstring); //converts a null terminated cstring into a String
 EXPORT String string_head(String string, isize to); //keeps only charcters to to ( [0, to) interval )
 EXPORT String string_tail(String string, isize from); //keeps only charcters from from ( [from, string.size) interval )
-EXPORT String string_limit(String string, isize max_size); //if the string is longer than max_size trims it to max_size else returns it unchanged 
+EXPORT String string_safe_head(String string, isize to); //returns string_head using to. If to is outside the range [0, string.size] clamps it to the range. 
+EXPORT String string_safe_tail(String string, isize from); //returns string_tail using from. If from is outside the range [0, string.size] clamps it to the range. 
 EXPORT String string_range(String string, isize from, isize to); //returns a string containing characters staring from from and ending in to ( [from, to) interval )
 EXPORT String string_portion(String string, isize from, isize size); //returns a string containing size characters staring from ( [from, from + size) interval )
 EXPORT bool   string_is_equal(String a, String b); //Returns true if the contents and sizes of the strings match
@@ -83,12 +84,14 @@ EXPORT String_Array string_split(String to_split, String split_by);
         return tail;
     }
 
-    EXPORT String string_limit(String string, isize max_size)
+    EXPORT String string_safe_head(String string, isize to)
     {
-        if(max_size < string.size)
-            return string_head(string, max_size);
-        else
-            return string;
+        return string_head(string, CLAMP(to, 0, string.size));
+    }
+    
+    EXPORT String string_safe_tail(String string, isize from)
+    {
+        return string_tail(string, CLAMP(from, 0, string.size));
     }
 
     EXPORT String string_range(String string, isize from, isize to)
