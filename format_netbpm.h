@@ -315,7 +315,7 @@ EXPORT Error netbpm_format_write_pam(String_Builder* append_into, Image image)
     if(image.pixel_format == PIXEL_FORMAT_U8 || image.pixel_format == PIXEL_FORMAT_U16)
     {
         max_val = image.pixel_format == PIXEL_FORMAT_U8 ? 255 : 65535;
-        depth = channels;
+        depth = (int) channels;
         switch(channels)
         {
             case 1: tuple_type = "GRAYSCALE"; break;
