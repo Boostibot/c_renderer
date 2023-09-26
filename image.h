@@ -70,6 +70,7 @@ EXPORT isize image_builder_byte_stride(Image_Builder image);
 EXPORT isize image_builder_all_pixels_size(Image_Builder image);
 
 EXPORT Image image_from_builder(Image_Builder image);
+EXPORT Image image_from_data(void* pixels, isize width, isize height, isize pixel_size, Image_Pixel_Format pixel_format);
 EXPORT bool image_is_contiguous(Image view); //returns true if the view is contiguous in memory
 EXPORT void* image_at(Image image, i32 x, i32 y);
 EXPORT isize image_channel_count(Image image);
@@ -185,24 +186,27 @@ EXPORT isize image_pixel_count(Image image)
     return image.width * image.height;
 }
 
-EXPORT Image image_from_builder(Image_Builder image)
+EXPORT Image image_from_data(void* pixels, isize width, isize height, isize pixel_size, Image_Pixel_Format pixel_format)
 {
     Image view = {0};
-    view.pixels = image.pixels;
-    view.pixel_size = image.pixel_size;
-    view.pixel_format = image.pixel_format;
+    view.pixels = (u8*) pixels;
+    view.pixel_size = (i32) pixel_size;
+    view.pixel_format = (i32) pixel_format;
 
-    view.containing_width = image.width;
-    view.containing_height = image.height;
+    view.containing_width = (i32) width;
+    view.containing_height = (i32) height;
 
     view.from_x = 0;
     view.from_y = 0;
-    view.width = image.width;
-    view.height = image.height;
-
+    view.width = (i32) width;
+    view.height = (i32) height;
     return view;
 }
 
+EXPORT Image image_from_builder(Image_Builder image)
+{
+    return image_from_data(image.pixels, image.width, image.height, image.pixel_size, image.pixel_format);
+}
 
 EXPORT bool image_is_contiguous(Image view)
 {

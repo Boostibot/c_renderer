@@ -301,3 +301,58 @@ EXPORT bool match_decimal_f32(String str, isize* index, f32* out)
     *out = result;
     return true;
 }
+
+
+INTERNAL void test_match()
+{
+    {
+        isize index = 0;
+        TEST(match_whitespace(STRING("   "), &index));
+        TEST(index == 3);
+    }
+    
+    {
+        isize index = 0;
+        TEST(match_whitespace(STRING("   \n \r \t "), &index));
+        TEST(index == 9);
+    }
+    
+    {
+        isize index = 0;
+        TEST(match_whitespace(STRING("a "), &index) == false);
+        TEST(index == 0);
+    }
+    
+    {
+        isize index = 0;
+        TEST(match_whitespace_custom(STRING("a "), &index, MATCH_INVERTED));
+        TEST(index == 1);
+    }
+    
+    {
+        isize index = 0;
+        TEST(match_whitespace_custom(STRING("a"), &index, MATCH_INVERTED));
+        TEST(index == 1);
+    }
+
+    {
+        f32 test_f32 = 0;
+        isize index = 0;
+        TEST(match_decimal_f32(STRING("12"), &index, &test_f32));
+        TEST(is_near_scaledf(12.0f, test_f32, EPSILON));
+    }
+    
+    {
+        f32 test_f32 = 0;
+        isize index = 0;
+        TEST(match_decimal_f32(STRING("-12"), &index, &test_f32));
+        TEST(is_near_scaledf(-12.0f, test_f32, EPSILON));
+    }
+    
+    {
+        f32 test_f32 = 0;
+        isize index = 0;
+        TEST(match_decimal_f32(STRING("-12.05"), &index, &test_f32));
+        TEST(is_near_scaledf(-12.05f, test_f32, EPSILON));
+    }
+}

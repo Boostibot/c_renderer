@@ -2113,25 +2113,30 @@ void run_func(void* context)
             error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
             render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(default_ao), 1, STRING("rustediron2_ao"));
             
+            Obj_Material_Info_Array materials = {0};
+            error = ERROR_OR(error) obj_parser_load_mtl(&materials, STRING("resources/models/sponza.mtl"), NULL, true);
 
-            Image_Builder test_image = {0};
-            Image_Builder test_image2 = {0};
-            Error read_error = image_read_from_file(&test_image, STRING("resources/floor.jpg"), 0, PIXEL_FORMAT_U8, 0);
-            LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
+            if(0)
+            {
+                Image_Builder test_image = {0};
+                Image_Builder test_image2 = {0};
+                Error read_error = image_read_from_file(&test_image, STRING("resources/floor.jpg"), 0, PIXEL_FORMAT_U8, 0);
+                LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
 
-            Error write_error = image_write_to_file(image_from_builder(test_image), STRING("resources/floor.pam"));
-            LOG_INFO("ASSET", "Write "STRING_FMT, STRING_PRINT(error_code(write_error)));
+                Error write_error = image_write_to_file(image_from_builder(test_image), STRING("resources/floor.pam"));
+                LOG_INFO("ASSET", "Write "STRING_FMT, STRING_PRINT(error_code(write_error)));
             
-            PERF_COUNTER_START(art_counter_single_simple_tex);
-            read_error = image_read_from_file(&test_image2, STRING("resources/floor.pam"), 0, PIXEL_FORMAT_U8, 0);
-            PERF_COUNTER_END(art_counter_single_simple_tex);
-            LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
+                PERF_COUNTER_START(art_counter_single_simple_tex);
+                read_error = image_read_from_file(&test_image2, STRING("resources/floor.pam"), 0, PIXEL_FORMAT_U8, 0);
+                PERF_COUNTER_END(art_counter_single_simple_tex);
+                LOG_INFO("ASSET", "Read "STRING_FMT, STRING_PRINT(error_code(read_error)));
 
-            ASSERT(image_builder_all_pixels_size(test_image) == image_builder_all_pixels_size(test_image2));
-            ASSERT(memcmp(test_image.pixels, test_image2.pixels, image_builder_all_pixels_size(test_image)));
+                ASSERT(image_builder_all_pixels_size(test_image) == image_builder_all_pixels_size(test_image2));
+                ASSERT(memcmp(test_image.pixels, test_image2.pixels, image_builder_all_pixels_size(test_image)));
 
-            image_builder_deinit(&test_image);
-            image_builder_deinit(&test_image2);
+                image_builder_deinit(&test_image);
+                image_builder_deinit(&test_image2);
+            }
 
             error = ERROR_OR(error) render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
             

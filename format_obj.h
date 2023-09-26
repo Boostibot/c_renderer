@@ -22,24 +22,46 @@
 
 #endif
 
+#define OBJ_PARSER_MAX_ERRORS_TO_PRINT 1000
+#define MTL_PARSER_MAX_ERRORS_TO_PRINT 1000
+
+#define MTL_ILLUM_MIN 0
+#define MTL_ILLUM_MAX 10
+
 typedef enum Obj_Parser_Error_On
 {
-    OBJ_PARSER_ERROR_ON_NONE,
-    OBJ_PARSER_ERROR_ON_FACE,
-    OBJ_PARSER_ERROR_ON_COMMENT,
-    OBJ_PARSER_ERROR_ON_VERTEX_POS,
-    OBJ_PARSER_ERROR_ON_VERTEX_NORM,
-    OBJ_PARSER_ERROR_ON_VERTEX_UV,
-    OBJ_PARSER_ERROR_ON_MATERIAL_LIBRARY,
-    OBJ_PARSER_ERROR_ON_MATERIAL_USE,
-    OBJ_PARSER_ERROR_ON_POINT,
-    OBJ_PARSER_ERROR_ON_LINE,
-    OBJ_PARSER_ERROR_ON_GROUP,
-    OBJ_PARSER_ERROR_ON_SMOOTH_SHADING,
-    OBJ_PARSER_ERROR_ON_OBJECT,
-    OBJ_PARSER_ERROR_ON_INVALID_INDEX,
-    OBJ_PARSER_ERROR_ON_OTHER,
+    OBJ_PARSER_ERROR_NONE = 0,
+    FORMAT_MTL_ERROR_NONE = 1,
+
+    OBJ_PARSER_ERROR_FACE,
+    OBJ_PARSER_ERROR_COMMENT,
+    OBJ_PARSER_ERROR_VERTEX_POS,
+    OBJ_PARSER_ERROR_VERTEX_NORM,
+    OBJ_PARSER_ERROR_VERTEX_UV,
+    OBJ_PARSER_ERROR_MATERIAL_LIBRARY,
+    OBJ_PARSER_ERROR_MATERIAL_USE,
+    OBJ_PARSER_ERROR_POINT,
+    OBJ_PARSER_ERROR_LINE,
+    OBJ_PARSER_ERROR_GROUP,
+    OBJ_PARSER_ERROR_SMOOTH_SHADING,
+    OBJ_PARSER_ERROR_OBJECT,
+    OBJ_PARSER_ERROR_INVALID_INDEX,
+    OBJ_PARSER_ERROR_OTHER,
+    
+    FORMAT_MTL_ERROR_NEWMTL,
+    FORMAT_MTL_ERROR_MISSING_NEWMTL,
+    FORMAT_MTL_ERROR_COLOR_AMBIENT,
+    FORMAT_MTL_ERROR_COLOR_DIFFUSE,
+    FORMAT_MTL_ERROR_COLOR_SPECULAR,
+    FORMAT_MTL_ERROR_SPECULAR_EXPOMENT,
+    FORMAT_MTL_ERROR_OPACITY,
+    FORMAT_MTL_ERROR_TRANSMISSION_FILTER,
+    FORMAT_MTL_ERROR_TRANSMISSION_OPTICAL_DENSITY,
+    FORMAT_MTL_ERROR_ILLUMINATION_MODE,
+    FORMAT_MTL_ERROR_MAP,
+    FORMAT_MTL_ERROR_OTHER,
 } Obj_Parser_Error_On;
+
 
 typedef struct Obj_Parser_Error
 {
@@ -51,9 +73,9 @@ typedef struct Obj_Parser_Error
 
 typedef struct Obj_Texture_Info {
     String_Builder path;        
-    Vec3 offset;                //-o u (v (w))
-    Vec3 scale;                 //-s u (v (w))
-    Vec3 turbulance;            //-t u (v (w)) //is some kind of perturbance in the specified direction
+    Vec3 offset;                //-o u (vec (w))
+    Vec3 scale;                 //-s u (vec (w))
+    Vec3 turbulance;            //-t u (vec (w)) //is some kind of perturbance in the specified direction
     i32 texture_resolution;     //-texres [i32 power of two]
     f32 mipmap_sharpness_boost; //-boost [f32]
     f32 bump_multiplier;        //-bm [f32]
@@ -95,6 +117,14 @@ typedef struct Obj_Material_Info {
     Obj_Texture_Info map_displacement;           //disp
     Obj_Texture_Info map_stencil;                //decal
 
+    Obj_Texture_Info map_reflection_spehere;     //refl -type {sphere, cube_top, cube_bottom, cube_front, cube_back, cube_left, cube_right}
+    Obj_Texture_Info map_reflection_cube_top;    //refl 
+    Obj_Texture_Info map_reflection_cube_bottom; //refl
+    Obj_Texture_Info map_reflection_cube_front;  //refl
+    Obj_Texture_Info map_reflection_cube_back;   //refl
+    Obj_Texture_Info map_reflection_cube_left;   //refl
+    Obj_Texture_Info map_reflection_cube_right;  //refl
+
     Obj_Texture_Info map_pbr_rougness;           //Pr/map_Pr [options] [name]
     Obj_Texture_Info map_pbr_metallic;           //Pm/map_Pm
     Obj_Texture_Info map_pbr_sheen;              //Ps/map_Ps
@@ -105,8 +135,7 @@ typedef struct Obj_Material_Info {
     Obj_Texture_Info map_pbr_anisotropy_rotation;//anisor
     Obj_Texture_Info map_pbr_normal;             //norm
 
-    Obj_Texture_Info map_rma; //RMA material (roughness, metalness, ambient occlusion)
-    Obj_Texture_Info map_orm; //alternate definition of map_RMA
+    Obj_Texture_Info map_pbr_rma; //RMA material (roughness, metalness, ambient occlusion) //map_RMA/map_ORM       
 } Obj_Material_Info;
 
 typedef struct Obj_Group {
@@ -139,21 +168,15 @@ typedef struct Obj_Model {
 } Obj_Model;
 
 EXPORT void obj_texture_info_deinit(Obj_Texture_Info* info);
+EXPORT void obj_material_info_deinit(Obj_Material_Info* info);
 EXPORT void obj_group_deinit(Obj_Group* info);
 EXPORT void obj_model_deinit(Obj_Model* info);
 
 EXPORT void obj_texture_info_init(Obj_Texture_Info* info, Allocator* alloc);
+EXPORT void obj_material_info_init(Obj_Material_Info* info, Allocator* alloc);
 EXPORT void obj_group_init(Obj_Group* info, Allocator* alloc);
 EXPORT void obj_model_init(Obj_Model* info, Allocator* alloc);
 
-EXPORT const char* obj_parser_error_on_to_string(Obj_Parser_Error_On statement);
-EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement);
-
-EXPORT Error obj_load_obj_only(Obj_Model* out, String obj_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
-EXPORT Error obj_load_mtl_only(Obj_Material_Info_Array* out, String obj_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
-
-EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
-EXPORT Error obj_parse_mtl(Obj_Material_Info_Array* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
 
 //Loads obj model along with all of its required materials
 EXPORT Error obj_load(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors);
@@ -163,98 +186,106 @@ EXPORT Error obj_load(Obj_Model* out, String obj_source, Obj_Parser_Error_Array*
 #if (defined(LIB_ALL_IMPL) || defined(LIB_OBJ_PARSER_IMPL)) && !defined(LIB_OBJ_PARSER_HAS_IMPL)
 #define LIB_OBJ_PARSER_HAS_IMPL
 
-
-INTERNAL void test_match()
+EXPORT void obj_texture_info_deinit(Obj_Texture_Info* info)
 {
-    {
-        isize index = 0;
-        TEST(match_whitespace(STRING("   "), &index));
-        TEST(index == 3);
-    }
-    
-    {
-        isize index = 0;
-        TEST(match_whitespace(STRING("   \n \r \t "), &index));
-        TEST(index == 9);
-    }
-    
-    {
-        isize index = 0;
-        TEST(match_whitespace(STRING("a "), &index) == false);
-        TEST(index == 0);
-    }
-    
-    {
-        isize index = 0;
-        TEST(match_whitespace_custom(STRING("a "), &index, MATCH_INVERTED));
-        TEST(index == 1);
-    }
-    
-    {
-        isize index = 0;
-        TEST(match_whitespace_custom(STRING("a"), &index, MATCH_INVERTED));
-        TEST(index == 1);
-    }
+    (void) info;
+}
+EXPORT void obj_material_info_deinit(Obj_Material_Info* info)
+{
+    (void) info;
 
-    {
-        f32 test_f32 = 0;
-        isize index = 0;
-        TEST(match_decimal_f32(STRING("12"), &index, &test_f32));
-        TEST(is_near_scaledf(12.0f, test_f32, EPSILON));
-    }
-    
-    {
-        f32 test_f32 = 0;
-        isize index = 0;
-        TEST(match_decimal_f32(STRING("-12"), &index, &test_f32));
-        TEST(is_near_scaledf(-12.0f, test_f32, EPSILON));
-    }
-    
-    {
-        f32 test_f32 = 0;
-        isize index = 0;
-        TEST(match_decimal_f32(STRING("-12.05"), &index, &test_f32));
-        TEST(is_near_scaledf(-12.05f, test_f32, EPSILON));
-    }
+}
+EXPORT void obj_model_deinit(Obj_Model* info)
+{
+    (void) info;
+
+}
+
+EXPORT void obj_texture_info_init(Obj_Texture_Info* info, Allocator* alloc)
+{
+    (void) info, alloc;
+}
+EXPORT void obj_material_info_init(Obj_Material_Info* info, Allocator* alloc)
+{
+    (void) info, alloc;
+
+}
+EXPORT void obj_model_init(Obj_Model* info, Allocator* alloc)
+{
+    (void) info, alloc;
+
 }
 
 EXPORT const char* obj_parser_error_on_to_string(Obj_Parser_Error_On statement)
 {
     switch(statement)
     {
-        case OBJ_PARSER_ERROR_ON_NONE: return "OBJ_PARSER_ERROR_ON_NONE";
-        case OBJ_PARSER_ERROR_ON_FACE: return "OBJ_PARSER_ERROR_ON_FACE";
-        case OBJ_PARSER_ERROR_ON_COMMENT: return "OBJ_PARSER_ERROR_ON_COMMENT";
-        case OBJ_PARSER_ERROR_ON_VERTEX_POS: return "OBJ_PARSER_ERROR_ON_VERTEX_POS";
-        case OBJ_PARSER_ERROR_ON_VERTEX_NORM: return "OBJ_PARSER_ERROR_ON_VERTEX_NORM";
-        case OBJ_PARSER_ERROR_ON_VERTEX_UV: return "OBJ_PARSER_ERROR_ON_VERTEX_UV";
-        case OBJ_PARSER_ERROR_ON_MATERIAL_LIBRARY: return "OBJ_PARSER_ERROR_ON_MATERIAL_LIBRARY";
-        case OBJ_PARSER_ERROR_ON_MATERIAL_USE: return "OBJ_PARSER_ERROR_ON_MATERIAL_USE";
-        case OBJ_PARSER_ERROR_ON_POINT: return "OBJ_PARSER_ERROR_ON_POINT";
-        case OBJ_PARSER_ERROR_ON_LINE: return "OBJ_PARSER_ERROR_ON_LINE";
-        case OBJ_PARSER_ERROR_ON_GROUP: return "OBJ_PARSER_ERROR_ON_GROUP";
-        case OBJ_PARSER_ERROR_ON_SMOOTH_SHADING: return "OBJ_PARSER_ERROR_ON_SMOOTH_SHADING";
-        case OBJ_PARSER_ERROR_ON_OBJECT: return "OBJ_PARSER_ERROR_ON_OBJECT";
-        case OBJ_PARSER_ERROR_ON_INVALID_INDEX: return "OBJ_PARSER_ERROR_ON_INVALID_INDEX";
+        case OBJ_PARSER_ERROR_NONE: return "OBJ_PARSER_ERROR_NONE";
+        case OBJ_PARSER_ERROR_FACE: return "OBJ_PARSER_ERROR_FACE";
+        case OBJ_PARSER_ERROR_COMMENT: return "OBJ_PARSER_ERROR_COMMENT";
+        case OBJ_PARSER_ERROR_VERTEX_POS: return "OBJ_PARSER_ERROR_VERTEX_POS";
+        case OBJ_PARSER_ERROR_VERTEX_NORM: return "OBJ_PARSER_ERROR_VERTEX_NORM";
+        case OBJ_PARSER_ERROR_VERTEX_UV: return "OBJ_PARSER_ERROR_VERTEX_UV";
+        case OBJ_PARSER_ERROR_MATERIAL_LIBRARY: return "OBJ_PARSER_ERROR_MATERIAL_LIBRARY";
+        case OBJ_PARSER_ERROR_MATERIAL_USE: return "OBJ_PARSER_ERROR_MATERIAL_USE";
+        case OBJ_PARSER_ERROR_POINT: return "OBJ_PARSER_ERROR_POINT";
+        case OBJ_PARSER_ERROR_LINE: return "OBJ_PARSER_ERROR_LINE";
+        case OBJ_PARSER_ERROR_GROUP: return "OBJ_PARSER_ERROR_GROUP";
+        case OBJ_PARSER_ERROR_SMOOTH_SHADING: return "OBJ_PARSER_ERROR_SMOOTH_SHADING";
+        case OBJ_PARSER_ERROR_OBJECT: return "OBJ_PARSER_ERROR_OBJECT";
+        case OBJ_PARSER_ERROR_INVALID_INDEX: return "OBJ_PARSER_ERROR_INVALID_INDEX";
+        case FORMAT_MTL_ERROR_NONE: return "FORMAT_MTL_ERROR_NONE";
+        case FORMAT_MTL_ERROR_NEWMTL: return "FORMAT_MTL_ERROR_NEWMTL";
+        case FORMAT_MTL_ERROR_MISSING_NEWMTL: return "FORMAT_MTL_ERROR_MISSING_NEWMTL";
+        case FORMAT_MTL_ERROR_COLOR_AMBIENT: return "FORMAT_MTL_ERROR_COLOR_AMBIENT";
+        case FORMAT_MTL_ERROR_COLOR_DIFFUSE: return "FORMAT_MTL_ERROR_COLOR_DIFFUSE";
+        case FORMAT_MTL_ERROR_COLOR_SPECULAR: return "FORMAT_MTL_ERROR_COLOR_SPECULAR";
+        case FORMAT_MTL_ERROR_SPECULAR_EXPOMENT: return "FORMAT_MTL_ERROR_SPECULAR_EXPOMENT";
+        case FORMAT_MTL_ERROR_OPACITY: return "FORMAT_MTL_ERROR_OPACITY";
+        case FORMAT_MTL_ERROR_TRANSMISSION_FILTER: return "FORMAT_MTL_ERROR_TRANSMISSION_FILTER";
+        case FORMAT_MTL_ERROR_TRANSMISSION_OPTICAL_DENSITY: return "FORMAT_MTL_ERROR_TRANSMISSION_OPTICAL_DENSITY";
+        case FORMAT_MTL_ERROR_ILLUMINATION_MODE: return "FORMAT_MTL_ERROR_ILLUMINATION_MODE";
+        case FORMAT_MTL_ERROR_MAP: return "FORMAT_MTL_ERROR_MAP";
+        case FORMAT_MTL_ERROR_OTHER: return "FORMAT_MTL_ERROR_OTHER";
         
         default:
-        case OBJ_PARSER_ERROR_ON_OTHER: return "OBJ_PARSER_ERROR_ON_OTHER";
+        case OBJ_PARSER_ERROR_OTHER: return "OBJ_PARSER_ERROR_OTHER";
     }
 }
 
 INTERNAL String obj_parser_translate_error(u32 code, void* context)
 {
     (void) context;
-    return string_make(obj_parser_error_on_to_string((Obj_Parser_Error_On) code));
+    enum {LOCAL_BUFF_SIZE = 256, MAX_ERRORS = 4};
+    static int error_index = 0;
+    static char error_strings[MAX_ERRORS][LOCAL_BUFF_SIZE + 1] = {0};
+
+    int line = code >> 8;
+    int error_flag = code & 0xFF;
+
+    const char* error_flag_str = obj_parser_error_on_to_string((Obj_Parser_Error_On) error_flag);
+
+    memset(error_strings[error_index], 0, LOCAL_BUFF_SIZE);
+    snprintf(error_strings[error_index], LOCAL_BUFF_SIZE, "%s line: %d", error_flag_str, line);
+    String out = string_make(error_strings[error_index]);
+    error_index += 1;
+    return out;
 }
 
-EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement)
+EXPORT u32 obj_parser_error_module()
 {
-    static u32 shader_error_module = 0;
-    if(shader_error_module == 0)
-        shader_error_module = error_system_register_module(obj_parser_translate_error, STRING("obj_parser.h"), NULL);
+    static u32 error_module = 0;
+    if(error_module == 0)
+        error_module = error_system_register_module(obj_parser_translate_error, STRING("obj_parser.h"), NULL);
 
-    return error_make(shader_error_module, statement);
+    return error_module;
+}
+
+
+EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement, isize line)
+{
+    u32 splatted = (u32) line << 8 | (u32) statement;
+    return error_make(obj_parser_error_module(), splatted);
 }
 
 
@@ -274,8 +305,14 @@ EXPORT void obj_group_deinit(Obj_Group* info)
     memset(info, 0, sizeof *info);
 }
 
-EXPORT Error obj_parser_parse(Shape* append_to, String obj_source, Obj_Parser_Error_Array* error_or_null, bool log_errors);
-EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
+//EXPORT Error deduplicate_obj_data()
+//{
+//
+//}
+
+//@TODO: separate parsing and transforming to engine friendly format into two different things
+
+EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
 {
     test_match();
 
@@ -303,7 +340,6 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
     //Init temporary buffers
     Error had_error = {0};
     isize error_count = 0;
-    isize max_error_print = 1000;
     
     Obj_Group_Array temp_groups = {scratch_alloc};
     Obj_Vertex_Index_Array obj_indeces_array = {scratch_alloc};
@@ -352,14 +388,12 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
         String line = string_range(obj_source, line_start_i, line_end_i);
         ASSERT(line.size > 0);
 
-        bool error = false;
-        Obj_Parser_Error_On statement = OBJ_PARSER_ERROR_ON_NONE;
+        Obj_Parser_Error_On error = OBJ_PARSER_ERROR_NONE;
 
         char first_char = line.data[0];
         switch (first_char) 
         {
             case '#': {
-                statement = OBJ_PARSER_ERROR_ON_COMMENT;
                 // Skip comments
                 continue;
             } break;
@@ -369,8 +403,6 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 switch (second_char)
                 {
                     case ' ': {
-                        statement = OBJ_PARSER_ERROR_ON_VERTEX_POS;
-
                         Vec3 pos = {0};
                         isize line_index = 1;
                         bool matched = true
@@ -382,13 +414,12 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                             && match_decimal_f32(line, &line_index, &pos.z);
 
                         if(!matched)
-                            error = true;
+                            error = OBJ_PARSER_ERROR_VERTEX_POS;
                         else
                             array_push(&pos_array, pos);
                     } break;
 
                     case 'n': {
-                        statement = OBJ_PARSER_ERROR_ON_VERTEX_NORM;
 
                         Vec3 norm = {0};
                         isize line_index = 2;
@@ -401,13 +432,12 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                             && match_decimal_f32(line, &line_index, &norm.z);
 
                         if(!matched)
-                            error = true;
+                            error = OBJ_PARSER_ERROR_VERTEX_NORM;
                         else
                             array_push(&norm_array, norm);
                     } break;
 
                     case 't': {
-                        statement = OBJ_PARSER_ERROR_ON_VERTEX_UV;
 
                         // @NOTE: Ignoring Z if present.
                         Vec2 tex_coord = {0};
@@ -419,19 +449,18 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                             && match_decimal_f32(line, &line_index, &tex_coord.y);
                         
                         if(!matched)
-                            error = true;
+                            error = OBJ_PARSER_ERROR_VERTEX_UV;
                         else 
                             array_push(&uv_array, tex_coord);
                     } break;
 
                     default: {
-                        error = true;
+                        error = OBJ_PARSER_ERROR_OTHER;
                     }
                 }
             } break;
 
             case 'f': {
-                statement = OBJ_PARSER_ERROR_ON_FACE;
 
                 // can be one of the following:
                 // 1: f 1/1/1 2/2/2 3/3/3   ~~ pos/tex/norm pos/tex/norm pos/tex/norm
@@ -516,7 +545,7 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 }
 
                 if(!ok)
-                    error = true;
+                    error = OBJ_PARSER_ERROR_FACE;
 
                 //correct negative values indeces. If index is negative it refers to the -i-nth last parsed
                 // value in the given category. If the category does not recieve data (NULL) set the index to 0
@@ -542,7 +571,6 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
             
             //Smoothing
             case 's': {
-                statement = OBJ_PARSER_ERROR_ON_SMOOTH_SHADING;
                 isize line_index1 = 1;
                 i64 smoothing_index = 0;
                 bool matched_smoothing_index = true
@@ -563,13 +591,12 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 }
                 else
                 {
-                    error = true;
+                    error = OBJ_PARSER_ERROR_SMOOTH_SHADING;
                 }
             } break;
             
             //Group: g [group1] [group2] ...
             case 'g': {
-                statement = OBJ_PARSER_ERROR_ON_GROUP;
                 //We permit only a single group owner.
                 //We simply ignore further group names.
                 //All trinagles are owned by a single object.
@@ -598,13 +625,12 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 }
                 else
                 {
-                    error = true;
+                    error = OBJ_PARSER_ERROR_GROUP;
                 }
             } break;
 
             //Object: g [object_name] ...
             case 'o': {
-                statement = OBJ_PARSER_ERROR_ON_OBJECT;
             
                 isize line_index = 1;
                 bool matches = match_whitespace(line, &line_index);
@@ -630,16 +656,15 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 }
                 else
                 {
-                    error = true;
+                    error = OBJ_PARSER_ERROR_OBJECT;
                 }
             } break;
 
             case 'm': {
-                statement = OBJ_PARSER_ERROR_ON_MATERIAL_LIBRARY;
 
                 isize line_index = 0;
-                bool matches = match_sequence(line, &line_index, STRING("mtllib"));
-                matches = matches && match_whitespace(line, &line_index);
+                bool matches = match_sequence(line, &line_index, STRING("mtllib"))
+                    && match_whitespace(line, &line_index);
                     
                 isize from_index = line_index;
                 isize to_index = line_index;
@@ -652,16 +677,14 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 }
                 else
                 {
-                    error = true;
+                    error = OBJ_PARSER_ERROR_MATERIAL_LIBRARY;
                 }
             } break;
             
             case 'u': {
-                statement = OBJ_PARSER_ERROR_ON_MATERIAL_USE;
-
                 isize line_index = 0;
-                bool matches = match_sequence(line, &line_index, STRING("usemtl"));
-                matches = matches && match_whitespace(line, &line_index);
+                bool matches = match_sequence(line, &line_index, STRING("usemtl"))
+                    && match_whitespace(line, &line_index);
                     
                 isize from_index = line_index;
                 isize to_index = line_index;
@@ -674,12 +697,12 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 }
                 else
                 {
-                    error = true;
+                    error = OBJ_PARSER_ERROR_MATERIAL_USE;
                 }
             } break;
 
             default: {
-                error = true;
+                error = OBJ_PARSER_ERROR_OTHER;
             }
         }
 
@@ -687,25 +710,26 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
         if(error)
         {
             bool unimplemented = false;
-            had_error = obj_parser_error_on_to_error(statement);
+            if(error_is_ok(had_error))
+                had_error = obj_parser_error_on_to_error(error, line_number);
 
             if(output_errors_to_or_null)
             {
                 Obj_Parser_Error parser_error = {0};
                 parser_error.index = line_start_i;
                 parser_error.line = (i32) line_number;
-                parser_error.statement = statement;
+                parser_error.statement = error;
                 parser_error.unimplemented = unimplemented;
                 array_push(output_errors_to_or_null, parser_error);
             }
 
-            if(log_errors && error_count <= max_error_print)
+            if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
             {
-                const char* error_text = obj_parser_error_on_to_string(statement);
+                const char* error_text = obj_parser_error_on_to_string(error);
                 LOG_WARN(OBJ_LOADER_CHANNEL, "malformed statement %s on line %lld:\n" STRING_FMT, error_text, (lld) line_number, STRING_PRINT(line));
             }
             
-            if(log_errors && error_count == max_error_print)
+            if(log_errors && error_count == OBJ_PARSER_MAX_ERRORS_TO_PRINT)
             {
                 LOG_WARN(OBJ_LOADER_CHANNEL, "file contains more than %lld errors. Stopping to print.", (lld) error_count);
             }
@@ -769,9 +793,9 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
                 Obj_Vertex_Index index = obj_indeces_array.data[i];
                 if(index.norm_i1 < 0 || index.norm_i1 > norm_array.size)
                 {
-                    if(log_errors && error_count <= max_error_print)
+                    if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
                         LOG_ERROR(OBJ_LOADER_CHANNEL, "norm index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.norm_i1);
-                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_ON_INVALID_INDEX);
+                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_INVALID_INDEX, 0);
                 }
                 else
                 {
@@ -780,9 +804,9 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
 
                 if(index.pos_i1 < 0 || index.pos_i1 > pos_array.size)
                 {
-                    if(log_errors && error_count <= max_error_print)
+                    if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
                         LOG_ERROR(OBJ_LOADER_CHANNEL, "pos index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.pos_i1);
-                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_ON_INVALID_INDEX);
+                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_INVALID_INDEX, 0);
                     discard_triangle = true;
                 }
                 else
@@ -792,9 +816,9 @@ EXPORT Error obj_parse_obj(Obj_Model* out, String obj_source, Obj_Parser_Error_A
 
                 if(index.uv_i1 < 0 || index.uv_i1 > uv_array.size)
                 {
-                    if(log_errors && error_count <= max_error_print)
+                    if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
                         LOG_ERROR(OBJ_LOADER_CHANNEL, "uv index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.uv_i1);
-                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_ON_INVALID_INDEX);
+                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_INVALID_INDEX, 0);
                 }
                 else
                 {
@@ -868,7 +892,7 @@ EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error
             STRING_PRINT(obj_path), STRING_PRINT(error_string));
     }
 
-    Error parse_state = ERROR_OR(read_state) obj_parse_obj(&model, string_from_builder(obj_data), error_or_null, log_errors);
+    Error parse_state = ERROR_OR(read_state) obj_parser_parse(&model, string_from_builder(obj_data), error_or_null, log_errors);
     allocator_set(prev_allocs);
 
     array_append(&append_to->triangles, model.triangles.data, model.triangles.size);
@@ -878,4 +902,487 @@ EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error
     LOG_INFO("PERF", "Loading of " STRING_FMT " took: %lf ms", STRING_PRINT(obj_path), perf_counter_get_ellapsed(c) * 1000);
     return parse_state;
 }
+
+bool match_space_separated_vec3(String str, isize* index, Vec3* matched)
+{
+    isize i = *index;
+    bool state = match_decimal_f32(str, &i, &matched->x)
+        && match_whitespace(str, &i)
+        && match_decimal_f32(str, &i, &matched->y)
+        && match_whitespace(str, &i)
+        && match_decimal_f32(str, &i, &matched->z);
+
+    if(state)
+        *index = i;
+    return state;
+}
+
+//matches the sequence:x (y (z)) where x, y, z are f32 and () means optional
+bool match_space_separated_optional_vec3(String str, isize* index, Vec3* matched)
+{
+    isize i = *index;
+    bool matched_x = match_decimal_f32(str, &i, &matched->x);
+
+    bool matched_y = matched_x 
+        && match_whitespace(str, &i)
+        && match_decimal_f32(str, &i, &matched->y);
+    
+    bool matched_z = matched_y 
+        && match_whitespace(str, &i)
+        && match_decimal_f32(str, &i, &matched->z);
+
+    bool state = matched_x || matched_y || matched_z;
+    if(state)
+        *index = i;
+    return state;
+}
+
+EXPORT Error obj_parser_parse_mtl(Obj_Material_Info_Array* out, String mtl_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
+{
+    Allocator* def_alloc = allocator_get_default();
+    Obj_Material_Info* material = NULL;
+    Error out_error = {0};
+    isize error_count = 0;
+    
+    isize line_start_i = 0;
+    isize line_end_i = -1;
+    isize line_number = 0;
+    for(isize ender_i = 0; ender_i < mtl_source.size; ender_i++)
+    {
+        line_number += 1;
+        line_start_i = line_end_i + 1;
+        line_end_i = string_find_first_char(mtl_source, '\n', line_start_i);
+        
+        //if is the last line stop at the next iteration
+        if(line_end_i == -1)
+        {
+            ender_i = mtl_source.size; 
+            line_end_i = mtl_source.size;
+        }
+
+        String line = string_range(mtl_source, line_start_i, line_end_i);
+        isize skipped_whitespace = 0;
+        match_whitespace(line, &skipped_whitespace);
+
+        line = string_tail(line, skipped_whitespace);
+
+        //skip blank lines
+        if(line.size == 0)
+            continue;
+
+        Obj_Parser_Error_On error = FORMAT_MTL_ERROR_NONE;
+        isize i = 0;
+        Vec3 vec = {0};
+
+        if(i = 0, match_sequence(line, &i, STRING("newmtl")))
+        {
+            match_whitespace(line, &i);
+            isize name_start = i;
+            isize name_end = i;
+            match_whitespace_custom(line, &name_end, MATCH_INVERTED);
+
+            String name = string_range(line, name_start, name_end);
+            if(name.size == 0)
+                error = FORMAT_MTL_ERROR_NEWMTL;
+            else
+            {
+                Obj_Material_Info new_material = {0};
+                obj_material_info_init(&new_material, def_alloc);
+                builder_assign(&new_material.name, name);
+
+                array_push(out, new_material);
+                material = array_last(*out);
+            }
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("#")))
+        {
+            //comment => do nothing
+        }
+        else if(material == NULL)
+        {
+            error = FORMAT_MTL_ERROR_MISSING_NEWMTL;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Ka")))
+        {
+            if(match_whitespace(line, &i) && match_space_separated_vec3(line, &i, &vec))
+                material->ambient_color = vec;
+            else
+                error = FORMAT_MTL_ERROR_COLOR_AMBIENT;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Kd")))
+        {
+            if(match_whitespace(line, &i) && match_space_separated_vec3(line, &i, &vec))
+                material->diffuse_color = vec;
+            else
+                error = FORMAT_MTL_ERROR_COLOR_DIFFUSE;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Ks")))
+        {
+            if(match_whitespace(line, &i) && match_space_separated_vec3(line, &i, &vec))
+                material->specular_color = vec;
+            else
+                error = FORMAT_MTL_ERROR_COLOR_SPECULAR;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Ns"))) //d=0 => transparent
+        {
+            f32 val = 0;
+            if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
+                material->specular_exponent = val;
+            else
+                error = FORMAT_MTL_ERROR_SPECULAR_EXPOMENT;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("d"))) //d=0 => transparent
+        {
+            f32 val = 0;
+            if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
+                material->opacity = val;
+            else
+                error = FORMAT_MTL_ERROR_OPACITY;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Tr"))) //Tr=1 => transparent
+        {
+            f32 val = 0;
+            if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
+                material->opacity = 1.0f - val;
+            else
+                error = FORMAT_MTL_ERROR_OPACITY;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Tf")))
+        {
+            if(match_whitespace(line, &i) && match_space_separated_vec3(line, &i, &vec))
+                material->only_for_transparent_transmission_filter_color = vec;
+            else
+                error = FORMAT_MTL_ERROR_TRANSMISSION_FILTER;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("Ni")))
+        {
+            f32 val = 0;
+            if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
+                material->only_for_transparent_optical_density = val;
+            else
+                error = FORMAT_MTL_ERROR_TRANSMISSION_OPTICAL_DENSITY;
+        }
+        else if(i = 0, match_sequence(line, &i, STRING("illum")))
+        {
+            i64 val = 0;
+            if(match_whitespace(line, &i) && match_decimal_u64(line, &i, &val)
+                && MTL_ILLUM_MIN <= val && val <= MTL_ILLUM_MAX)
+                    material->illumination_mode = (i32) val;
+            else
+                error = FORMAT_MTL_ERROR_ILLUMINATION_MODE;
+        }
+        else
+        {
+            typedef struct {
+                Obj_Texture_Info* tex_info;
+                const char* sequences[2];
+            } Mtl_Map_Table_Entry;
+
+            //try to match any remaining statements as map kinds. 
+            //We use a table to model this because all of the options have the same syntax
+            Mtl_Map_Table_Entry map_table[] = {
+                    {&material->map_ambient,                 "map_Ka"},
+                    {&material->map_ambient_diffuse,         "map_Kd"},
+                    {&material->map_specular_color,          "map_Ks"},
+                    {&material->map_specular_highlight,      "map_Ns "},
+                    {&material->map_alpha,                   "map_d"},
+                    {&material->map_bump,                    "map_bump", "bump"},
+                    {&material->map_displacement,            "disp"},
+                    {&material->map_stencil,                 "decal"},
+                    {&material->map_reflection_spehere,      "refl "},
+
+                    //@TODO: Ke and map_Ke are different and so are probably the rest of these.
+                    //       make the parsing proper!
+                    {&material->map_pbr_rougness,            "Pr", "map_Pr"},
+                    {&material->map_pbr_metallic,            "Pm", "map_Pm"},
+                    {&material->map_pbr_sheen,               "Ps", "map_Ps"},
+                    {&material->map_pbr_clearcoat_thickness, "Pc"},
+                    {&material->map_pbr_clearcoat_rougness,  "Pcr"},
+                    {&material->map_pbr_emmisive,            "Ke", "map_Ke"},
+                    {&material->map_pbr_anisotropy,          "aniso"},
+                    {&material->map_pbr_anisotropy_rotation, "anisor"},
+                    {&material->map_pbr_normal,              "norm"},
+                    {&material->map_pbr_rma,                 "map_RMA", "map_ORM"},
+            };
+
+            //try to match any of the sequences from the above table
+            isize map_table_matched_i = -1;
+            for(isize k = 0; k < STATIC_ARRAY_SIZE(map_table); k++)
+            {
+                Mtl_Map_Table_Entry map = map_table[k];
+                for(isize j = 0; j < 2; j++)
+                {
+                    String str_sequence = string_make(map.sequences[j]);
+                    if(str_sequence.size != 0 && match_sequence(line, &i, str_sequence))
+                    {
+                        map_table_matched_i = k;
+                        break;
+                    }
+                }
+            }
+
+            //if found match try to parse arguments
+            bool matched = map_table_matched_i != -1;
+            if(!matched)
+                error = FORMAT_MTL_ERROR_OTHER;
+            else
+            {
+                Mtl_Map_Table_Entry map_entry = map_table[map_table_matched_i];
+                Obj_Texture_Info* tex_info = map_entry.tex_info;
+                Obj_Texture_Info temp_tex_info = {0};
+                obj_texture_info_init(&temp_tex_info, def_alloc);
+
+                while(matched && i < line.size)
+                {
+                    matched = match_whitespace(line, &i);
+                    isize arg_from = i;
+                    String arg = string_tail(line, arg_from);
+                    isize arg_i = 0;
+                        
+                    Vec3 arg_vec = {0};
+                    //offset
+                    if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-o")))
+                    {
+                        if(match_whitespace(arg, &arg_i) && match_space_separated_optional_vec3(arg, &arg_i, &arg_vec))
+                            temp_tex_info.offset = arg_vec;
+                        else
+                            matched = false;
+                    }
+                    //scale
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-s")))
+                    {
+                        
+                        if(match_whitespace(arg, &arg_i) && match_space_separated_optional_vec3(arg, &arg_i, &arg_vec))
+                            temp_tex_info.scale = arg_vec;
+                        else
+                            matched = false;
+                    }
+                    //turbulance
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-t")))
+                    {
+                        
+                        if(match_whitespace(arg, &arg_i) && match_space_separated_optional_vec3(arg, &arg_i, &arg_vec))
+                            temp_tex_info.turbulance = arg_vec;
+                        else
+                            matched = false;
+                    }
+                    //texture_resolution
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-texres")))
+                    {
+                        i64 res = 0;
+                        if(match_whitespace(arg, &arg_i) && match_decimal_u64(arg, &arg_i, &res))
+                            temp_tex_info.texture_resolution = (i32) res;
+                        else
+                            matched = false;
+                    }
+                    //mipmap_sharpness_boost
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-boost")))
+                    {
+                        f32 val = 0;
+                        if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &val))
+                            temp_tex_info.mipmap_sharpness_boost = val;
+                        else
+                            matched = false;
+                    }
+                    //bump_multiplier
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-bm")))
+                    {
+                        f32 val = 0;
+                        if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &val))
+                            temp_tex_info.bump_multiplier = val;
+                        else
+                            matched = false;
+                    }
+                    //modify_brigthness modify_contrast
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-mm")))
+                    {
+                        f32 modify_brigthness = 0;
+                        f32 modify_contrast = 0;
+                        if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &modify_brigthness)
+                            && match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &modify_contrast))
+                        {
+                            temp_tex_info.modify_brigthness = modify_brigthness;
+                            temp_tex_info.modify_contrast = modify_contrast;
+                        }
+                        else
+                            matched = false;
+                    }
+                    //is_repeating
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-clamp")))
+                    {
+                        bool had_space = match_whitespace(arg, &arg_i);
+                        if(had_space && match_sequence(arg, &arg_i, STRING("on")))
+                            temp_tex_info.is_repeating = false;
+                        else if(had_space && match_sequence(arg, &arg_i, STRING("off")))
+                            temp_tex_info.is_repeating = true;
+                        else
+                            matched = false;
+                    }
+                    //blend_u
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-blendu")))
+                    {
+                        bool had_space = match_whitespace(arg, &arg_i);
+                        if(had_space && match_sequence(arg, &arg_i, STRING("on")))
+                            temp_tex_info.blend_u = false;
+                        else if(had_space && match_sequence(arg, &arg_i, STRING("off")))
+                            temp_tex_info.blend_u = true;
+                        else
+                            matched = false;
+                    }
+                    //blend_v
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-blendv")))
+                    {
+                        bool had_space = match_whitespace(arg, &arg_i);
+                        if(had_space && match_sequence(arg, &arg_i, STRING("on")))
+                            temp_tex_info.blend_v = false;
+                        else if(had_space && match_sequence(arg, &arg_i, STRING("off")))
+                            temp_tex_info.blend_v = true;
+                        else
+                            matched = false;
+                    }
+                    //-type sphere 
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-type")))
+                    {
+                        ASSERT(map_entry.sequences[0] != NULL);
+                        //if is not on refl map then error
+                        if(strcmp(map_entry.sequences[0], "refl") != 0)
+                            matched = false;
+                        else
+                        {
+                            bool had_space = match_whitespace(arg, &arg_i);
+                            if(had_space && match_sequence(arg, &arg_i, STRING("spehre")))
+                                tex_info = &material->map_reflection_spehere;
+                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_top")))
+                                tex_info = &material->map_reflection_cube_top;
+                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_bottom")))
+                                tex_info = &material->map_reflection_cube_bottom;
+                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_front")))
+                                tex_info = &material->map_reflection_cube_front;
+                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_back")))
+                                tex_info = &material->map_reflection_cube_back;
+                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_left")))
+                                tex_info = &material->map_reflection_cube_left;
+                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_right")))
+                                tex_info = &material->map_reflection_cube_right;
+                            else
+                                matched = false;
+                        }
+                    }
+                    //use_channel
+                    //-imfchan [r | g | b | m | l | z]  
+                    else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-imfchan")))
+                    {
+                        bool matched_arg = match_whitespace(arg, &arg_i);
+                        char c = 0;
+                        if(matched_arg && arg.size - arg_i > 1)
+                            c = arg.data[arg_i];
+
+                        if(matched_arg)
+                            switch(c)
+                            {
+                                case 'r': 
+                                case 'g': 
+                                case 'b': 
+                                case 'm': 
+                                case 'l': 
+                                case 'z':
+                                    temp_tex_info.use_channel = c;
+                                    break;
+                                default: 
+                                    matched_arg = false;
+                                    break;
+                            }
+
+                        if(!matched_arg)
+                            matched = false;
+                    }
+                    else
+                    {
+                        break;         
+                    }
+                    
+
+                    ASSERT_MSG(arg_i > 0, "will make progress");
+                    i += arg_i;
+                }
+
+                obj_texture_info_deinit(tex_info);
+                *tex_info = temp_tex_info;
+
+                isize filename_from = i;
+                isize filename_to = line.size;
+
+                for(; filename_to-- > filename_from; )
+                    if(char_is_space(line.data[filename_to]) == false)
+                        break;
+
+                if(filename_to < filename_from)
+                    filename_to = filename_from;
+
+                String filename = string_range(line, filename_from, filename_to);
+                if(filename.size > 0)
+                    builder_assign(&tex_info->path, filename);
+                else
+                    matched = FORMAT_MTL_ERROR_MAP;
+            }
+
+        }
+    
+        if(error != FORMAT_MTL_ERROR_NONE)
+        {
+            if(error_is_ok(out_error))
+                out_error = obj_parser_error_on_to_error(error, line_number);
+
+            if(output_errors_to_or_null)
+            {
+                Obj_Parser_Error parser_error = {0};
+                parser_error.index = i;
+                parser_error.line = (i32) line_number;
+                parser_error.unimplemented = false;
+                parser_error.statement = error;
+
+                array_push(output_errors_to_or_null, parser_error);
+            }
+            
+            if(log_errors && error_count <= MTL_PARSER_MAX_ERRORS_TO_PRINT)
+            {
+                const char* error_text = obj_parser_error_on_to_string(error);
+                LOG_WARN(OBJ_LOADER_CHANNEL, "malformed statement %s on line %lld:\n" STRING_FMT, error_text, (lld) line_number, STRING_PRINT(line));
+            }
+            
+            if(log_errors && error_count == MTL_PARSER_MAX_ERRORS_TO_PRINT)
+            {
+                LOG_WARN(OBJ_LOADER_CHANNEL, "file contains more than %lld errors. Stopping to print.", (lld) error_count);
+            }
+
+            error_count += 1;
+        }
+    }
+
+    return out_error;
+}
+
+EXPORT Error obj_parser_load_mtl(Obj_Material_Info_Array* out, String mtl_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
+{
+    //log_errors = false;
+    PERF_COUNTER_START(c);
+    Allocator_Set prev_allocs = allocator_set_both(allocator_get_scratch(), allocator_get_scratch());
+
+    String_Builder obj_data = {0};
+    Error read_state = file_read_entire(mtl_path, &obj_data);
+    if(!error_is_ok(read_state) && log_errors)
+    {
+        String error_string = error_code(read_state);
+        LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_load() failed to read file " STRING_FMT " with error " STRING_FMT, 
+            STRING_PRINT(mtl_path), STRING_PRINT(error_string));
+    }
+
+    Error parse_state = ERROR_OR(read_state) obj_parser_parse_mtl(out, string_from_builder(obj_data), output_errors_to_or_null, log_errors);
+    allocator_set(prev_allocs);
+
+    PERF_COUNTER_END(c);
+    LOG_INFO("PERF", "Loading of " STRING_FMT " took: %lf ms", STRING_PRINT(mtl_path), perf_counter_get_ellapsed(c) * 1000);
+    return parse_state;
+}
+
 #endif
