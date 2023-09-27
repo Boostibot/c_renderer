@@ -5,21 +5,13 @@
 #include "array.h"
 #include "string.h"
 #include "format.h"
-#include "log.h"
-#include "error.h"
-#include "shapes.h"
-#include "profile.h"
 #include "parse.h"
 
-#define OBJ_LOADER_CHANNEL "ASSET"
-
 #ifndef VEC_ARRAY_DEFINED
-
     #define VEC_ARRAY_DEFINED
     DEFINE_ARRAY_TYPE(Vec2, Vec2_Array);
     DEFINE_ARRAY_TYPE(Vec3, Vec3_Array);
     DEFINE_ARRAY_TYPE(Vec4, Vec4_Array);
-
 #endif
 
 #define OBJ_PARSER_MAX_ERRORS_TO_PRINT 1000
@@ -30,23 +22,23 @@
 
 typedef enum Obj_Parser_Error_On
 {
-    OBJ_PARSER_ERROR_NONE = 0,
+    FORMAT_OBJ_ERROR_NONE = 0,
     FORMAT_MTL_ERROR_NONE = 1,
 
-    OBJ_PARSER_ERROR_FACE,
-    OBJ_PARSER_ERROR_COMMENT,
-    OBJ_PARSER_ERROR_VERTEX_POS,
-    OBJ_PARSER_ERROR_VERTEX_NORM,
-    OBJ_PARSER_ERROR_VERTEX_UV,
-    OBJ_PARSER_ERROR_MATERIAL_LIBRARY,
-    OBJ_PARSER_ERROR_MATERIAL_USE,
-    OBJ_PARSER_ERROR_POINT,
-    OBJ_PARSER_ERROR_LINE,
-    OBJ_PARSER_ERROR_GROUP,
-    OBJ_PARSER_ERROR_SMOOTH_SHADING,
-    OBJ_PARSER_ERROR_OBJECT,
-    OBJ_PARSER_ERROR_INVALID_INDEX,
-    OBJ_PARSER_ERROR_OTHER,
+    FORMAT_OBJ_ERROR_FACE,
+    FORMAT_OBJ_ERROR_COMMENT,
+    FORMAT_OBJ_ERROR_VERTEX_POS,
+    FORMAT_OBJ_ERROR_VERTEX_NORM,
+    FORMAT_OBJ_ERROR_VERTEX_UV,
+    FORMAT_OBJ_ERROR_MATERIAL_LIBRARY,
+    FORMAT_OBJ_ERROR_MATERIAL_USE,
+    FORMAT_OBJ_ERROR_POINT,
+    FORMAT_OBJ_ERROR_LINE,
+    FORMAT_OBJ_ERROR_GROUP,
+    FORMAT_OBJ_ERROR_SMOOTH_SHADING,
+    FORMAT_OBJ_ERROR_OBJECT,
+    FORMAT_OBJ_ERROR_INVALID_INDEX,
+    FORMAT_OBJ_ERROR_OTHER,
     
     FORMAT_MTL_ERROR_NEWMTL,
     FORMAT_MTL_ERROR_MISSING_NEWMTL,
@@ -61,7 +53,6 @@ typedef enum Obj_Parser_Error_On
     FORMAT_MTL_ERROR_MAP,
     FORMAT_MTL_ERROR_OTHER,
 } Obj_Parser_Error_On;
-
 
 typedef struct Obj_Parser_Error
 {
@@ -88,13 +79,6 @@ typedef struct Obj_Texture_Info {
     bool blend_v;               //-blendv [on | off]
     char use_channel;           //-imfchan [r | g | b | m | l | z]  
 } Obj_Texture_Info;
-
-typedef enum Obj_Illumination_Mode
-{
-    OBJ_ILLUMINATION_COLOR_AND_AMBIENT_OFF = 0,
-    OBJ_ILLUMINATION_COLOR_AND_AMBIENT_ON = 1,
-    OBJ_ILLUMINATION_HIGHLIGH_ON = 2,
-} Obj_Illumination_Mode;
 
 typedef struct Obj_Material_Info {
     String_Builder name;                    //newmtl [name]
@@ -139,12 +123,12 @@ typedef struct Obj_Material_Info {
 } Obj_Material_Info;
 
 typedef struct Obj_Group {
-    String_Builder object;  //o [String]
-    String_Builder group;  //g [space separeted groups names]
-    String_Builder material; //usemtl [String material_name]
-    i32 smoothing_index;    //s [index > 0] //to set smoothing
-                            //s [0 | off]   //to set no smoothing
-    f32 merge_group_resolution; //mg [i32 smoothing_index] [f32 distance]
+    String_Builder object;          //o [String]
+    String_Builder_Array groups;    //g [group1] [group2] ...
+    String_Builder material;        //usemtl [String material_name]
+    i32 smoothing_index;            //s [index > 0] //to set smoothing
+                                    //s [0 | off]   //to set no smoothing
+    f32 merge_group_resolution;     //mg [i32 smoothing_index] [f32 distance]
 
     //Each group has info and some number of trinagles.
     //Trinagles from this group are inside the shared trinagles array
@@ -153,17 +137,28 @@ typedef struct Obj_Group {
     i32 trinagles_count;
 } Obj_Group;
 
+//one based indeces into the appropraite arrays.
+//If value is 0 means not present.
+typedef struct Obj_Vertex_Index
+{
+    i32 pos_i1;
+    i32 uv_i1;
+    i32 norm_i1;
+} Obj_Vertex_Index;
+
 DEFINE_ARRAY_TYPE(Triangle_Index_Array, Triangle_Index_Array_Array);
 DEFINE_ARRAY_TYPE(Obj_Parser_Error, Obj_Parser_Error_Array);
 DEFINE_ARRAY_TYPE(Obj_Group, Obj_Group_Array);
 DEFINE_ARRAY_TYPE(Obj_Material_Info, Obj_Material_Info_Array);
+DEFINE_ARRAY_TYPE(Obj_Vertex_Index, Obj_Vertex_Index_Array);
 
 typedef struct Obj_Model {
-    Vertex_Array vertices;
-    Hash_Index vertices_hash;
-    Triangle_Index_Array triangles;
+    Allocator* alloc;
+    Vec3_Array positions; 
+    Vec2_Array uvs; 
+    Vec3_Array normals;
+    Obj_Vertex_Index_Array indeces;
     Obj_Group_Array groups;
-    Obj_Material_Info_Array materials;
     String_Builder_Array material_files;
 } Obj_Model;
 
@@ -220,20 +215,20 @@ EXPORT const char* obj_parser_error_on_to_string(Obj_Parser_Error_On statement)
 {
     switch(statement)
     {
-        case OBJ_PARSER_ERROR_NONE: return "OBJ_PARSER_ERROR_NONE";
-        case OBJ_PARSER_ERROR_FACE: return "OBJ_PARSER_ERROR_FACE";
-        case OBJ_PARSER_ERROR_COMMENT: return "OBJ_PARSER_ERROR_COMMENT";
-        case OBJ_PARSER_ERROR_VERTEX_POS: return "OBJ_PARSER_ERROR_VERTEX_POS";
-        case OBJ_PARSER_ERROR_VERTEX_NORM: return "OBJ_PARSER_ERROR_VERTEX_NORM";
-        case OBJ_PARSER_ERROR_VERTEX_UV: return "OBJ_PARSER_ERROR_VERTEX_UV";
-        case OBJ_PARSER_ERROR_MATERIAL_LIBRARY: return "OBJ_PARSER_ERROR_MATERIAL_LIBRARY";
-        case OBJ_PARSER_ERROR_MATERIAL_USE: return "OBJ_PARSER_ERROR_MATERIAL_USE";
-        case OBJ_PARSER_ERROR_POINT: return "OBJ_PARSER_ERROR_POINT";
-        case OBJ_PARSER_ERROR_LINE: return "OBJ_PARSER_ERROR_LINE";
-        case OBJ_PARSER_ERROR_GROUP: return "OBJ_PARSER_ERROR_GROUP";
-        case OBJ_PARSER_ERROR_SMOOTH_SHADING: return "OBJ_PARSER_ERROR_SMOOTH_SHADING";
-        case OBJ_PARSER_ERROR_OBJECT: return "OBJ_PARSER_ERROR_OBJECT";
-        case OBJ_PARSER_ERROR_INVALID_INDEX: return "OBJ_PARSER_ERROR_INVALID_INDEX";
+        case FORMAT_OBJ_ERROR_NONE: return "FORMAT_OBJ_ERROR_NONE";
+        case FORMAT_OBJ_ERROR_FACE: return "FORMAT_OBJ_ERROR_FACE";
+        case FORMAT_OBJ_ERROR_COMMENT: return "FORMAT_OBJ_ERROR_COMMENT";
+        case FORMAT_OBJ_ERROR_VERTEX_POS: return "FORMAT_OBJ_ERROR_VERTEX_POS";
+        case FORMAT_OBJ_ERROR_VERTEX_NORM: return "FORMAT_OBJ_ERROR_VERTEX_NORM";
+        case FORMAT_OBJ_ERROR_VERTEX_UV: return "FORMAT_OBJ_ERROR_VERTEX_UV";
+        case FORMAT_OBJ_ERROR_MATERIAL_LIBRARY: return "FORMAT_OBJ_ERROR_MATERIAL_LIBRARY";
+        case FORMAT_OBJ_ERROR_MATERIAL_USE: return "FORMAT_OBJ_ERROR_MATERIAL_USE";
+        case FORMAT_OBJ_ERROR_POINT: return "FORMAT_OBJ_ERROR_POINT";
+        case FORMAT_OBJ_ERROR_LINE: return "FORMAT_OBJ_ERROR_LINE";
+        case FORMAT_OBJ_ERROR_GROUP: return "FORMAT_OBJ_ERROR_GROUP";
+        case FORMAT_OBJ_ERROR_SMOOTH_SHADING: return "FORMAT_OBJ_ERROR_SMOOTH_SHADING";
+        case FORMAT_OBJ_ERROR_OBJECT: return "FORMAT_OBJ_ERROR_OBJECT";
+        case FORMAT_OBJ_ERROR_INVALID_INDEX: return "FORMAT_OBJ_ERROR_INVALID_INDEX";
         case FORMAT_MTL_ERROR_NONE: return "FORMAT_MTL_ERROR_NONE";
         case FORMAT_MTL_ERROR_NEWMTL: return "FORMAT_MTL_ERROR_NEWMTL";
         case FORMAT_MTL_ERROR_MISSING_NEWMTL: return "FORMAT_MTL_ERROR_MISSING_NEWMTL";
@@ -249,45 +244,9 @@ EXPORT const char* obj_parser_error_on_to_string(Obj_Parser_Error_On statement)
         case FORMAT_MTL_ERROR_OTHER: return "FORMAT_MTL_ERROR_OTHER";
         
         default:
-        case OBJ_PARSER_ERROR_OTHER: return "OBJ_PARSER_ERROR_OTHER";
+        case FORMAT_OBJ_ERROR_OTHER: return "FORMAT_OBJ_ERROR_OTHER";
     }
 }
-
-INTERNAL String obj_parser_translate_error(u32 code, void* context)
-{
-    (void) context;
-    enum {LOCAL_BUFF_SIZE = 256, MAX_ERRORS = 4};
-    static int error_index = 0;
-    static char error_strings[MAX_ERRORS][LOCAL_BUFF_SIZE + 1] = {0};
-
-    int line = code >> 8;
-    int error_flag = code & 0xFF;
-
-    const char* error_flag_str = obj_parser_error_on_to_string((Obj_Parser_Error_On) error_flag);
-
-    memset(error_strings[error_index], 0, LOCAL_BUFF_SIZE);
-    snprintf(error_strings[error_index], LOCAL_BUFF_SIZE, "%s line: %d", error_flag_str, line);
-    String out = string_make(error_strings[error_index]);
-    error_index += 1;
-    return out;
-}
-
-EXPORT u32 obj_parser_error_module()
-{
-    static u32 error_module = 0;
-    if(error_module == 0)
-        error_module = error_system_register_module(obj_parser_translate_error, STRING("obj_parser.h"), NULL);
-
-    return error_module;
-}
-
-
-EXPORT Error obj_parser_error_on_to_error(Obj_Parser_Error_On statement, isize line)
-{
-    u32 splatted = (u32) line << 8 | (u32) statement;
-    return error_make(obj_parser_error_module(), splatted);
-}
-
 
 EXPORT void obj_group_init(Obj_Group* info, Allocator* alloc)
 {
@@ -312,55 +271,70 @@ EXPORT void obj_group_deinit(Obj_Group* info)
 
 //@TODO: separate parsing and transforming to engine friendly format into two different things
 
-EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
+INTERNAL Obj_Group* _obj_parser_add_group(Obj_Model* out, String active_object, String_Builder_Array* active_groups, isize vertex_index)
 {
-    test_match();
-
-    log_group_push();
-    PERF_COUNTER_START(c);
-    
-    PERF_COUNTER_START(parsing_counter);
-
-    //one based indeces into the appropraite arrays.
-    //If value is 0 means not present.
-    typedef struct Obj_Vertex_Index
+    if(out->groups.size != 0)
     {
-        i32 pos_i1;
-        i32 uv_i1;
-        i32 norm_i1;
-    } Obj_Vertex_Index;
+        Obj_Group* last = array_last(out->groups);
+        last->trinagles_count = vertex_index - last->trinagles_from;
+    }
 
-    DEFINE_ARRAY_TYPE(Obj_Vertex_Index, Obj_Vertex_Index_Array);
+    Obj_Group new_group = {0};
+    obj_group_init(&new_group, allocator_get_default());
+    new_group.trinagles_from = vertex_index;
+    new_group.groups = *active_groups;
+    builder_assign(&new_group.object, active_object);
+
+    String_Builder_Array null = {0};
+    *active_groups = null;
+    array_push(&out->groups, new_group);
+    
+    return array_last(out->groups);
+}
+
+INTERNAL Obj_Group* _obj_parser_get_active_group(Obj_Model* out, String active_object, isize vertex_index)
+{
+    //if the last group is still the active one
+    if(out->groups.size != 0)
+    {
+        Obj_Group* last = array_last(out->groups);
+        if(string_is_equal(string_from_builder(last->object), active_object))
+            return last;   
+    }
+    
+    //Add new default group
+    //End the previous group
+
+    String_Builder_Array def_groups = {0};
+    array_push(&def_groups, builder_from_cstring("default"));
+
+    return _obj_parser_add_group(out, active_object, &def_groups, vertex_index);
+}
+
+EXPORT bool obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Error* errors, isize errors_max_count, isize* had_errors)
+{
+    Allocator* alloc = out->alloc;
+    if(alloc == NULL)
+        alloc = allocator_get_default();
+
+    obj_model_init(out, alloc);
     
     Allocator* scratch_alloc = allocator_get_scratch();
     Allocator* default_alloc = allocator_get_default();
     
-    isize num_allocations_before = allocator_get_stats(allocator_get_scratch()).allocation_count;
-
-    //Init temporary buffers
-    Error had_error = {0};
+    bool had_error = false;
     isize error_count = 0;
-    
-    Obj_Group_Array temp_groups = {scratch_alloc};
-    Obj_Vertex_Index_Array obj_indeces_array = {scratch_alloc};
-    Vec3_Array pos_array = {scratch_alloc}; 
-    Vec2_Array uv_array = {scratch_alloc}; 
-    Vec3_Array norm_array = {scratch_alloc};
-
-    array_init_backed(&temp_groups, scratch_alloc, 64);
     
     //Try to guess the needed size based on a simple heurestic
     isize expected_line_count = obj_source.size / 32 + 128;
-    array_reserve(&obj_indeces_array, expected_line_count);
-    array_reserve(&pos_array, expected_line_count);
-    array_reserve(&uv_array, expected_line_count);
-    array_reserve(&norm_array, expected_line_count);
+    array_reserve(&out->indeces, expected_line_count);
+    array_reserve(&out->positions, expected_line_count);
+    array_reserve(&out->uvs, expected_line_count);
+    array_reserve(&out->normals, expected_line_count);
+    array_init_backed(&out->groups, scratch_alloc, 64);
 
     String active_object = {0};
-    Obj_Group active_group = {0};
-    obj_group_init(&active_group, scratch_alloc);
-    builder_assign(&active_group.group, STRING("default"));
-    builder_assign(&active_group.object, STRING("default"));
+    Obj_Group* active_group = NULL;
 
     i32 trinagle_index = 0;
 
@@ -388,7 +362,7 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
         String line = string_range(obj_source, line_start_i, line_end_i);
         ASSERT(line.size > 0);
 
-        Obj_Parser_Error_On error = OBJ_PARSER_ERROR_NONE;
+        Obj_Parser_Error_On error = FORMAT_OBJ_ERROR_NONE;
 
         char first_char = line.data[0];
         switch (first_char) 
@@ -398,6 +372,7 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                 continue;
             } break;
 
+            //vertex variants
             case 'v': {
                 char second_char = line.data[1];
                 switch (second_char)
@@ -414,9 +389,9 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                             && match_decimal_f32(line, &line_index, &pos.z);
 
                         if(!matched)
-                            error = OBJ_PARSER_ERROR_VERTEX_POS;
+                            error = FORMAT_OBJ_ERROR_VERTEX_POS;
                         else
-                            array_push(&pos_array, pos);
+                            array_push(&out->positions, pos);
                     } break;
 
                     case 'n': {
@@ -432,9 +407,9 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                             && match_decimal_f32(line, &line_index, &norm.z);
 
                         if(!matched)
-                            error = OBJ_PARSER_ERROR_VERTEX_NORM;
+                            error = FORMAT_OBJ_ERROR_VERTEX_NORM;
                         else
-                            array_push(&norm_array, norm);
+                            array_push(&out->normals, norm);
                     } break;
 
                     case 't': {
@@ -449,17 +424,18 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                             && match_decimal_f32(line, &line_index, &tex_coord.y);
                         
                         if(!matched)
-                            error = OBJ_PARSER_ERROR_VERTEX_UV;
+                            error = FORMAT_OBJ_ERROR_VERTEX_UV;
                         else 
-                            array_push(&uv_array, tex_coord);
+                            array_push(&out->uvs, tex_coord);
                     } break;
 
                     default: {
-                        error = OBJ_PARSER_ERROR_OTHER;
+                        error = FORMAT_OBJ_ERROR_OTHER;
                     }
                 }
             } break;
 
+            //faces
             case 'f': {
 
                 // can be one of the following:
@@ -545,7 +521,7 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                 }
 
                 if(!ok)
-                    error = OBJ_PARSER_ERROR_FACE;
+                    error = FORMAT_OBJ_ERROR_FACE;
 
                 //correct negative values indeces. If index is negative it refers to the -i-nth last parsed
                 // value in the given category. If the category does not recieve data (NULL) set the index to 0
@@ -553,18 +529,18 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                 {
                     Obj_Vertex_Index index = indeces[i];
                     if(index.pos_i1 < 0)
-                        index.pos_i1 = (u32) pos_array.size + index.pos_i1 + 1;
+                        index.pos_i1 = (u32) out->positions.size + index.pos_i1 + 1;
                     
                     if(index.uv_i1 < 0)
-                        index.uv_i1 = (u32) uv_array.size + index.uv_i1 + 1;
+                        index.uv_i1 = (u32) out->uvs.size + index.uv_i1 + 1;
                         
                     if(index.norm_i1 < 0)
-                        index.norm_i1 = (u32) norm_array.size + index.norm_i1 + 1;
+                        index.norm_i1 = (u32) out->normals.size + index.norm_i1 + 1;
                 }
 
-                array_push(&obj_indeces_array, indeces[0]); 
-                array_push(&obj_indeces_array, indeces[1]); 
-                array_push(&obj_indeces_array, indeces[2]);
+                array_push(&out->indeces, indeces[0]); 
+                array_push(&out->indeces, indeces[1]); 
+                array_push(&out->indeces, indeces[2]);
 
                 trinagle_index += 1;
             } break;
@@ -587,51 +563,49 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
 
                 if(matched_smoothing_index || matched_smoothing_off)
                 {
-                    active_group.smoothing_index = (i32) smoothing_index;
+                    if(active_group == NULL)
+                        active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
+
+                    active_group->smoothing_index = (i32) smoothing_index;
                 }
                 else
                 {
-                    error = OBJ_PARSER_ERROR_SMOOTH_SHADING;
+                    error = FORMAT_OBJ_ERROR_SMOOTH_SHADING;
                 }
             } break;
             
             //Group: g [group1] [group2] ...
             case 'g': {
-                //We permit only a single group owner.
-                //We simply ignore further group names.
-                //All trinagles are owned by a single object.
-
+                String_Builder_Array groups = {default_alloc};
                 isize line_index = 1;
-                bool matches = match_whitespace(line, &line_index);
-
-                isize group_from = line_index;
-                isize group_to = line_index;
-                matches = matches && match_whitespace_custom(line, &group_to, MATCH_INVERTED);
-
-                if(matches)
+                while(true)
                 {
-                    active_group.trinagles_count = trinagle_index - active_group.trinagles_from;
-                    array_push(&temp_groups, active_group);
+                    bool matches = match_whitespace(line, &line_index);
+                    isize group_from = line_index;
+                    isize group_to = line_index;
+                    matches = matches && match_whitespace_custom(line, &group_to, MATCH_INVERTED);
 
-                    Obj_Group new_group = {0};
-                    obj_group_init(&new_group, scratch_alloc);
-                    new_group.trinagles_from = trinagle_index;
-                        
-                    String group = string_range(line, group_from, group_to);
-                    builder_assign(&new_group.group, group);
-                    builder_assign(&new_group.object, active_object);
-
-                    active_group = new_group;
+                    if(matches)
+                    {
+                        String group = string_range(line, group_from, group_to);
+                        array_push(&groups, builder_from_string_alloc(group, default_alloc));
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
+
+                if(groups.size > 0)
+                    active_group = _obj_parser_add_group(out, active_object, &groups, trinagle_index);
                 else
-                {
-                    error = OBJ_PARSER_ERROR_GROUP;
-                }
+                    error = FORMAT_OBJ_ERROR_GROUP;
+
+                builder_array_deinit(&groups);
             } break;
 
             //Object: g [object_name] ...
             case 'o': {
-            
                 isize line_index = 1;
                 bool matches = match_whitespace(line, &line_index);
 
@@ -640,26 +614,12 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                 matches = matches && match_whitespace_custom(line, &object_to, MATCH_INVERTED);
 
                 if(matches)
-                {
-                    active_group.trinagles_count = trinagle_index - active_group.trinagles_from;
-                    array_push(&temp_groups, active_group);
-
-                    Obj_Group new_group = {0};
-                    obj_group_init(&new_group, scratch_alloc);
-                    new_group.trinagles_from = trinagle_index;
-                    
-                    String object = string_range(line, object_from, object_to);
-                    builder_assign(&new_group.group, STRING("default"));
-                    builder_assign(&new_group.object, object);
-                    active_group = new_group;
-                    active_object = object;
-                }
+                    active_object = string_range(line, object_from, object_to);
                 else
-                {
-                    error = OBJ_PARSER_ERROR_OBJECT;
-                }
+                    error = FORMAT_OBJ_ERROR_OBJECT;
             } break;
 
+            //Material library
             case 'm': {
 
                 isize line_index = 0;
@@ -677,10 +637,11 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
                 }
                 else
                 {
-                    error = OBJ_PARSER_ERROR_MATERIAL_LIBRARY;
+                    error = FORMAT_OBJ_ERROR_MATERIAL_LIBRARY;
                 }
             } break;
             
+            //use material
             case 'u': {
                 isize line_index = 0;
                 bool matches = match_sequence(line, &line_index, STRING("usemtl"))
@@ -692,215 +653,47 @@ EXPORT Error obj_parser_parse(Obj_Model* out, String obj_source, Obj_Parser_Erro
 
                 if(matches)
                 {
+                    if(active_group == NULL)
+                        active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
+
                     String material_use = string_range(line, from_index, to_index);
-                    builder_assign(&active_group.material, material_use);
+                    builder_assign(&active_group->material, material_use);
                 }
                 else
                 {
-                    error = OBJ_PARSER_ERROR_MATERIAL_USE;
+                    error = FORMAT_OBJ_ERROR_MATERIAL_USE;
                 }
             } break;
 
             default: {
-                error = OBJ_PARSER_ERROR_OTHER;
+                error = FORMAT_OBJ_ERROR_OTHER;
             }
         }
 
         //Handle errors
         if(error)
         {
-            bool unimplemented = false;
-            if(error_is_ok(had_error))
-                had_error = obj_parser_error_on_to_error(error, line_number);
+            Obj_Parser_Error parser_error = {0};
+            parser_error.index = line_start_i;
+            parser_error.line = (i32) line_number;
+            parser_error.statement = error;
+            parser_error.unimplemented = false;
 
-            if(output_errors_to_or_null)
-            {
-                Obj_Parser_Error parser_error = {0};
-                parser_error.index = line_start_i;
-                parser_error.line = (i32) line_number;
-                parser_error.statement = error;
-                parser_error.unimplemented = unimplemented;
-                array_push(output_errors_to_or_null, parser_error);
-            }
-
-            if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
-            {
-                const char* error_text = obj_parser_error_on_to_string(error);
-                LOG_WARN(OBJ_LOADER_CHANNEL, "malformed statement %s on line %lld:\n" STRING_FMT, error_text, (lld) line_number, STRING_PRINT(line));
-            }
-            
-            if(log_errors && error_count == OBJ_PARSER_MAX_ERRORS_TO_PRINT)
-            {
-                LOG_WARN(OBJ_LOADER_CHANNEL, "file contains more than %lld errors. Stopping to print.", (lld) error_count);
-            }
+            had_error = true;
+            if(errors && error_count < errors_max_count)
+                errors[error_count] = parser_error;
 
             error_count++;
         }
     } 
     
-    active_group.trinagles_count = trinagle_index - active_group.trinagles_from;
-    array_push(&temp_groups, active_group);
+    //end the last group
+    if(active_group == NULL)
+        active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
+    active_group->trinagles_count = trinagle_index - active_group->trinagles_from;
 
-    PERF_COUNTER_END(parsing_counter);
-    PERF_COUNTER_START(processing_counter);
-    
-    //Iterate all indeces using a hash map to deduplicate vertex data
-    //and shape it into the vertex structure. 
-    //Discards all triangles that dont have a valid position
-    Hash_Index shape_assembly = {allocator_get_scratch()};
-    hash_index_reserve(&shape_assembly, obj_indeces_array.size);
-
-    //Try to guess the final needed size
-    array_reserve(&out->triangles, out->triangles.size + obj_indeces_array.size/3); //divided by three since are triangles
-    array_reserve(&out->vertices, out->vertices.size + obj_indeces_array.size/2); //divide by two since some vertices are shared
-    
-    bool discard_triangle = false;
-    Triangle_Index triangle = {0};
-
-    
-    ASSERT_MSG(active_group.trinagles_from + active_group.trinagles_count == obj_indeces_array.size / 3, "the groups must contain all indeces!");
-
-    //Deduplicate groups
-    for(isize parent_group_i = 0; parent_group_i < temp_groups.size; parent_group_i++)
-    {
-        Obj_Group* parent_group = &temp_groups.data[parent_group_i];
-        i32 triangles_before = (i32) out->triangles.size;
-        
-        //Skip empty groups
-        if(parent_group->trinagles_count <= 0)
-            continue;
-
-        for(isize child_group_i = parent_group_i; child_group_i < temp_groups.size; child_group_i++)
-        {
-            Obj_Group* child_group = &temp_groups.data[child_group_i];
-
-            //Skip groups that are empty 
-            if(child_group->trinagles_count <= 0)
-                continue;
-
-            //... and those that are not the same group
-            if(!builder_is_equal(child_group->group, parent_group->group)
-               || !builder_is_equal(child_group->object, parent_group->object))
-                continue;
-
-            isize i_min = (child_group->trinagles_from)*3;
-            isize i_max = (child_group->trinagles_from + child_group->trinagles_count)*3;
-        
-            //Deduplicate and parse vertices
-            for(isize i = i_min; i < i_max; i++)
-            {
-                Vertex composed_vertex = {0};
-                Obj_Vertex_Index index = obj_indeces_array.data[i];
-                if(index.norm_i1 < 0 || index.norm_i1 > norm_array.size)
-                {
-                    if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
-                        LOG_ERROR(OBJ_LOADER_CHANNEL, "norm index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.norm_i1);
-                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_INVALID_INDEX, 0);
-                }
-                else
-                {
-                    composed_vertex.norm = norm_array.data[index.norm_i1 - 1];
-                }
-
-                if(index.pos_i1 < 0 || index.pos_i1 > pos_array.size)
-                {
-                    if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
-                        LOG_ERROR(OBJ_LOADER_CHANNEL, "pos index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.pos_i1);
-                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_INVALID_INDEX, 0);
-                    discard_triangle = true;
-                }
-                else
-                {
-                    composed_vertex.pos = pos_array.data[index.pos_i1 - 1];
-                }
-
-                if(index.uv_i1 < 0 || index.uv_i1 > uv_array.size)
-                {
-                    if(log_errors && error_count <= OBJ_PARSER_MAX_ERRORS_TO_PRINT)
-                        LOG_ERROR(OBJ_LOADER_CHANNEL, "uv index number %lld was out of range with value: %lld", (lld) i / 3, (lld) index.uv_i1);
-                    had_error = obj_parser_error_on_to_error(OBJ_PARSER_ERROR_INVALID_INDEX, 0);
-                }
-                else
-                {
-                    composed_vertex.uv = uv_array.data[index.uv_i1 - 1];
-                }
-
-                obj_indeces_array.data[i] = index;
-        
-                u32 final_index = shape_assembly_add_vertex_custom(&shape_assembly, &out->vertices, composed_vertex);
-                u32 mod = i%3;
-                triangle.vertex_i[mod] = final_index;
-                if(mod == 2)
-                {
-                    if(discard_triangle == false)
-                        array_push(&out->triangles, triangle);
-                    discard_triangle = false;
-                }
-            }
-        }
-    
-        Obj_Group export_group = {0};
-        obj_group_init(&export_group, default_alloc);
-        builder_assign(&export_group.group, string_from_builder(parent_group->group));
-        builder_assign(&export_group.object, string_from_builder(parent_group->object));
-        builder_assign(&export_group.material, string_from_builder(parent_group->material));
-        export_group.smoothing_index = parent_group->smoothing_index;
-        export_group.merge_group_resolution = parent_group->merge_group_resolution;
-        export_group.trinagles_from = triangles_before;
-        export_group.trinagles_count = (i32) out->triangles.size - triangles_before;
-
-        array_push(&out->groups, export_group);
-    }
-
-    //deinit temp_groups
-    for(isize parent_group_i = 0; parent_group_i < temp_groups.size; parent_group_i++)
-    {
-        obj_group_deinit(&temp_groups.data[parent_group_i]);
-    }
-
-    isize num_allocations_after = allocator_get_stats(allocator_get_scratch()).allocation_count;
-    isize allocation_delta = num_allocations_after - num_allocations_before;
-    LOG_INFO(OBJ_LOADER_CHANNEL, "Obj loader caused %lld allocations", (lld) allocation_delta);
-    
-    hash_index_deinit(&shape_assembly);
-    PERF_COUNTER_END(processing_counter);
-    
-    array_deinit(&temp_groups);
-    array_deinit(&obj_indeces_array);
-    array_deinit(&pos_array);
-    array_deinit(&uv_array);
-    array_deinit(&norm_array);
-    log_group_pop();
-
-    PERF_COUNTER_END(c);
+    *had_errors = error_count;
     return had_error;
-}
-
-EXPORT Error obj_parser_load(Shape* append_to, String obj_path, Obj_Parser_Error_Array* error_or_null, bool log_errors)
-{
-    //log_errors = false;
-    PERF_COUNTER_START(c);
-    Allocator_Set prev_allocs = allocator_set_both(allocator_get_scratch(), allocator_get_scratch());
-
-    Obj_Model model = {0};
-    String_Builder obj_data = {0};
-    Error read_state = file_read_entire(obj_path, &obj_data);
-    if(!error_is_ok(read_state) && log_errors)
-    {
-        String error_string = error_code(read_state);
-        LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_load() failed to read file " STRING_FMT " with error " STRING_FMT, 
-            STRING_PRINT(obj_path), STRING_PRINT(error_string));
-    }
-
-    Error parse_state = ERROR_OR(read_state) obj_parser_parse(&model, string_from_builder(obj_data), error_or_null, log_errors);
-    allocator_set(prev_allocs);
-
-    array_append(&append_to->triangles, model.triangles.data, model.triangles.size);
-    array_append(&append_to->vertices, model.vertices.data, model.vertices.size);
-
-    PERF_COUNTER_END(c);
-    LOG_INFO("PERF", "Loading of " STRING_FMT " took: %lf ms", STRING_PRINT(obj_path), perf_counter_get_ellapsed(c) * 1000);
-    return parse_state;
 }
 
 bool match_space_separated_vec3(String str, isize* index, Vec3* matched)
@@ -937,13 +730,13 @@ bool match_space_separated_optional_vec3(String str, isize* index, Vec3* matched
     return state;
 }
 
-EXPORT Error obj_parser_parse_mtl(Obj_Material_Info_Array* out, String mtl_source, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
+EXPORT bool obj_parser_parse_mtl(Obj_Material_Info_Array* out, String mtl_source, Obj_Parser_Error* errors, isize errors_max_count, isize* had_errors)
 {
     Allocator* def_alloc = allocator_get_default();
     Obj_Material_Info* material = NULL;
-    Error out_error = {0};
     isize error_count = 0;
-    
+    bool had_error = false;
+
     isize line_start_i = 0;
     isize line_end_i = -1;
     isize line_number = 0;
@@ -1330,59 +1123,23 @@ EXPORT Error obj_parser_parse_mtl(Obj_Material_Info_Array* out, String mtl_sourc
     
         if(error != FORMAT_MTL_ERROR_NONE)
         {
-            if(error_is_ok(out_error))
-                out_error = obj_parser_error_on_to_error(error, line_number);
+            Obj_Parser_Error parser_error = {0};
+            parser_error.index = line_start_i;
+            parser_error.line = (i32) line_number;
+            parser_error.statement = error;
+            parser_error.unimplemented = false;
 
-            if(output_errors_to_or_null)
-            {
-                Obj_Parser_Error parser_error = {0};
-                parser_error.index = i;
-                parser_error.line = (i32) line_number;
-                parser_error.unimplemented = false;
-                parser_error.statement = error;
+            had_error = true;
+            if(errors && error_count < errors_max_count)
+                errors[error_count] = parser_error;
 
-                array_push(output_errors_to_or_null, parser_error);
-            }
-            
-            if(log_errors && error_count <= MTL_PARSER_MAX_ERRORS_TO_PRINT)
-            {
-                const char* error_text = obj_parser_error_on_to_string(error);
-                LOG_WARN(OBJ_LOADER_CHANNEL, "malformed statement %s on line %lld:\n" STRING_FMT, error_text, (lld) line_number, STRING_PRINT(line));
-            }
-            
-            if(log_errors && error_count == MTL_PARSER_MAX_ERRORS_TO_PRINT)
-            {
-                LOG_WARN(OBJ_LOADER_CHANNEL, "file contains more than %lld errors. Stopping to print.", (lld) error_count);
-            }
-
-            error_count += 1;
+            error_count++;
         }
     }
 
-    return out_error;
+    *had_errors = error_count;
+    return had_error;
 }
 
-EXPORT Error obj_parser_load_mtl(Obj_Material_Info_Array* out, String mtl_path, Obj_Parser_Error_Array* output_errors_to_or_null, bool log_errors)
-{
-    //log_errors = false;
-    PERF_COUNTER_START(c);
-    Allocator_Set prev_allocs = allocator_set_both(allocator_get_scratch(), allocator_get_scratch());
-
-    String_Builder obj_data = {0};
-    Error read_state = file_read_entire(mtl_path, &obj_data);
-    if(!error_is_ok(read_state) && log_errors)
-    {
-        String error_string = error_code(read_state);
-        LOG_ERROR(OBJ_LOADER_CHANNEL, "obj_parser_load() failed to read file " STRING_FMT " with error " STRING_FMT, 
-            STRING_PRINT(mtl_path), STRING_PRINT(error_string));
-    }
-
-    Error parse_state = ERROR_OR(read_state) obj_parser_parse_mtl(out, string_from_builder(obj_data), output_errors_to_or_null, log_errors);
-    allocator_set(prev_allocs);
-
-    PERF_COUNTER_END(c);
-    LOG_INFO("PERF", "Loading of " STRING_FMT " took: %lf ms", STRING_PRINT(mtl_path), perf_counter_get_ellapsed(c) * 1000);
-    return parse_state;
-}
 
 #endif
