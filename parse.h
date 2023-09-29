@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIB_PARSE
+#define LIB_PARSE
+
 #include "defines.h"
 #include "string.h"
 
@@ -18,17 +20,44 @@ EXPORT bool char_is_id(char c);
 EXPORT bool match_char_custom(String str, isize* index, char c, Match_Kind match);
 EXPORT bool match_any_of_custom(String str, isize* index, String any_of, Match_Kind match);
 EXPORT bool match_whitespace_custom(String str, isize* index, Match_Kind match);
+
+//Matches a single character
 EXPORT bool match_char(String str, isize* index, char c);
+//Matches any number of characters contained within any_of. Returns true if matched at least one.
 EXPORT bool match_any_of(String str, isize* index, String any_of);
+//Matches sequence exactly.
 EXPORT bool match_sequence(String str, isize* index, String sequence);
+//Matches any number of whitespace chars from index
 EXPORT bool match_whitespace(String str, isize* index);
-EXPORT bool match_id(String str, isize* index); //starts with _, [a-z], [A-Z] or _ then is followed by any number of [0-9], _, [a-z], [A-Z]
+//matches: [space][non space (*)] and returns true if (*) matched at least one char. Saves to from start of (*) and to to one past_end 
+EXPORT bool match_whitespace_separated(String str, isize* index, isize* from, isize* to); 
+
+//starts with _, [a-z], [A-Z] then is followed by any number of [0-9], _, [a-z], [A-Z]
+EXPORT bool match_id(String str, isize* index); 
 
 EXPORT bool match_decimal_u64(String str, isize* index, i64* out); //"00113000" -> 113000
 EXPORT bool match_decimal_i64(String str, isize* index, i64* out); //"-00113000" -> -113000
 EXPORT bool match_decimal_i32(String str, isize* index, i32* out); //"-00113000" -> -113000
 EXPORT bool match_decimal_f32(String str, isize* index, f32* out); //"-0011.0300" -> -11.03000
 
+typedef struct Line_Iterator {
+    String line;
+    isize line_number; //one based line number
+    isize line_from; //char index within the iterated string of line start
+    isize line_to;  //char index within the iterated string of line end
+} Line_Iterator;
+
+//use like so for(Line_Iterator it = {0}; line_iterator_get_line(&it, string); ) {...}
+EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string);
+
+EXPORT String string_trim_prefix_whitespace(String s);
+EXPORT String string_trim_postfix_whitespace(String s);
+EXPORT String string_trim_whitespace(String s);
+
+#endif
+
+#if (defined(LIB_ALL_IMPL) || defined(LIB_PARSE_IMPL)) && !defined(LIB_PARSE_HAS_IMPL)
+#define LIB_PARSE_HAS_IMPL
 
 EXPORT bool char_is_space(char c)
 {
@@ -154,6 +183,25 @@ EXPORT bool match_whitespace_custom(String str, isize* index, Match_Kind match)
 EXPORT bool match_whitespace(String str, isize* index)
 {
     return match_whitespace_custom(str, index, MATCH_NORMAL);
+}
+
+
+EXPORT bool match_whitespace_separated(String str, isize* index, isize* from, isize* to)
+{
+    isize index_ = *index;
+    bool matched = match_whitespace_custom(str, &index_, MATCH_NORMAL);
+    isize from_ = index_;
+    matched = matched && match_whitespace_custom(str, &index_, MATCH_INVERTED);
+    isize to_ = index_;
+
+    if(matched)
+    {
+        *index = index_;
+        *from = from_;
+        *to = to_;
+    }
+
+    return matched;
 }
 
 EXPORT bool match_id_chars(String str, isize* index)
@@ -302,7 +350,57 @@ EXPORT bool match_decimal_f32(String str, isize* index, f32* out)
     return true;
 }
 
+EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string)
+{
+    
+    isize line_from = 0;
+    if(iterator->line_to != 0)
+        line_from = iterator->line_to + 1;
 
+    if(line_from >= string.size)
+        return false;
+
+    isize line_to = string_find_first_char(string, '\n', line_from);
+        
+    if(line_to == -1)
+        line_to = string.size;
+        
+    iterator->line_number += 1;
+    iterator->line_from = line_from;
+    iterator->line_to = line_to;
+    iterator->line = string_range(string, line_from, line_to);
+
+    return true;
+}
+
+EXPORT String string_trim_prefix_whitespace(String s)
+{
+    isize from = 0;
+    for(; from < s.size; from++)
+        if(char_is_space(s.data[from]) == false)
+            break;
+
+    return string_tail(s, from);
+}
+EXPORT String string_trim_postfix_whitespace(String s)
+{
+    isize to = s.size;
+    for(; to-- > 0; )
+        if(char_is_space(s.data[to]) == false)
+            break;
+
+    return string_head(s, to + 1);
+}
+EXPORT String string_trim_whitespace(String s)
+{
+    String prefix_trimmed = string_trim_prefix_whitespace(s);
+    String both_trimmed = string_trim_postfix_whitespace(prefix_trimmed);
+
+    return both_trimmed;
+}
+
+
+#include "math.h"
 INTERNAL void test_match()
 {
     {
@@ -356,3 +454,5 @@ INTERNAL void test_match()
         TEST(is_near_scaledf(-12.05f, test_f32, EPSILON));
     }
 }
+
+#endif

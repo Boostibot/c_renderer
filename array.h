@@ -1,6 +1,8 @@
 #ifndef LIB_ARRAY
 #define LIB_ARRAY
 
+// @TODO: 
+
 // This file introduces a simple but powerful generic dynamic array concept.
 // It works by defining struct for each type and then using type generic macros to work
 // with these structs. 

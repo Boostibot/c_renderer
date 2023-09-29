@@ -3,6 +3,10 @@
 
 #include "platform.h"
 
+//@TODO: remove the locally enable disable mechanism from the codebase but save it someplace else. 
+//       So far I havent used it once so its probably just wasted code complexity. 
+//       Remove on if unused: 1/01/2024.
+
 //Locally enables/disables asserts. If we wish to disable for part of
 // code we simply undefine them then redefine them after.
 #define DO_ASSERTS       /* enables assertions */

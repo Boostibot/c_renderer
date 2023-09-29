@@ -44,7 +44,7 @@ EXPORT isize  string_find_last_from(String in_str, String search_for, isize from
 EXPORT isize  string_find_last(String string, String search_for); 
 
 EXPORT isize  string_find_first_char(String string, char search_for, isize from); 
-EXPORT isize  string_find_last_from_char(String in_str, char search_for, isize from);
+EXPORT isize  string_find_last_char_from(String in_str, char search_for, isize from);
 EXPORT isize  string_find_last_char(String string, char search_for); 
 
 EXPORT void             builder_append(String_Builder* builder, String string); //Appends a string

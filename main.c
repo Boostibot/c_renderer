@@ -3,18 +3,19 @@
 
 #ifdef RUN_TESTS
 
-#include "_test_unicode.h"
-
 //Try including multiple times
 #include "unicode.h"
 #include "unicode.h"
 #include "unicode.h"
+
+#include "_test_unicode.h"
 
 #define LIB_ALL_IMPL
 #include "unicode.h"
 
 void main()
 {
+
     test_unicode(3.0);
 }
 
@@ -42,6 +43,8 @@ void main()
 #include "shapes.h"
 #include "format_obj.h"
 #include "image_loader.h"
+#include "todo.h"
+#include "resource_loading.h"
 
 //#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
@@ -1891,6 +1894,46 @@ void log_perf_counters(bool sort_by_name)
     array_deinit(&counters);
 }
 
+void log_todos(const char* marker)
+{
+    Todo_Array todos = {0};
+    todo_parse_folder(&todos, STRING("./"), string_make(marker), 1);
+
+    String common_path_prefix = {0};
+    for(isize i = 0; i < todos.size; i++)
+    {
+        String curent_path = string_from_builder(todos.data[i].path);
+        if(common_path_prefix.data == NULL)
+            common_path_prefix = curent_path;
+        else
+        {
+            isize matches_to = 0;
+            isize min_size = MIN(common_path_prefix.size, curent_path.size);
+            for(; matches_to < min_size; matches_to++)
+            {
+                if(common_path_prefix.data[matches_to] != curent_path.data[matches_to])
+                    break;
+            }
+
+            common_path_prefix = string_safe_head(common_path_prefix, matches_to);
+        }
+    }
+    
+    for(isize i = 0; i < todos.size; i++)
+    {
+        Todo todo = todos.data[i];
+        String path = string_from_builder(todo.path);
+        
+        if(path.size > common_path_prefix.size)
+            path = string_safe_tail(path, common_path_prefix.size);
+
+        if(todo.signature.size > 0)
+            LOG_INFO("APP", "%-20s %4lld %s(%s) %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
+        else
+            LOG_INFO("APP", "%-20s %4lld %s %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
+    }
+}
+
 void run_func(void* context)
 {
     ASSERT(1);
@@ -2085,8 +2128,24 @@ void run_func(void* context)
             unit_quad = shapes_make_unit_quad();
             PERF_COUNTER_END(art_counter_shapes);
 
+            Resources resources = {0};
+            resources_init(&resources, allocator_get_default());
+
+            Object_Handle object_handle = {0};
+            Error_Array errors = {0};
+            object_read_entire(&resources, &object_handle, STRING("resources/models/sponza.obj"), &errors, 1000);
+
+            //@TODO: add better way of reporting errors. USE A CALLBACK!
+            //       add detection for empty in obj and mtl parsers
+            //       rework platform to include support for allocators
+            //       rework platform to include support for paths
+            //       think of a good way to represent a path (??? canoncalize : String -> Path = {String_Builder, Path_Info} ???)
+            Object* object = resources_object_get(&resources, object_handle);
+
+            (void) object;
+
+            //error = ERROR_OR(error) obj_parser_load(&falcon, STRING("resources/models/sponza.obj"), NULL, true);
             Error error = {0};
-            error = ERROR_OR(error) obj_parser_load(&falcon, STRING("resources/models/sponza.obj"), NULL, true);
 
             render_mesh_init_from_shape(&render_uv_sphere, uv_sphere, STRING("uv_sphere"));
             render_mesh_init_from_shape(&render_cube_sphere, cube_sphere, STRING("cube_sphere"));
@@ -2113,8 +2172,8 @@ void run_func(void* context)
             error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
             render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(default_ao), 1, STRING("rustediron2_ao"));
             
-            Obj_Material_Info_Array materials = {0};
-            error = ERROR_OR(error) obj_parser_load_mtl(&materials, STRING("resources/models/sponza.mtl"), NULL, true);
+            //Obj_Material_Info_Array materials = {0};
+            //error = ERROR_OR(error) obj_parser_load_mtl(&materials, STRING("resources/models/sponza.mtl"), NULL, true);
 
             if(0)
             {

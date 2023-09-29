@@ -186,7 +186,7 @@ n:
         i:1024
     :albedo
         3f:1 1 1
-    :rougness
+    :roughness
         f:0.59
     :metallic
         f:0
@@ -203,9 +203,9 @@ n:
         :tile
     }        b:false
     
-    :rougness_map
+    :roughness_map
     TEX {:path
-            :images/wood_rougness.bmp;
+            :images/wood_roughness.bmp;
         :gamma
             f:1
         :tile

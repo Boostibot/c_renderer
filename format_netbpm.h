@@ -1,17 +1,31 @@
-#pragma once
+#ifndef LIB_FORMAT_NETBPM
+#define LIB_FORMAT_NETBPM
 
-#include "image.h"
-#include "string.h"
-#include "format.h"
-#include "error.h"
-
-// EXTENSION    ACII MAGIC  BINARY MAGIC  COLORS                                  
+// This file contains readers and writers for some of the more common variants of the netbmp formats.
+// These formats are really simple and have no data compression at all. This makes them ideal for really fast loading and writing.
+//
+// The formats are summarised below. For some of these exist both ascii and binary variants. We only parse binary variants.
+//
+// EXTENSION    ACII MAGIC  BINARY MAGIC  COLORS AND FORMAT                                  
 // .pbm         P1          P4            [0..1] where 0 is white and 1 is black; the binary variant has the first pixel in the highest position of the byte
 // .pgm         P2          P5            [0..255], or [0..65535] in big endian; grayscale image
 // .ppm         P3          P6            [0..255]^3 or [0..65535]^3 in big endian; rgb image
 // .pfm         --          Pf            [0, r] where r is any number; float grayscale image; We call this format pfmg for pfm grayscale
 // .pfm         --          PF            [0, r]^3 where r is any number; float rgb image
 // .pam         --          P7            [0..65535]^channels where channels is any number.
+//
+// The ascii vriants have the same header as the binay variants. They differ only in the format of the actual data.
+// 
+// The ascii files have data comprised of numbers in decimal separated by whitespace. There is one number for one channel.
+// The binary files have data simply layed out in memory next to each other in row major order. There is no compression.
+//
+// @TODO: separate this file more from the rest of the engine. This whole file can be transfomed to only use scanf and clib.
+// @TODO: factor endian functions someplace else
+
+#include "image.h"
+#include "string.h"
+#include "format.h"
+#include "error.h"
 
 typedef enum Netbpm_Format {
     NETBPM_FORMAT_NONE = 0,
@@ -27,13 +41,11 @@ typedef enum Netbpm_Format {
 } Netbpm_Format;
 
 typedef enum Netbpm_Format_Error {
-    NETBPM_FORMAT_ERROR_SECTION_COUNT = 20,
-
-    NETBPM_FORMAT_ERROR_BAD_TYPE = 0,
-    NETBPM_FORMAT_ERROR_INVALID_HEADER = 1,
-    NETBPM_FORMAT_ERROR_INVALID_HEADER_VALUES = 2,
-    NETBPM_FORMAT_ERROR_NOT_ENOUGH_DATA = 3,
-    
+    NETBPM_FORMAT_ERROR_NONE = 0,
+    NETBPM_FORMAT_ERROR_BAD_TYPE,
+    NETBPM_FORMAT_ERROR_INVALID_HEADER,
+    NETBPM_FORMAT_ERROR_INVALID_HEADER_VALUES,
+    NETBPM_FORMAT_ERROR_NOT_ENOUGH_DATA,
 } Netbpm_Format_Error;
 
 typedef enum Endian {
@@ -42,8 +54,29 @@ typedef enum Endian {
     ENDIAN_BIG = 2,
 } Endian;
 
-
 EXPORT Endian endian_get_local();
+EXPORT u32 endian_byteswap(u32 val);
+EXPORT Netbpm_Format netbpm_format_classify(String data);
+
+EXPORT Error netbpm_format_pgm_write_into(String_Builder* into, Image image);
+EXPORT Error netbpm_format_pgm_read_into(Image_Builder* image, String ppm);
+
+EXPORT Error netbpm_format_ppm_write_into(String_Builder* into, Image image);
+EXPORT Error netbpm_format_ppm_read_into(Image_Builder* image, String ppm);
+
+EXPORT Error netbpm_format_pfmg_write_into(String_Builder* into, Image image, f32 range);
+EXPORT Error netbpm_format_pfmg_read_into(Image_Builder* image, String ppm);
+
+EXPORT Error netbpm_format_pfm_write_into(String_Builder* into, Image image, f32 range);
+EXPORT Error netbpm_format_pfm_read_into(Image_Builder* image, String ppm);
+
+EXPORT Error netbpm_format_pam_write_into(String_Builder* into, Image image);
+EXPORT Error netbpm_format_pam_read_into(Image_Builder* image, String ppm);
+
+#endif
+
+#if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_NETBPM_IMPL)) && !defined(LIB_FORMAT_NETBPM_HAS_IMPL)
+#define LIB_FORMAT_NETBPM_HAS_IMPL
 
 EXPORT u32 endian_byteswap(u32 val)
 {
@@ -61,8 +94,6 @@ EXPORT u32 endian_byteswap(u32 val)
 
     return swapped.val;
 }
-
-EXPORT Netbpm_Format netbpm_format_classify(String data);
 
 EXPORT Netbpm_Format netbpm_format_classify(String data)
 {
@@ -84,7 +115,6 @@ EXPORT Netbpm_Format netbpm_format_classify(String data)
         default: return NETBPM_FORMAT_NONE;
     }
 }
-
 
 INTERNAL String format_ppm_translate_error(u32 code, void* context)
 {
@@ -517,3 +547,5 @@ EXPORT Error netbpm_format_pam_read_into(Image_Builder* image, String ppm)
     return out_error;
 
 }
+
+#endif

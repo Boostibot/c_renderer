@@ -4,6 +4,9 @@
 #include "allocator.h"
 #include <limits.h>
 
+//@TODO: flip_x flip_y and remove those from the load image 
+//@TODO: set_chanels, convert
+
 //some of the predefined pixel formats.
 //Other unspecified formats can specified by using some
 //positive number for its format. 
@@ -98,11 +101,6 @@ EXPORT isize image_pixel_format_size(Image_Pixel_Format format)
         case PIXEL_FORMAT_F32:  return 4;
     }
 }
-
-//INTERNAL bool image_is_invariant(Image_Builder image)
-//{
-//
-//}
 
 EXPORT isize image_builder_channel_count(Image_Builder image)
 {

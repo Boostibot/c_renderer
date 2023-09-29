@@ -14,6 +14,7 @@ EXPORT Error file_append_entire(String file_path, String data);
 EXPORT Error file_write_entire(String file_path, String data);
 EXPORT Error file_create(String file_path, bool* was_just_created);
 EXPORT Error file_remove(String file_path, bool* was_just_removed);
+EXPORT Error file_get_full_path(String_Builder* into, String path);
 
 #endif
 
@@ -142,6 +143,13 @@ EXPORT Error file_remove(String file_path, bool* was_just_removed)
     array_deinit(&escpaed_file_path);
     PERF_COUNTER_END(c);
     return error_from_platform(error);
+}
+
+EXPORT Error file_get_full_path(String_Builder* into, String path)
+{
+    //@TEMP: implement this in platform. Implement platform allocator support
+    builder_assign(into, path);
+    return ERROR_OK;
 }
 
 #endif

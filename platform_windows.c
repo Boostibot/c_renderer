@@ -60,8 +60,9 @@ void* platform_heap_reallocate(int64_t new_size, void* old_ptr, int64_t old_size
     #ifndef NDEBUG
     if(old_ptr != NULL && old_size != 0)
     {
-        int64_t correct_size = platform_heap_get_block_size(old_ptr, align);
-        assert(old_size == correct_size && "incorrect old_size passed to platform_heap_reallocate!");
+        //@TODO: Remove this. Actually refactor the entire way we do allocations
+        //int64_t correct_size = platform_heap_get_block_size(old_ptr, align);
+        //assert(old_size == correct_size && "incorrect old_size passed to platform_heap_reallocate!");
     }
     #endif
 
@@ -432,7 +433,7 @@ static void* _buffer_resize(_Buffer* stack, int64_t new_size)
         void* prev_ptr = NULL;
         if(stack->is_alloced)
             prev_ptr = stack->data;
-        stack->data = platform_heap_reallocate((int64_t) (new_capaity * i_size), prev_ptr, stack->capacity, IO_ALIGN);
+        stack->data = platform_heap_reallocate(new_capaity * i_size, prev_ptr, stack->capacity * i_size, IO_ALIGN);
         stack->is_alloced = true;
 
         //null newly added portion
@@ -482,7 +483,7 @@ static void* _buffer_at(_Buffer* stack, int64_t index)
 static void _buffer_deinit(_Buffer* stack)
 {
     if(stack->is_alloced)
-        (void) platform_heap_reallocate(0, stack->data, stack->capacity, IO_ALIGN);
+        (void) platform_heap_reallocate(0, stack->data, stack->capacity * stack->item_size, IO_ALIGN);
     
     _Buffer empty = {0};
     *stack = empty;
@@ -939,7 +940,7 @@ static Platform_Error _directory_list_contents_alloc(const wchar_t* directory_pa
     _Buffer built_path = {0};
 
     _BUFFER_INIT_BACKED(&stack, Dir_Context, 16);
-    _BUFFER_INIT_BACKED(&stack, wchar_t, IO_LOCAL_BUFFER_SIZE);
+    _BUFFER_INIT_BACKED(&built_path, wchar_t, IO_LOCAL_BUFFER_SIZE);
 
     _buffer_push(&stack, &first, sizeof(first));
 
