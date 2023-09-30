@@ -24,7 +24,6 @@
     DEFINE_ARRAY_TYPE(Vec3, Vec3_Array);
     DEFINE_ARRAY_TYPE(Vec4, Vec4_Array);
 #endif
-
 typedef struct Format_Mtl_Map {
     String_Builder path;        
     Vec3 offset;                //-o u (v (w)) (default 0 0 0)
@@ -41,6 +40,21 @@ typedef struct Format_Mtl_Map {
     bool blend_u;               //-blendu [on | off]
     bool blend_v;               //-blendv [on | off]
     char use_channel;           //-imfchan [r | g | b | m | l | z]  
+
+    bool was_set_offset;                
+    bool was_set_scale;                 
+    bool was_set_turbulance;            
+    bool was_set_texture_resolution;     
+    bool was_set_mipmap_sharpness_boost; 
+    bool was_set_bump_multiplier;        
+
+    bool was_set_modify_brigthness;      
+    bool was_set_modify_contrast;        
+
+    bool was_set_is_clamped;            
+    bool was_set_blend_u;               
+    bool was_set_blend_v;               
+    bool was_set_use_channel;           
 } Format_Mtl_Map;
 
 typedef struct Format_Mtl_Material {
@@ -88,6 +102,50 @@ typedef struct Format_Mtl_Material {
     Format_Mtl_Map map_pbr_sheen;              //map_Ps
     Format_Mtl_Map map_pbr_non_standard_ambient_occlusion;  //map_Pa //!DISCLAIMER! !THIS IS NOT STANDARD!
     Format_Mtl_Map map_pbr_rma;                //map_RMA/map_ORM  //RMA material (roughness, metalness, ambient occlusion)      
+
+    bool was_set_ambient_color;                     //Ka [bool was_set_
+    bool was_set_diffuse_color;                     //Kd [bool was_set_
+    bool was_set_specular_color;                    //Ks [bool was_set_
+    bool was_set_emissive_color;                    //Ke [bool was_set_
+    bool was_set_specular_exponent;                  //Ns [bool was_set_
+    bool was_set_opacity;                            //d/Tr [bool was_set_ //fully transparent is: d=0 and Tr=1 
+    bool was_set_illumination_mode;                  //illum [0, 10]
+
+    bool was_set_pbr_roughness;                           //Pr [bool was_set_
+    bool was_set_pbr_metallic;                            //Pm
+    bool was_set_pbr_sheen;                               //Ps
+    bool was_set_pbr_anisotropy;                          //aniso
+    bool was_set_pbr_anisotropy_rotation;                 //anisor
+    bool was_set_pbr_clearcoat_thickness;                 //Pc
+    bool was_set_pbr_clearcoat_roughness;                 //Pcr
+
+    bool was_set_only_for_transparent_transmission_filter_color;    //Tf [vec3] / Tf xyz [vec3]
+    bool was_set_only_for_transparent_optical_density;               //Ni [bool was_set_
+
+    bool was_set_map_ambient;                
+    bool was_set_map_diffuse;                
+    bool was_set_map_specular_color;         
+    bool was_set_map_specular_highlight;      
+    bool was_set_map_alpha;                  
+    bool was_set_map_bump;                   
+    bool was_set_map_emmisive;               
+    bool was_set_map_displacement;           
+    bool was_set_map_stencil;                
+    bool was_set_map_normal;                 
+
+    bool was_set_map_reflection_sphere;     
+    bool was_set_map_reflection_cube_top;    
+    bool was_set_map_reflection_cube_bottom; 
+    bool was_set_map_reflection_cube_front;  
+    bool was_set_map_reflection_cube_back;   
+    bool was_set_map_reflection_cube_left;   
+    bool was_set_map_reflection_cube_right;  
+
+    bool was_set_map_pbr_roughness;          
+    bool was_set_map_pbr_metallic;           
+    bool was_set_map_pbr_sheen;              
+    bool was_set_map_pbr_non_standard_ambient_occlusion;  
+    bool was_set_map_pbr_rma;                 
 } Format_Mtl_Material;
 
 typedef struct Format_Obj_Group {
@@ -407,7 +465,7 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
     
     //Add new default group
     String_Builder_Array def_groups = {0};
-    array_push(&def_groups, builder_from_cstring("default"));
+    array_push(&def_groups, builder_from_cstring("default", NULL));
 
     return _obj_parser_add_group(out, active_object, &def_groups, vertex_index);
 }
@@ -678,7 +736,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                     if(match_whitespace_separated(line, &line_index, &group_from, &group_to))
                     {
                         String group = string_range(line, group_from, group_to);
-                        array_push(&groups, builder_from_string_alloc(group, default_alloc));
+                        array_push(&groups, builder_from_string(group, default_alloc));
                     }
                     else
                     {
@@ -716,7 +774,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                     && match_whitespace_separated(line, &line_index, &from_index, &to_index))
                 {
                     String material_lib = string_range(line, from_index, to_index);
-                    array_push(&out->material_files, builder_from_string(material_lib));
+                    array_push(&out->material_files, builder_from_string(material_lib, NULL));
                 }
                 else
                 {
@@ -811,6 +869,7 @@ INTERNAL bool _match_space_separated_optional_vec3(String str, isize* index, Vec
     return state;
 }
 
+
 EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
     Allocator* def_alloc = allocator_get_default();
@@ -863,12 +922,14 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             error = FORMAT_MTL_ERROR_MISSING_NEWMTL;
         }
+        
+        #define SET_PROP(on, prop) (on)->was_set_##prop = true, (on)->prop
 
         //ambient_color
         else if(i = 0, match_sequence(line, &i, STRING("Ka")))
         {
             if(match_whitespace(line, &i) && _match_space_separated_vec3(line, &i, &vec))
-                material->ambient_color = vec;
+                SET_PROP(material,ambient_color) = vec;
             else
                 error = FORMAT_MTL_ERROR_COLOR_AMBIENT;
         }
@@ -877,7 +938,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         else if(i = 0, match_sequence(line, &i, STRING("Kd")))
         {
             if(match_whitespace(line, &i) && _match_space_separated_vec3(line, &i, &vec))
-                material->diffuse_color = vec;
+                SET_PROP(material, diffuse_color) = vec;
             else
                 error = FORMAT_MTL_ERROR_COLOR_DIFFUSE;
         }
@@ -886,7 +947,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         else if(i = 0, match_sequence(line, &i, STRING("Ks")))
         {
             if(match_whitespace(line, &i) && _match_space_separated_vec3(line, &i, &vec))
-                material->specular_color = vec;
+                SET_PROP(material, specular_color) = vec;
             else
                 error = FORMAT_MTL_ERROR_COLOR_SPECULAR;
         }
@@ -895,7 +956,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         else if(i = 0, match_sequence(line, &i, STRING("Ke")))
         {
             if(match_whitespace(line, &i) && _match_space_separated_vec3(line, &i, &vec))
-                material->emissive_color = vec;
+                SET_PROP(material, emissive_color) = vec;
             else
                 error = FORMAT_MTL_ERROR_COLOR_EMISSIVE;
         }
@@ -905,7 +966,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->specular_exponent = val;
+                SET_PROP(material, specular_exponent) = val;
             else
                 error = FORMAT_MTL_ERROR_SHEEN;
         }
@@ -915,7 +976,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_roughness = val;
+                SET_PROP(material, pbr_roughness) = val;
             else
                 error = FORMAT_MTL_ERROR_ROUGHNESS;
         }
@@ -925,7 +986,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_metallic = val;
+                SET_PROP(material, pbr_metallic) = val;
             else
                 error = FORMAT_MTL_ERROR_METALIC;
         }
@@ -935,7 +996,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_sheen = val;
+                SET_PROP(material, pbr_sheen) = val;
             else
                 error = FORMAT_MTL_ERROR_SHEEN;
         }
@@ -945,7 +1006,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_anisotropy = val;
+                SET_PROP(material, pbr_anisotropy) = val;
             else
                 error = FORMAT_MTL_ERROR_SHEEN;
         }
@@ -955,7 +1016,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_anisotropy_rotation = val;
+                SET_PROP(material, pbr_anisotropy_rotation) = val;
             else
                 error = FORMAT_MTL_ERROR_SHEEN;
         }
@@ -965,7 +1026,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_clearcoat_thickness = val;
+                SET_PROP(material, pbr_clearcoat_thickness) = val;
             else
                 error = FORMAT_MTL_ERROR_CLEARCOAT_THICKNESS;
         }
@@ -975,7 +1036,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->pbr_clearcoat_roughness = val;
+                SET_PROP(material, pbr_clearcoat_roughness) = val;
             else
                 error = FORMAT_MTL_ERROR_CLEARCOAT_ROUGHNESS;
         }
@@ -985,7 +1046,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->opacity = val; //d=0 => transparent
+                SET_PROP(material, opacity) = val; //d=0 => transparent
             else
                 error = FORMAT_MTL_ERROR_OPACITY;
         }
@@ -995,7 +1056,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->opacity = 1.0f - val; //Tr=1 => transparent
+                SET_PROP(material, opacity) = 1.0f - val; //Tr=1 => transparent
             else
                 error = FORMAT_MTL_ERROR_OPACITY;
         }
@@ -1004,7 +1065,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         else if(i = 0, match_sequence(line, &i, STRING("Tf")))
         {
             if(match_whitespace(line, &i) && _match_space_separated_vec3(line, &i, &vec))
-                material->only_for_transparent_transmission_filter_color = vec;
+                SET_PROP(material, only_for_transparent_transmission_filter_color) = vec;
             else
                 error = FORMAT_MTL_ERROR_TRANSMISSION_FILTER;
         }
@@ -1014,7 +1075,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         {
             f32 val = 0;
             if(match_whitespace(line, &i) && match_decimal_f32(line, &i, &val))
-                material->only_for_transparent_optical_density = val;
+                SET_PROP(material, only_for_transparent_optical_density) = val;
             else
                 error = FORMAT_MTL_ERROR_TRANSMISSION_OPTICAL_DENSITY;
         }
@@ -1025,7 +1086,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
             i64 val = 0;
             if(match_whitespace(line, &i) && match_decimal_u64(line, &i, &val)
                 && FORMAT_MTL_ILLUM_MIN <= val && val <= FORMAT_MTL_ILLUM_MAX)
-                    material->illumination_mode = (i32) val;
+                    SET_PROP(material, illumination_mode) = (i32) val;
             else
                 error = FORMAT_MTL_ERROR_ILLUMINATION_MODE;
         }
@@ -1075,7 +1136,8 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     }
                 }
             }
-
+            
+            #define SET_PROP_(on, prop) (on).was_set_##prop = true, (on).prop
             //if found match try to parse arguments
             bool matched = map_table_matched_i != -1;
             if(!matched)
@@ -1099,7 +1161,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-o")))
                     {
                         if(match_whitespace(arg, &arg_i) && _match_space_separated_optional_vec3(arg, &arg_i, &arg_vec))
-                            temp_tex_info.offset = arg_vec;
+                            SET_PROP_(temp_tex_info,offset) = arg_vec;
                         else
                             matched = false;
                     }
@@ -1108,7 +1170,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         
                         if(match_whitespace(arg, &arg_i) && _match_space_separated_optional_vec3(arg, &arg_i, &arg_vec))
-                            temp_tex_info.scale = arg_vec;
+                            SET_PROP_(temp_tex_info,scale) = arg_vec;
                         else
                             matched = false;
                     }
@@ -1117,7 +1179,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         
                         if(match_whitespace(arg, &arg_i) && _match_space_separated_optional_vec3(arg, &arg_i, &arg_vec))
-                            temp_tex_info.turbulance = arg_vec;
+                            SET_PROP_(temp_tex_info,turbulance) = arg_vec;
                         else
                             matched = false;
                     }
@@ -1126,7 +1188,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         i64 res = 0;
                         if(match_whitespace(arg, &arg_i) && match_decimal_u64(arg, &arg_i, &res))
-                            temp_tex_info.texture_resolution = (i32) res;
+                            SET_PROP_(temp_tex_info,texture_resolution) = (i32) res;
                         else
                             matched = false;
                     }
@@ -1135,7 +1197,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         f32 val = 0;
                         if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &val))
-                            temp_tex_info.mipmap_sharpness_boost = val;
+                            SET_PROP_(temp_tex_info,mipmap_sharpness_boost) = val;
                         else
                             matched = false;
                     }
@@ -1143,13 +1205,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-bm")))
                     {
                         f32 val = 0;
-                        const char* esc_seq1 = map_entry.sequences[0] ? map_entry.sequences[0] : "";
-                        const char* esc_seq2 = map_entry.sequences[1] ? map_entry.sequences[1] : "";
-
-                        //if is not bump map then error //@TODO: make this a soft error
-                        if(strcmp(esc_seq1, "map_bump") != 0 && strcmp(esc_seq2, "bump") != 0)
-                            matched = false;
-                        else if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &val))
+                        if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &val))
                             material->map_bump.bump_multiplier = val - 1.0f;
                         else
                             matched = false;
@@ -1162,8 +1218,8 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                         if(match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &modify_brigthness)
                             && match_whitespace(arg, &arg_i) && match_decimal_f32(arg, &arg_i, &modify_contrast))
                         {
-                            temp_tex_info.modify_brigthness = modify_brigthness;
-                            temp_tex_info.modify_contrast = modify_contrast - 1.0f;
+                            SET_PROP_(temp_tex_info,modify_brigthness) = modify_brigthness;
+                            SET_PROP_(temp_tex_info,modify_contrast) = modify_contrast - 1.0f;
                         }
                         else
                             matched = false;
@@ -1173,9 +1229,9 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         bool had_space = match_whitespace(arg, &arg_i);
                         if(had_space && match_sequence(arg, &arg_i, STRING("on")))
-                            temp_tex_info.is_clamped = true;
+                            SET_PROP_(temp_tex_info,is_clamped) = true;
                         else if(had_space && match_sequence(arg, &arg_i, STRING("off")))
-                            temp_tex_info.is_clamped = false;
+                            SET_PROP_(temp_tex_info,is_clamped) = false;
                         else
                             matched = false;
                     }
@@ -1184,9 +1240,9 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         bool had_space = match_whitespace(arg, &arg_i);
                         if(had_space && match_sequence(arg, &arg_i, STRING("on")))
-                            temp_tex_info.blend_u = false;
+                            SET_PROP_(temp_tex_info,blend_u) = false;
                         else if(had_space && match_sequence(arg, &arg_i, STRING("off")))
-                            temp_tex_info.blend_u = true;
+                            SET_PROP_(temp_tex_info,blend_u) = true;
                         else
                             matched = false;
                     }
@@ -1195,38 +1251,43 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     {
                         bool had_space = match_whitespace(arg, &arg_i);
                         if(had_space && match_sequence(arg, &arg_i, STRING("on")))
-                            temp_tex_info.blend_v = false;
+                            SET_PROP_(temp_tex_info,blend_v) = false;
                         else if(had_space && match_sequence(arg, &arg_i, STRING("off")))
-                            temp_tex_info.blend_v = true;
+                            SET_PROP_(temp_tex_info,blend_v) = true;
                         else
                             matched = false;
                     }
                     //-type sphere 
                     else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-type")))
                     {
-                        ASSERT(map_entry.sequences[0] != NULL);
-                        //if is not on refl map then error
-                        if(strcmp(map_entry.sequences[0], "refl") != 0)
-                            matched = false;
-                        else
+                        Format_Mtl_Map* found_tex_info = NULL; 
+                        if(match_whitespace(arg, &arg_i))
                         {
-                            bool had_space = match_whitespace(arg, &arg_i);
-                            if(had_space && match_sequence(arg, &arg_i, STRING("sphere")))
-                                tex_info = &material->map_reflection_sphere;
-                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_top")))
-                                tex_info = &material->map_reflection_cube_top;
-                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_bottom")))
-                                tex_info = &material->map_reflection_cube_bottom;
-                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_front")))
-                                tex_info = &material->map_reflection_cube_front;
-                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_back")))
-                                tex_info = &material->map_reflection_cube_back;
-                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_left")))
-                                tex_info = &material->map_reflection_cube_left;
-                            else if(had_space && match_sequence(arg, &arg_i, STRING("cube_right")))
-                                tex_info = &material->map_reflection_cube_right;
-                            else
-                                matched = false;
+                            if(match_sequence(arg, &arg_i, STRING("sphere")))
+                                found_tex_info = &material->map_reflection_sphere;
+                            else if(match_sequence(arg, &arg_i, STRING("cube_top")))
+                                found_tex_info = &material->map_reflection_cube_top;
+                            else if(match_sequence(arg, &arg_i, STRING("cube_bottom")))
+                                found_tex_info = &material->map_reflection_cube_bottom;
+                            else if(match_sequence(arg, &arg_i, STRING("cube_front")))
+                                found_tex_info = &material->map_reflection_cube_front;
+                            else if(match_sequence(arg, &arg_i, STRING("cube_back")))
+                                found_tex_info = &material->map_reflection_cube_back;
+                            else if(match_sequence(arg, &arg_i, STRING("cube_left")))
+                                found_tex_info = &material->map_reflection_cube_left;
+                            else if(match_sequence(arg, &arg_i, STRING("cube_right")))
+                                found_tex_info = &material->map_reflection_cube_right;
+                        }
+
+                        if(found_tex_info == NULL)
+                            matched = false;
+                        else    
+                        {
+                            //if is not on refl map then do nothing. 
+                            //This could be a hard error but its mostly harmless
+                            ASSERT(map_entry.sequences[0] != NULL);
+                            if(strcmp(map_entry.sequences[0], "refl") == 0)
+                                tex_info = found_tex_info;
                         }
                     }
                     //use_channel
@@ -1247,7 +1308,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                                 case 'm': 
                                 case 'l': 
                                 case 'z':
-                                    temp_tex_info.use_channel = c;
+                                    SET_PROP_(temp_tex_info,use_channel) = c;
                                     break;
                                 default: 
                                     matched_arg = false;
@@ -1267,24 +1328,18 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     i += arg_i;
                 }
 
-                format_obj_texture_info_deinit(tex_info);
-                *tex_info = temp_tex_info;
 
                 isize filename_from = i;
                 isize filename_to = line.size;
 
-                for(; filename_to-- > filename_from; )
-                    if(char_is_space(line.data[filename_to]) == false)
-                        break;
-
-                if(filename_to < filename_from)
-                    filename_to = filename_from;
-
                 String filename = string_range(line, filename_from, filename_to);
                 if(filename.size > 0)
-                    builder_assign(&tex_info->path, filename);
+                    builder_assign(&temp_tex_info.path, filename);
                 else
                     matched = FORMAT_MTL_ERROR_MAP;
+                    
+                format_obj_texture_info_deinit(tex_info);
+                *tex_info = temp_tex_info;
             }
 
         }

@@ -13,7 +13,7 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Resource Files\shaders">
+    <Filter Include="shaders">
       <UniqueIdentifier>{ffb7ba52-3168-4721-acd5-b25c8f0c3889}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -173,82 +173,85 @@
     <ClInclude Include="todo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="render.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\screen.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\screen.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\depth_color.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\depth_color.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\uv_debug.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\uv_debug.geom">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\uv_debug.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\blinn_phong.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\blinn_phong.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\solid_color.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\solid_color.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\skybox.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\skybox.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\pbr.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\pbr.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\equi_to_cubemap.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\equi_to_cubemap.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\irradiance_convolution.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\irradiance_convolution.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\pbr_mapped.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\pbr_mapped.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\brdf_lut.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\brdf_lut.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\prefilter.frag">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
     <None Include="shaders\prefilter.vert">
-      <Filter>Resource Files\shaders</Filter>
+      <Filter>shaders</Filter>
     </None>
   </ItemGroup>
 </Project>

@@ -272,7 +272,7 @@ EXPORT Hash_Found hash_table_insert(void* _table, String key, const void* value)
     ASSERT_SLOW(_hash_table_is_invarinat(table));
     hash_table_reserve(table, table->size + 1);
 
-    table->keys[table->size] = builder_from_string_alloc(key, table->index.allocator);
+    table->keys[table->size] = builder_from_string(key, table->index.allocator);
     memmove(_hash_table_get_value(table, table->size), value, table->value_type_size);
 
     Hash_Found found = {0};

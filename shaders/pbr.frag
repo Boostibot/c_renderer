@@ -11,19 +11,24 @@ in VS_OUT
 
 #define PBR_MAX_LIGHTS 4
 
-uniform sampler2D texture_albedo;
-uniform sampler2D texture_normal;
-uniform sampler2D texture_metallic;
-uniform sampler2D texture_roughness;
-uniform sampler2D texture_ao;
+uniform sampler2D map_albedo;
+uniform sampler2D map_normal;
+uniform sampler2D map_metallic;
+uniform sampler2D map_roughness;
+uniform sampler2D map_ao;
 
-uniform int use_textures;
+uniform int use_albedo_map;
+uniform int use_normal_map;
+uniform int use_metallic_map;
+uniform int use_roughness_map;
+uniform int use_ao_map;
 
 uniform vec3 solid_albedo;
 uniform float solid_metallic;
 uniform float solid_roughness;
 uniform float solid_ao;
 uniform vec3  reflection_at_zero_incidence;
+uniform vec3  ambient_color;
 
 uniform float gamma;
 uniform float attentuation_strength;
@@ -98,12 +103,12 @@ float attentuate_no_singularity(float light_distance, float light_radius)
 }
 
 
-vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, float ao)
+vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, float ao, vec3 ambient)
 {
     vec3 N = normal; 
     vec3 V = normalize(view_pos - fs_in.frag_pos);
 
-    vec3 Lo = vec3(0.0);
+    vec3 Lo = ambient;
     //int i = 0;
     for(int i = 0; i < PBR_MAX_LIGHTS; ++i) 
     {
@@ -133,7 +138,7 @@ vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, 
         kD *= 1.0 - metallic;	
 
         float NdotL = max(dot(N, L), 0.0);                
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
+        Lo += (kD * albedo / PI + specular) * radiance * (NdotL + 0.01); 
     }
     
     return Lo;
@@ -141,7 +146,7 @@ vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, 
 
 vec3 get_normal_from_map()
 {
-    vec3 tangent_normal = texture(texture_normal, fs_in.uv).xyz * 2.0 - 1.0;
+    vec3 tangent_normal = texture(map_normal, fs_in.uv).xyz * 2.0 - 1.0;
 
     vec3 Q1  = dFdx(fs_in.frag_pos);
     vec3 Q2  = dFdy(fs_in.frag_pos);
@@ -164,15 +169,18 @@ void main()
     float roughness = solid_roughness;
     float ao = solid_ao;
 
-    if(use_textures > 0)
-    {
-        albedo = gamma_correct(texture(texture_albedo, fs_in.uv).rgb, 1.0/gamma);
+    if(use_albedo_map > 0)
+        albedo = gamma_correct(texture(map_albedo, fs_in.uv).rgb, 1.0/gamma);
+    if(use_normal_map > 0)
         normal = get_normal_from_map(); //normalize(fs_in.norm); 
-        metallic  = texture(texture_metallic, fs_in.uv).r;
-        roughness = texture(texture_roughness, fs_in.uv).r;
-        ao        = texture(texture_ao, fs_in.uv).r;
-    }
+    if(use_metallic_map > 0)
+        metallic  = texture(map_metallic, fs_in.uv).r;
+    if(use_roughness_map > 0)
+        roughness = texture(map_roughness, fs_in.uv).r;
+    if(use_ao_map > 0)
+        ao        = texture(map_ao, fs_in.uv).r;
 
-    vec3 color = point_light_pbr(albedo, normal, metallic, roughness, ao);
+    vec3 color = point_light_pbr(albedo, normal, metallic, roughness, ao, ambient_color);
     frag_color = vec4(color, 1.0);
+    //frag_color = vec4(albedo, 1.0);
 }

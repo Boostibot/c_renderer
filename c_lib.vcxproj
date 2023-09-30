@@ -231,6 +231,7 @@
     <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
     <ClInclude Include="format_netbpm.h" />
+    <ClInclude Include="render.h" />
     <ClInclude Include="resource_loading.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="gl_debug_output.h" />

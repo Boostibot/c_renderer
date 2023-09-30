@@ -6,6 +6,8 @@
 #include "image.h"
 #include "handle_table.h"
 
+//@TODO: cubemap info!
+
 #define MAX_CHANNELS 4
 typedef struct Map_Info {
     Vec2 offset;                
@@ -83,7 +85,7 @@ typedef struct Material_Description {
     Vec3 albedo;
     Vec3 emissive;
     f32 roughness;
-    f32 metalic;
+    f32 metallic;
     f32 ambient_occlusion;
     f32 opacity;
     f32 emissive_power;
@@ -116,8 +118,8 @@ typedef struct Object_Group_Description {
     i32 child_i1;
     i32 depth;
 
-    i32 vertices_from;
-    i32 vertices_to;
+    i32 triangles_from;
+    i32 triangles_to;
 } Object_Group_Description;
 
 DEFINE_ARRAY_TYPE(Material_Description, Material_Description_Array);
@@ -176,7 +178,6 @@ typedef struct Loaded_Image {
 DEFINE_HANDLE_TYPES(Loaded_Image);
 DEFINE_HANDLE_TYPES(Map);
 DEFINE_HANDLE_TYPES(Cubemap);
-DEFINE_HANDLE_TYPES(Shape);
 DEFINE_HANDLE_TYPES(Shape_Assembly);
 DEFINE_HANDLE_TYPES(Material);
 DEFINE_HANDLE_TYPES(Object);
@@ -187,7 +188,6 @@ typedef struct Resources
 
     Handle_Table images;
     Handle_Table shapes;
-    Handle_Table shape_assemblies;
     Handle_Table materials;
     Handle_Table materials_phong;
     Handle_Table objects;
@@ -220,7 +220,7 @@ typedef struct Material {
     Vec3 albedo;
     Vec3 emissive;
     f32 roughness;
-    f32 metalic;
+    f32 metallic;
     f32 ambient_occlusion;
     f32 opacity;
     f32 emissive_power;
@@ -246,6 +246,15 @@ typedef struct Material {
 
 DEFINE_ARRAY_TYPE(Material, Material_Array);
 
+typedef struct Object_Leaf_Group
+{
+    String_Builder name;
+    Material_Handle material;
+
+    i32 triangles_from;
+    i32 triangles_to;
+} Object_Leaf_Group;
+
 typedef struct Object_Group
 {
     String_Builder name;
@@ -255,8 +264,8 @@ typedef struct Object_Group
     i32 child_i1;
     i32 depth;
 
-    i32 vertices_from;
-    i32 vertices_to;
+    i32 triangles_from;
+    i32 triangles_to;
 } Object_Group;
 
 DEFINE_ARRAY_TYPE(Object_Group, Object_Group_Array);
@@ -267,8 +276,7 @@ typedef struct Object
     String_Builder path;
 
     Material_Handle fallback_material;
-    Shape_Handle shape;
-    Shape_Assembly_Handle shape_assembly;
+    Shape_Assembly_Handle shape;
 
     Object_Group_Array groups;
 } Object;
@@ -282,8 +290,7 @@ typedef struct Object
     
     
 DEFINE_RESOURCES_RESOURCE_DECL(Loaded_Image, loaded_image, images)
-DEFINE_RESOURCES_RESOURCE_DECL(Shape, shape, shapes)
-DEFINE_RESOURCES_RESOURCE_DECL(Shape_Assembly, shape_assembly, shape_assemblies)
+DEFINE_RESOURCES_RESOURCE_DECL(Shape_Assembly, shape, shapes)
 DEFINE_RESOURCES_RESOURCE_DECL(Material, material, materials)
 DEFINE_RESOURCES_RESOURCE_DECL(Material, material_phong, materials_phong)
 DEFINE_RESOURCES_RESOURCE_DECL(Object, object, objects)
@@ -489,7 +496,6 @@ void object_description_deinit(Object_Description* description)
     Type##_Handle resources_##name##_share(Resources* resources, Type##_Handle handle)  \
     {                                                                                   \
         Handle h = handle_table_share(&resources->member_name, handle.h);               \
-        ASSERT(h.index != 0);                                                           \
         Type##_Handle out = {h};                                                        \
         return out;                                                                     \
     }                                                                                   \
@@ -497,7 +503,6 @@ void object_description_deinit(Object_Description* description)
     Type* resources_##name##_get(Resources* resources, Type##_Handle handle)            \
     {                                                                                   \
         Type* out = (Type*) handle_table_get(resources->member_name, handle.h);         \
-        ASSERT_MSG(out != NULL, "handles must always be valid! (Handles are strong, Refs are weak)"); \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
@@ -507,8 +512,7 @@ void object_description_deinit(Object_Description* description)
     }                                                                                   \
 
 DEFINE_RESOURCES_RESOURCE(Loaded_Image, loaded_image, images)
-DEFINE_RESOURCES_RESOURCE(Shape, shape, shapes)
-DEFINE_RESOURCES_RESOURCE(Shape_Assembly, shape_assembly, shape_assemblies)
+DEFINE_RESOURCES_RESOURCE(Shape_Assembly, shape, shapes)
 DEFINE_RESOURCES_RESOURCE(Material, material, materials)
 DEFINE_RESOURCES_RESOURCE(Material, material_phong, materials_phong)
 DEFINE_RESOURCES_RESOURCE(Object, object, objects)
@@ -521,16 +525,11 @@ void resources_loaded_image_remove(Resources* resources, Loaded_Image_Handle han
     if(handle_table_remove(&resources->images, handle.h, &removed))
         loaded_image_deinit(&removed);
 }    
-void resources_shape_remove(Resources* resources, Shape_Handle handle)      
-{                                                                               
-    Shape removed = {0};
-    if(handle_table_remove(&resources->shapes, handle.h, &removed))
-        shape_deinit(&removed);
-}  
-void resources_shape_assembly_remove(Resources* resources, Shape_Assembly_Handle handle)      
+
+void resources_shape_remove(Resources* resources, Shape_Assembly_Handle handle)      
 {                                                                               
     Shape_Assembly removed = {0};
-    if(handle_table_remove(&resources->shape_assemblies, handle.h, &removed))
+    if(handle_table_remove(&resources->shapes, handle.h, &removed))
         shape_assembly_deinit(&removed);
 }  
 void resources_material_remove(Resources* resources, Material_Handle handle)      
@@ -573,8 +572,7 @@ void resources_init(Resources* resources, Allocator* alloc)
     resources->alloc = alloc;
 
     handle_table_init(&resources->images, alloc,            sizeof(Loaded_Image), DEF_ALIGN);
-    handle_table_init(&resources->shapes, alloc,            sizeof(Shape), DEF_ALIGN);
-    handle_table_init(&resources->shape_assemblies, alloc,  sizeof(Shape_Assembly), DEF_ALIGN);
+    handle_table_init(&resources->shapes, alloc,            sizeof(Shape_Assembly), DEF_ALIGN);
     handle_table_init(&resources->materials, alloc,         sizeof(Material), DEF_ALIGN);
     handle_table_init(&resources->materials_phong, alloc,   sizeof(Material), DEF_ALIGN);
     handle_table_init(&resources->objects, alloc,           sizeof(Object), DEF_ALIGN);
@@ -582,9 +580,28 @@ void resources_init(Resources* resources, Allocator* alloc)
 
 void resources_deinit(Resources* resources)
 {
+    HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, object)
+        object_deinit(object, resources);
+    HANDLE_TABLE_FOR_EACH_END
+    
+    HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials, h, Material*, material)
+        material_deinit(material, resources);
+    HANDLE_TABLE_FOR_EACH_END
+    
+    HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials_phong, h, Material*, material)
+        material_deinit(material, resources);
+    HANDLE_TABLE_FOR_EACH_END
+
+    HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, loaded_image)
+        loaded_image_deinit(loaded_image);
+    HANDLE_TABLE_FOR_EACH_END
+    
+    HANDLE_TABLE_FOR_EACH_BEGIN(resources->shapes, h, Shape_Assembly*, shape_assembly)
+        shape_assembly_deinit(shape_assembly);
+    HANDLE_TABLE_FOR_EACH_END
+
     handle_table_deinit(&resources->images);
     handle_table_deinit(&resources->shapes);
-    handle_table_deinit(&resources->shape_assemblies);
     handle_table_deinit(&resources->materials);
     handle_table_deinit(&resources->materials_phong);
     handle_table_deinit(&resources->objects);
@@ -691,7 +708,6 @@ void object_deinit(Object* item, Resources* resources)
     array_deinit(&item->name);
     resources_material_remove(resources, item->fallback_material);
     resources_shape_remove(resources, item->shape);
-    resources_shape_assembly_remove(resources, item->shape_assembly);
 
     for(isize i = 0; i < item->groups.size; i++)
         object_group_deinit(&item->groups.data[i], resources);

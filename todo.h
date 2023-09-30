@@ -111,9 +111,9 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
         
         Todo todo = {0};
         todo.line = it.line_number;
-        todo.path = builder_from_string(path);
-        todo.marker = builder_from_string(todo_marker);
-        todo.signature = builder_from_string(signature);
+        todo.path = builder_from_string(path, NULL);
+        todo.marker = builder_from_string(todo_marker, NULL);
+        todo.signature = builder_from_string(signature, NULL);
 
         //is a comment todo
         if(comment_start != -1)

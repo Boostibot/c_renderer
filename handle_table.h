@@ -48,6 +48,8 @@
 // but not 1. However we can change this behind the scenes later.
 // 
 
+//@TODO: make type generic interface for this similar to array to remove the needed boilerplate and increase safety!
+
 #include "array.h"
 
 typedef struct Handle {
@@ -86,6 +88,8 @@ EXPORT Handle handle_table_share(Handle_Table* table, Handle handle);
 //Otherwise adds a new copy of the item and saves a handle to it.
 EXPORT void* handle_table_get_unique(Handle_Table* table, Handle handle, Handle* out_handle); 
 
+//@TODO: add size to the removed so this is at least a bit safer.
+//
 //Removes the item referenced by handle decreasing its reference count. 
 //If the items reference count reaches zero saves it to the removed pointer,
 //deallocate its data and returns true. Else returns false.
@@ -100,8 +104,11 @@ EXPORT void* handle_table_get(Handle_Table table, Handle handle);
 #define HANDLE_TABLE_FOR_EACH_BEGIN(handle_table, handle_name, Ptr_Type, ptr_name)      \
     for(isize _i = 0; _i < (handle_table).slots.size; _i++)                             \
     {                                                                                   \
+        ASSERT_MSG((handle_table).type_size == sizeof(*(Ptr_Type) NULL),                \
+            "incorectly sized type submitted to HANDLE_TABLE_FOR_EACH_BEGIN");          \
         Handle_Table_Slot* _slot = &(handle_table).slots.data[_i];                      \
         Handle handle_name = {(i32) _i + 1, _slot->generation};                         \
+        (void) handle_name; /* use it so the compiler doesnt shout if we dont need it */\
         Ptr_Type ptr_name = (Ptr_Type) _slot->ptr;                                      \
         if(ptr_name)                                                                    \
         {                                                                               \

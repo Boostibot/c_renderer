@@ -6,14 +6,6 @@
 #include "profile.h"
 #include "image_loader.h"
 
-//void obj_load_description(String path, Shape* shape, String_Builder_Array* material_names);
-//void mtl_load_description(String path, Material_Description_Array material_descriptions);
-//
-//void mtl_finilize(Resources* resources, Material_Description description, Material* material);
-//void obj_finalize(Shape_Handle shape_assembly, Object_Description description, Material_Ref_Array materials, Object* object);
-//
-//Error obj_load(Resources* resources, String path, Object* object);
-
 INTERNAL String _format_obj_mtl_translate_error(u32 code, void* context)
 {
     (void) context;
@@ -86,23 +78,6 @@ typedef struct Load_Error
 
 DEFINE_ARRAY_TYPE(Error, Error_Array);
 
-//@TODO: Move into math.h
-//Returns the maximum compoment of a vector.
-//This is also the maximum norm
-INTERNAL f32 vec3_max_len(Vec3 vec)
-{
-    f32 max1 = MAX(vec.x, vec.y);
-    f32 max = MAX(max1, vec.z);
-
-    return max;
-}
-
-//Normalize vector using the maximum norm.
-INTERNAL Vec3 vec3_max_norm(Vec3 vec)
-{
-    return vec3_scale(vec, 1.0f / vec3_max_len(vec));
-}
-
 EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Description* description, Format_Obj_Model model, Error_Array* errors_or_null, isize max_errors)
 {
     hash_index_reserve(&shape_assembly->vertices_hash, model.indeces.size);
@@ -111,7 +86,7 @@ EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Descriptio
     for(isize i = 0; i < model.material_files.size; i++)
     {
         String material_file = string_from_builder(model.material_files.data[i]);
-        array_push(&description->material_files, builder_from_string(material_file));
+        array_push(&description->material_files, builder_from_string(material_file, NULL));
     }
 
     //Try to guess the final needed size
@@ -233,8 +208,8 @@ EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Descriptio
         group_desc.depth = 0;
 
         //assign its range
-        group_desc.vertices_from = triangles_before;
-        group_desc.vertices_to = triangles_after;
+        group_desc.triangles_from = triangles_before;
+        group_desc.triangles_to = triangles_after;
 
         builder_assign(&group_desc.material_name, string_from_builder(parent_group->material));
         if(parent_group->groups.size > 0)
@@ -279,16 +254,25 @@ EXPORT void process_mtl_material(Material_Description* description_or_null, Mate
     if(pbr)
     {
         builder_assign(&pbr->name, string_from_builder(material.name));
+        
+        f32 guessed_ao = 1.0f - CLAMP(vec3_len(material.ambient_color), 0.0f, 1.0f);
+        f32 guessed_metallic = (f32)(material.specular_exponent >= 32);
+        f32 guessed_rougness = 1.0f - CLAMP(material.specular_exponent / 64.0f, 0.0f, 1.0f);
 
-        //values
+        pbr->ambient_occlusion = guessed_ao;
         pbr->albedo = material.diffuse_color;
-        pbr->metalic = material.pbr_metallic;
-        pbr->roughness = material.pbr_roughness;
+        
+        if(material.was_set_pbr_metallic)
+            pbr->metallic = material.pbr_metallic;
+        else
+            pbr->metallic = guessed_metallic;
+        
+        if(material.was_set_pbr_roughness)
+            pbr->roughness = material.pbr_roughness;
+        else
+            pbr->roughness = guessed_rougness;
+        
         pbr->opacity = material.opacity;
-
-        f32 ao_guess = 1.0f - CLAMP(vec3_len(material.ambient_color), 0.0f, 1.0f);
-        pbr->ambient_occlusion = ao_guess;
-
         pbr->bump_multiplier_minus_one = material.map_bump.bump_multiplier - 1;
         
         pbr->emissive_power = vec3_max_len(material.emissive_color);
@@ -297,8 +281,8 @@ EXPORT void process_mtl_material(Material_Description* description_or_null, Mate
         
         //maps
 
-        //if has RMA - rougness, metalic, ambient map use it
-        if(material.map_pbr_rma.path.size > 0)
+        //if has RMA - rougness, metallic, ambient map use it
+        if(material.was_set_map_pbr_rma > 0)
         {
             process_mtl_map(&pbr->map_roughness, material.map_pbr_rma, GAMMA_LINEAR, 1);
             process_mtl_map(&pbr->map_metallic, material.map_pbr_rma, GAMMA_LINEAR, 1);
@@ -310,13 +294,13 @@ EXPORT void process_mtl_material(Material_Description* description_or_null, Mate
         }
 
         //... but if has a specific texture it takes priority
-        if(material.map_pbr_roughness.path.size > 0)
+        if(material.was_set_map_pbr_roughness > 0)
             process_mtl_map(&pbr->map_roughness, material.map_pbr_roughness, GAMMA_LINEAR, 1);
 
-        if(material.map_pbr_metallic.path.size > 0)
+        if(material.was_set_map_pbr_metallic)
             process_mtl_map(&pbr->map_metallic, material.map_pbr_metallic, GAMMA_LINEAR, 1);
 
-        if(material.map_pbr_non_standard_ambient_occlusion.path.size > 0)
+        if(material.was_set_map_pbr_non_standard_ambient_occlusion)
             process_mtl_map(&pbr->map_ambient_occlusion, material.map_pbr_non_standard_ambient_occlusion, GAMMA_LINEAR, 1);
             
         process_mtl_map(&pbr->map_albedo, material.map_diffuse, GAMMA_SRGB, 3);
@@ -373,6 +357,16 @@ EXPORT void process_mtl_material(Material_Description* description_or_null, Mate
     }
 }
 
+String path_get_file_directory(String file_path)
+{
+    //@TODO: refactor out. Make handling of paths consistent!
+    isize last_dir_index = string_find_last_char(file_path, '/') + 1;
+
+    //@TODO: remove builder_from_string and make builder_from_string_alloc the default
+    String dir_path = string_head(file_path, last_dir_index);
+    return dir_path;
+}
+
 EXPORT Error material_load_images(Resources* resources, Material* material, Material_Description description, Error_Array* errors_or_null, isize max_errors)
 {
     Error out_error = {0};
@@ -415,7 +409,7 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
     material->albedo = description.albedo;
     material->emissive = description.emissive;
     material->roughness = description.roughness;
-    material->metalic = description.metalic;
+    material->metallic = description.metallic;
     material->ambient_occlusion = description.ambient_occlusion;
     material->opacity = description.opacity;
     material->emissive_power = description.emissive_power;
@@ -426,13 +420,24 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
     for(isize i = 0; i < STATIC_ARRAY_SIZE(pairings); i++)
     {
         Map_Pairing pairing = pairings[i];
+        
+        //if this image does not have a path dont even try
+        if(pairing.from->path.size <= 0)
+            continue;
+        
+        String item_path = string_from_builder(pairing.from->path);
+        String dir_path = path_get_file_directory(string_from_builder(description.path));
+            
+        String_Builder composed_path = builder_from_string(dir_path, NULL);
+        builder_append(&composed_path, item_path);
+
         Error load_error = {0};
         //look for loaded map inside resources.
         //@SPEED: linear search here. This will only become problematic once we start loading A LOT of images.
         //        I am guessing up to 1000 images this doenst make sense to optimize in any way.
         Loaded_Image_Handle found_handle = {0};
         HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, image_ptr)
-            if(builder_is_equal(image_ptr->path, pairing.from->path))
+            if(builder_is_equal(image_ptr->path, composed_path))
             {
                 found_handle.h = h;
                 break;
@@ -443,14 +448,14 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
         //@TODO: make macro for checking null handles
         if(found_handle.h.index == 0)
         {
-            String path = string_from_builder(pairing.from->path);
+
             Loaded_Image loaded = {0};
             loaded_image_init(&loaded, resources->alloc);
 
-            load_error = image_read_from_file(&loaded.image, path, 0, PIXEL_FORMAT_U8, 0);
+            load_error = image_read_from_file(&loaded.image, string_from_builder(composed_path), 0, PIXEL_FORMAT_U8, 0);
             if(error_is_ok(load_error))
             {
-                builder_assign(&loaded.path, path);
+                array_copy(&loaded.path, composed_path);
                 found_handle = resources_loaded_image_add(resources, &loaded);
             }
             else
@@ -466,18 +471,19 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
          pairing.to->info = pairing.from->info;
          array_copy(&pairing.to->path, pairing.from->path);
          out_error = ERROR_OR(out_error) load_error;
+
+         array_deinit(&composed_path);
     }
 
     return out_error;
 }
 
-EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly* assembly, Object_Description description, Material_Handle_Array materials)
+EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly* assembly, Object_Description description, Material_Handle_Array materials, Error_Array* errors_or_null, isize max_errors)
 {
-    Shape_Assembly_Handle assembly_handle = resources_shape_assembly_add(resources, assembly);
+    Shape_Assembly_Handle assembly_handle = resources_shape_add(resources, assembly);
     object_init(object, resources);
 
-    object->shape_assembly = assembly_handle;
-    object->shape = NULL_HANDLE(Shape_Handle);
+    object->shape = assembly_handle;
     array_copy(&object->name, description.name);
     array_copy(&object->path, description.path);
 
@@ -491,8 +497,6 @@ EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly
         Material* material = resources_material_get(resources, material_handle);
         if(material == NULL)
             continue;
-
-        LOG_INFO("ASSET", "%s", material->name.data);
     }
 
     for(isize i = 0; i < description.groups.size; i++)
@@ -521,15 +525,19 @@ EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly
                 group.child_i1 = group_desc->child_i1;
                 group.depth = group_desc->depth;
 
-                group.vertices_from = group_desc->vertices_from;
-                group.vertices_to = group_desc->vertices_to;
+                group.triangles_from = group_desc->triangles_from;
+                group.triangles_to = group_desc->triangles_to;
 
                 array_push(&object->groups, group);
             }
         }
 
-        if(unable_to_find_group)
+        if(unable_to_find_group && errors_or_null && errors_or_null->size < max_errors)
+        {
+            Error error = _resource_loading_error_to_error(RESOURCE_LOADING_ERROR_MATERIAL_NOT_FOUND);
+            array_push(errors_or_null, error);
             LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
+        }
     }
 }
 
@@ -537,12 +545,10 @@ EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly
 
 EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* materials, String path, Error_Array* errors_or_null, isize max_errors)
 {
-    Error error = {0};
-
     String_Builder full_path = {0};
     Allocator* scratch = allocator_get_scratch();
     array_init_backed(&full_path, scratch, 512);
-    file_get_full_path(&full_path, path);
+    Error error = file_get_full_path(&full_path, path);
     
     //@TODO: add dirty flag or something similar so this handles reloading.
     //       For now we can only reload if we eject all resources
@@ -575,34 +581,28 @@ EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* m
             isize had_mtl_errors = 0;
             format_mtl_read(&mtl_materials, string_from_builder(file_content), mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
 
-            if(had_mtl_errors > 0)
-                error = _format_obj_mtl_error_on_to_error(mtl_errors[0].statement, mtl_errors[0].line);
-
             if(errors_or_null)
             {
                 for(isize i = 0; i < MIN(FLAT_ERRORS_COUNT, had_mtl_errors); i++)
                     array_push(errors_or_null, _format_obj_mtl_error_on_to_error(mtl_errors[i].statement, mtl_errors[i].line));
             }
             
-            if(error_is_ok(error))
+            for(isize i = 0; i < mtl_materials.size; i++)
             {
-                for(isize i = 0; i < mtl_materials.size; i++)
-                {
-                    Material material = {0};
+                Material material = {0};
 
-                    material_init(&material, resources);
+                material_init(&material, resources);
             
-                    //@TODO: handle phong materials
-                    Material_Description material_desription = {0};
-                    process_mtl_material(&material_desription, NULL, mtl_materials.data[i]);
-                    array_copy(&material_desription.path, full_path);
+                //@TODO: handle phong materials
+                Material_Description material_desription = {0};
+                process_mtl_material(&material_desription, NULL, mtl_materials.data[i]);
+                array_copy(&material_desription.path, full_path);
 
-                    material_load_images(resources, &material, material_desription, errors_or_null, max_errors);
-                    Material_Handle local_handle = resources_material_add(resources, &material);
+                material_load_images(resources, &material, material_desription, errors_or_null, max_errors);
+                Material_Handle local_handle = resources_material_add(resources, &material);
                     
-                    array_push(materials, local_handle);
-                    material_description_deinit(&material_desription);
-                }
+                array_push(materials, local_handle);
+                material_description_deinit(&material_desription);
             }
 
             for(isize i = 0; i < mtl_materials.size; i++)
@@ -630,60 +630,52 @@ EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* m
 EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, String path, Error_Array* errors_or_null, isize max_errors)
 {
     Object_Handle out_handle = {0};
-    Error error = {0};
     String_Builder full_path = {0};
     Allocator* scratch = allocator_get_scratch();
     array_init_backed(&full_path, scratch, 512);
-    file_get_full_path(&full_path, path);
+    Error error = file_get_full_path(&full_path, path);
 
-    //search for an object. If found return its duplicated handle.
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, found_object)
-        if(builder_is_equal(full_path, found_object->path))
-        {
-            Object_Handle local_handle = {h};
-            out_handle = resources_object_share(resources, local_handle);
-            break;
-        }
-    HANDLE_TABLE_FOR_EACH_END
-
-    //@TODO factor
-    if(out_handle.h.index == 0)
+    if(error_is_ok(error))
     {
-        Allocator_Set allocs_before = allocator_set_default(resources->alloc);
-        String_Builder file_content = {scratch};
+    
 
-        error = file_read_entire(string_from_builder(full_path), &file_content);
-
-        if(error_is_ok(error))
-        {
-            Format_Obj_Model model = {0};
-            format_obj_model_init(&model, scratch);
-
-            Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
-            isize had_obj_errors = 0;
-            format_obj_read(&model, string_from_builder(file_content), obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
-
-            if(had_obj_errors > 0)
-                error = _format_obj_mtl_error_on_to_error(obj_errors[0].statement, obj_errors[0].line);
-
-            if(errors_or_null)
+        //search for an object. If found return its duplicated handle.
+        HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, found_object)
+            if(builder_is_equal(full_path, found_object->path))
             {
-                for(isize i = 0; i < MIN(FLAT_ERRORS_COUNT, had_obj_errors); i++)
-                    array_push(errors_or_null, _format_obj_mtl_error_on_to_error(obj_errors[i].statement, obj_errors[i].line));
+                Object_Handle local_handle = {h};
+                out_handle = resources_object_share(resources, local_handle);
+                break;
             }
+        HANDLE_TABLE_FOR_EACH_END
+
+        //@TODO factor
+        if(out_handle.h.index == 0)
+        {
+            Allocator_Set allocs_before = allocator_set_default(resources->alloc);
+            String_Builder file_content = {scratch};
+
+            error = file_read_entire(string_from_builder(full_path), &file_content);
 
             if(error_is_ok(error))
             {
+                Format_Obj_Model model = {0};
+                format_obj_model_init(&model, scratch);
+
+                Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
+                isize had_obj_errors = 0;
+                format_obj_read(&model, string_from_builder(file_content), obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
+
+                if(errors_or_null)
+                {
+                    for(isize i = 0; i < MIN(FLAT_ERRORS_COUNT, had_obj_errors); i++)
+                        array_push(errors_or_null, _format_obj_mtl_error_on_to_error(obj_errors[i].statement, obj_errors[i].line));
+                }
+
                 Shape_Assembly out_assembly = {0};
                 shape_assembly_init(&out_assembly, resources->alloc);
 
-                String full_path_s = string_from_builder(full_path);
-
-                //@TODO: refactor out. Make handling of paths consistent!
-                isize last_dir_index = string_find_last_char(full_path_s, '/') + 1;
-
-                //@TODO: remove builder_from_string and make builder_from_string_alloc the default
-                String dir_path = string_head(full_path_s, last_dir_index);
+                String dir_path = path_get_file_directory(string_from_builder(full_path));
 
                 Object_Description description = {0};
                 process_obj_object(&out_assembly, &description, model, errors_or_null, max_errors);
@@ -695,27 +687,34 @@ EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, Str
                 Material_Handle_Array materials = {0};
                 for(isize i = 0; i < description.material_files.size; i++)
                 {
-                    String_Builder mtl_path = builder_from_string_alloc(dir_path, scratch);
+                    //@TODO: remove builder_from_string and make builder_from_string_alloc the default
+                    String_Builder mtl_path = builder_from_string(dir_path, scratch);
                     String file = string_from_builder(description.material_files.data[i]);
                     builder_append(&mtl_path, file);
-                    material_read_entire(resources, &materials, string_from_builder(mtl_path), errors_or_null, max_errors);
+                    Error major_material_error = material_read_entire(resources, &materials, string_from_builder(mtl_path), errors_or_null, max_errors);
+
+                    if(error_is_ok(major_material_error) == false)
+                        LOG_ERROR("ASSET", "Failed to load material file %s while loading %s", mtl_path.data, full_path.data);
 
                     array_deinit(&mtl_path);
                 }
             
-                object_finalize(resources, &out_object, &out_assembly, description, materials);
+                object_finalize(resources, &out_object, &out_assembly, description, materials, errors_or_null, max_errors);
 
                 out_handle = resources_object_add(resources, &out_object);
                 array_deinit(&materials);
+
+                format_obj_model_deinit(&model);
+            }
+            else
+            {
+                LOG_ERROR("ASSET", "Failed to load object file %s", full_path.data);
             }
 
-            format_obj_model_deinit(&model);
+            array_deinit(&file_content);
+            allocator_set(allocs_before);
         }
-
-        array_deinit(&file_content);
-        allocator_set(allocs_before);
     }
-        
     if(error_is_ok(error) == false)
     {
         if(errors_or_null && errors_or_null->size < max_errors)

@@ -20,7 +20,7 @@ uniform float light_linear_attentuation;
 uniform float light_quadratic_attentuation;
 uniform float gamma;
 
-uniform sampler2D texture_diffuse;
+uniform sampler2D map_diffuse;
 
 vec3 gamma_correct(vec3 color, float gamma)
 {
@@ -29,7 +29,7 @@ vec3 gamma_correct(vec3 color, float gamma)
 
 void main()
 {
-    vec3 texture_color = texture(texture_diffuse, fs_in.uv).rgb;
+    vec3 texture_color = texture(map_diffuse, fs_in.uv).rgb;
     vec3 corrected_texture_color = gamma_correct(texture_color, 1.0/gamma);
 
     vec3 diffuse_color = corrected_texture_color * light_color;

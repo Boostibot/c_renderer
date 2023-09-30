@@ -339,6 +339,7 @@ float slerpf_coeficient(float t, float arc_angle)
     return coef;
 }
 
+//Spherical lerp. Arc angle needs to be the angle between from and to with respect to some position.
 Vec3 vec3_slerp(Vec3 from, Vec3 to, float arc_angle, float t)
 {
     Vec3 from_portion = vec3_scale(from, slerpf_coeficient(1.0f - t, arc_angle));
@@ -356,11 +357,27 @@ Vec3 vec3_slerp_around(Vec3 from, Vec3 to, Vec3 center, float t)
     return result;
 }
 
+//Returns the maximum compoment of a vector.
+//This is also the maximum norm
+INTERNAL f32 vec3_max_len(Vec3 vec)
+{
+    f32 max1 = MAX(vec.x, vec.y);
+    f32 max = MAX(max1, vec.z);
+
+    return max;
+}
+
+//Normalize vector using the maximum norm.
+INTERNAL Vec3 vec3_max_norm(Vec3 vec)
+{
+    return vec3_scale(vec, 1.0f / vec3_max_len(vec));
+}
+
 //Constructs a mat4 by entries in writing order
 //Calling this function as mat4(1, 2, 3, 4, ...)
-//result in the first row from the matrix being 1, 2, 3, 4
+//result in the first ROW from the matrix being 1, 2, 3, 4
 //while doint Mat4 mat = {1, 2, 3, 4} reuslts in the first 
-//column being 1, 2, 3, 4
+//COLUMN being 1, 2, 3, 4
 JMAPI Mat4 mat4(
         float m11, float m12, float m13, float m14,
         float m21, float m22, float m23, float m24,

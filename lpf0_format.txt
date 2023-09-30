@@ -211,9 +211,9 @@ n:
         :tile
     }        b:false
     
-    :metalic_map
+    :metallic_map
     TEX {:path
-            :images/wood_metalic.bmp;
+            :images/wood_metallic.bmp;
         :gamma
             f:1
         :tile
