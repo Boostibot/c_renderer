@@ -838,18 +838,20 @@ void run_func(void* context)
     settings->MSAA_samples = 4;
 
     mapping_make_default(app->control_mappings);
-
+    
     Resources resources = {0};
     Renderer renderer = {0};
 
     resources_init(&resources, &debug_alloc.allocator);
     renderer_init(&renderer, &debug_alloc.allocator);
+    
+    Object_Handle falcon_handle = {0};
+    Render_Object render_falcon = {0};
+    Object* falcon_object = NULL;
+
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
     Render_Capture_Buffers capture_buffers = {0};
-	
-    
-    Object_Handle falcon_handle = {0};
 
     i32 res_environment = 1024;
     i32 res_irradiance = 32;
@@ -872,12 +874,11 @@ void run_func(void* context)
     Render_Mesh render_quad = {0};
     //Render_Mesh render_falcon = {0};
 
-    Render_Object render_falcon = {0};
 
     Render_Image image_floor = {0};
     Render_Image image_debug = {0};
     Render_Image image_environment = {0};
-    Render_PBR_Material material_metal = {0};
+    Render_Material material_metal = {0};
 
     Render_Cubeimage cubemap_skybox = {0};
 
@@ -1008,11 +1009,14 @@ void run_func(void* context)
             PERF_COUNTER_END(art_counter_shapes);
 
 
-            object_read_entire(&resources, &falcon_handle, STRING("resources/sponza/sponza.obj"), NULL, 0);
-
-            Object* falcon_object = resources_object_get(&resources, falcon_handle);
-            //@TODO: add error returns here!
-            render_object_init_from_object(&render_falcon, &renderer, *falcon_object, &resources);
+            if(0)
+            {
+                object_read_entire(&resources, &falcon_handle, STRING("resources/sponza/sponza.obj"), NULL, 0);
+            
+                falcon_object = resources_object_get(&resources, falcon_handle);
+                //@TODO: add error returns here!
+                render_object_init_from_object(&render_falcon, &renderer, *falcon_object, &resources);
+            }
 
             //@TODO: make Renderer and Resources globals. Make them changable however similar to allocator.
             //       make Handle_Table type polymorphic!
@@ -1292,11 +1296,11 @@ void run_func(void* context)
                         f32 rough = (f32) rough_i / iters;
                         f32 metallic = (f32) metallic_i / iters;
                     
-                        Render_PBR_Material material = {0};
-                        material.metallic = metallic;
-                        material.roughness = rough;
-                        material.albedo = vec3(1, 1, 0.92f);
-                        material.ambient_occlusion = default_ao;
+                        Render_Filled_Material material = {0};
+                        material.info.metallic = metallic;
+                        material.info.roughness = rough;
+                        material.info.albedo = vec3(1, 1, 0.92f);
+                        material.info.ambient_occlusion = default_ao;
 
                         Vec3 pos = vec3(spacing * rough_i, spacing*metallic_i, 0);
                         Mat4 model = mat4_scale_affine(mat4_translation(vec3_add(offset, pos)), vec3_of(scale));
@@ -1305,7 +1309,7 @@ void run_func(void* context)
                         //    render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material,
                         //        &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &image_brdf_lut);
                         //else
-                            render_mesh_draw_using_pbr(render_uv_sphere, &renderer, &shader_pbr, projection, view, model, &params, &material, NULL);
+                            render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material, NULL);
                     }
                 }
 
@@ -1330,6 +1334,7 @@ void run_func(void* context)
             }
 
             //render falcon
+            if(0)
             {
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.01f)), vec3(20, 0, 20));
                 //render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
@@ -1456,7 +1461,9 @@ void run_func(void* context)
     render_shader_deinit(&shader_prefilter);
     render_shader_deinit(&shader_brdf_lut);
     render_shader_deinit(&shader_pbr_mapped);
-
+    
+    resources_deinit(&resources);
+    renderer_deinit(&renderer);
 
     render_pbr_material_deinit(&material_metal, &renderer);
 

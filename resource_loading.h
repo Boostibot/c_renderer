@@ -222,18 +222,24 @@ EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Descriptio
 
         array_push(&description->groups, group_desc);
     }
-
-    
 }
 
 INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, f32 expected_gamma, i8 channels)
 {
     description->info.brigthness = map.modify_brigthness;
-    description->info.contrast_minus_one = map.modify_contrast;
+    description->info.contrast = map.modify_contrast;
     description->info.gamma = expected_gamma;
     description->info.channels_count = channels;
     description->info.is_enabled = map.path.size > 0;
-    description->info.is_clamped = map.is_clamped;
+
+    Map_Repeat repeat = map.is_clamped ? MAP_REPEAT_CLAMP_TO_EDGE : MAP_REPEAT_REPEAT;
+    description->info.repeat_u = repeat;
+    description->info.repeat_v = repeat;
+    description->info.repeat_w = repeat;
+
+    description->info.filter_magnify = MAP_SCALE_FILTER_BILINEAR;
+    description->info.filter_minify = MAP_SCALE_FILTER_BILINEAR;
+
     description->info.offset = vec2_from_vec3(map.offset);
     description->info.scale = vec2_from_vec3(map.scale);
     description->info.resolution = vec2_of((f32) map.texture_resolution);
@@ -246,186 +252,131 @@ INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, 
 #define GAMMA_SRGB 2.2f
 #define GAMMA_LINEAR 1
 
-EXPORT void process_mtl_material(Material_Description* description_or_null, Material_Phong_Description* description_phong_or_null, Format_Mtl_Material material)
+EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_Material material)
 {
-    Material_Description* pbr = description_or_null;
-    Material_Phong_Description* phong = description_phong_or_null;
+    
+    builder_assign(&description->name, string_from_builder(material.name));
+        
+    f32 guessed_ao = 1.0f - CLAMP(vec3_len(material.ambient_color), 0.0f, 1.0f);
+    f32 guessed_metallic = (f32)(material.specular_exponent >= 32);
+    f32 guessed_rougness = 1.0f - CLAMP(material.specular_exponent / 64.0f, 0.0f, 1.0f);
 
-    if(pbr)
+    description->info.ambient_occlusion = guessed_ao;
+    description->info.albedo = material.diffuse_color;
+        
+    if(material.was_set_pbr_metallic)
+        description->info.metallic = material.pbr_metallic;
+    else
+        description->info.metallic = guessed_metallic;
+        
+    if(material.was_set_pbr_roughness)
+        description->info.roughness = material.pbr_roughness;
+    else
+        description->info.roughness = guessed_rougness;
+        
+    description->info.opacity = material.opacity;
+    description->info.bump_multiplier = material.map_bump.bump_multiplier;
+        
+    description->info.emissive_power = vec3_max_len(material.emissive_color);
+    description->info.emissive = description->info.emissive_power > 0 ? vec3_max_norm(material.emissive_color) : vec3_of(0);
+    description->info.emissive_power_map = 0;
+        
+    description->info.ambient_color = material.ambient_color;                     
+    description->info.diffuse_color = material.diffuse_color;                     
+    description->info.specular_color = material.specular_color;                    
+    description->info.specular_exponent = material.specular_exponent;                  
+    description->info.opacity = material.opacity;      
+
+    //maps
+    Map_Description* maps = description->maps;
+    Cubemap_Description* cubemaps = description->cubemaps;
+
+    //if has RMA - rougness, metallic, ambient map use it
+    if(material.was_set_map_pbr_rma > 0)
     {
-        builder_assign(&pbr->name, string_from_builder(material.name));
-        
-        f32 guessed_ao = 1.0f - CLAMP(vec3_len(material.ambient_color), 0.0f, 1.0f);
-        f32 guessed_metallic = (f32)(material.specular_exponent >= 32);
-        f32 guessed_rougness = 1.0f - CLAMP(material.specular_exponent / 64.0f, 0.0f, 1.0f);
+        process_mtl_map(&maps[MAP_TYPE_ROUGNESS], material.map_pbr_rma, GAMMA_LINEAR, 1);
+        process_mtl_map(&maps[MAP_TYPE_METALLIC], material.map_pbr_rma, GAMMA_LINEAR, 1);
+        process_mtl_map(&maps[MAP_TYPE_AMBIENT_OCCLUSION], material.map_pbr_rma, GAMMA_LINEAR, 1);
 
-        pbr->ambient_occlusion = guessed_ao;
-        pbr->albedo = material.diffuse_color;
-        
-        if(material.was_set_pbr_metallic)
-            pbr->metallic = material.pbr_metallic;
-        else
-            pbr->metallic = guessed_metallic;
-        
-        if(material.was_set_pbr_roughness)
-            pbr->roughness = material.pbr_roughness;
-        else
-            pbr->roughness = guessed_rougness;
-        
-        pbr->opacity = material.opacity;
-        pbr->bump_multiplier_minus_one = material.map_bump.bump_multiplier - 1;
-        
-        pbr->emissive_power = vec3_max_len(material.emissive_color);
-        pbr->emissive = pbr->emissive_power > 0 ? vec3_max_norm(material.emissive_color) : vec3_of(0);
-        pbr->emissive_power_map = 0;
-        
-        //maps
-
-        //if has RMA - rougness, metallic, ambient map use it
-        if(material.was_set_map_pbr_rma > 0)
-        {
-            process_mtl_map(&pbr->map_roughness, material.map_pbr_rma, GAMMA_LINEAR, 1);
-            process_mtl_map(&pbr->map_metallic, material.map_pbr_rma, GAMMA_LINEAR, 1);
-            process_mtl_map(&pbr->map_ambient_occlusion, material.map_pbr_rma, GAMMA_LINEAR, 1);
-
-            pbr->map_roughness.info.channels_idices1[0] = 1;
-            pbr->map_metallic.info.channels_idices1[0] = 2;
-            pbr->map_ambient_occlusion.info.channels_idices1[0] = 3;
-        }
-
-        //... but if has a specific texture it takes priority
-        if(material.was_set_map_pbr_roughness > 0)
-            process_mtl_map(&pbr->map_roughness, material.map_pbr_roughness, GAMMA_LINEAR, 1);
-
-        if(material.was_set_map_pbr_metallic)
-            process_mtl_map(&pbr->map_metallic, material.map_pbr_metallic, GAMMA_LINEAR, 1);
-
-        if(material.was_set_map_pbr_non_standard_ambient_occlusion)
-            process_mtl_map(&pbr->map_ambient_occlusion, material.map_pbr_non_standard_ambient_occlusion, GAMMA_LINEAR, 1);
-            
-        process_mtl_map(&pbr->map_albedo, material.map_diffuse, GAMMA_SRGB, 3);
-
-        process_mtl_map(&pbr->map_alpha, material.map_alpha, GAMMA_LINEAR, 1);
-        process_mtl_map(&pbr->map_emmisive, material.map_alpha, GAMMA_LINEAR, 1);
-        
-        process_mtl_map(&pbr->map_bump, material.map_alpha, GAMMA_LINEAR, 1);
-        process_mtl_map(&pbr->map_displacement, material.map_alpha, GAMMA_LINEAR, 1);
-        process_mtl_map(&pbr->map_stencil, material.map_alpha, GAMMA_LINEAR, 1);
-        process_mtl_map(&pbr->map_normal, material.map_alpha, GAMMA_LINEAR, 3);
-
-        process_mtl_map(&pbr->map_reflection_sphere, material.map_alpha, GAMMA_SRGB, 3);
-
-        process_mtl_map(&pbr->map_reflection_cube.top, material.map_reflection_cube_top, GAMMA_SRGB, 3);
-        process_mtl_map(&pbr->map_reflection_cube.bottom, material.map_reflection_cube_bottom, GAMMA_SRGB, 3);
-        process_mtl_map(&pbr->map_reflection_cube.front, material.map_reflection_cube_front, GAMMA_SRGB, 3);
-        process_mtl_map(&pbr->map_reflection_cube.back, material.map_reflection_cube_back, GAMMA_SRGB, 3);
-        process_mtl_map(&pbr->map_reflection_cube.left, material.map_reflection_cube_left, GAMMA_SRGB, 3);
-        process_mtl_map(&pbr->map_reflection_cube.right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
+        maps[MAP_TYPE_ROUGNESS].info.channels_idices1[0] = 1;
+        maps[MAP_TYPE_METALLIC].info.channels_idices1[0] = 2;
+        maps[MAP_TYPE_AMBIENT_OCCLUSION].info.channels_idices1[0] = 3;
     }
 
-    if(phong)
-    {
-        builder_assign(&phong->name, string_from_builder(material.name));
-    
-        phong->ambient_color = material.ambient_color;                     
-        phong->diffuse_color = material.diffuse_color;                     
-        phong->specular_color = material.specular_color;                    
-        phong->specular_exponent = material.specular_exponent;                  
-        phong->opacity = material.opacity;      
-    
-        phong->bump_multiplier_minus_one = material.map_bump.bump_multiplier - 1;                    
+    //... but if has a specific texture it takes priority
+    if(material.was_set_map_pbr_roughness > 0)
+        process_mtl_map(&maps[MAP_TYPE_ROUGNESS], material.map_pbr_roughness, GAMMA_LINEAR, 1);
 
-        process_mtl_map(&phong->map_ambient, material.map_ambient, GAMMA_SRGB, 3);           
-        process_mtl_map(&phong->map_diffuse, material.map_diffuse, GAMMA_SRGB, 3);   
-        process_mtl_map(&phong->map_specular_color, material.map_specular_color, GAMMA_SRGB, 3);    
-        process_mtl_map(&phong->map_specular_highlight, material.map_specular_highlight, GAMMA_LINEAR, 1);
+    if(material.was_set_map_pbr_metallic)
+        process_mtl_map(&maps[MAP_TYPE_METALLIC], material.map_pbr_metallic, GAMMA_LINEAR, 1);
 
-        process_mtl_map(&phong->map_alpha, material.map_alpha, GAMMA_LINEAR, 1);             
-        process_mtl_map(&phong->map_bump, material.map_bump, GAMMA_LINEAR, 1);              
-        process_mtl_map(&phong->map_displacement, material.map_displacement, GAMMA_LINEAR, 1);      
-        process_mtl_map(&phong->map_stencil, material.map_stencil, GAMMA_LINEAR, 1);           
-        process_mtl_map(&phong->map_normal, material.map_normal, GAMMA_LINEAR, 3);          
+    if(material.was_set_map_pbr_non_standard_ambient_occlusion)
+        process_mtl_map(&maps[MAP_TYPE_AMBIENT_OCCLUSION], material.map_pbr_non_standard_ambient_occlusion, GAMMA_LINEAR, 1);
+
+    process_mtl_map(&maps[MAP_TYPE_ALBEDO], material.map_diffuse, GAMMA_SRGB, 3);
+    process_mtl_map(&maps[MAP_TYPE_ALPHA], material.map_alpha, GAMMA_LINEAR, 1);
+    process_mtl_map(&maps[MAP_TYPE_EMMISIVE], material.map_emmisive, GAMMA_LINEAR, 1);
         
-        process_mtl_map(&phong->map_reflection_sphere, material.map_reflection_sphere, GAMMA_SRGB, 3);
+    process_mtl_map(&maps[MAP_TYPE_AMBIENT], material.map_ambient, GAMMA_SRGB, 3);           
+    process_mtl_map(&maps[MAP_TYPE_DIFFUSE], material.map_diffuse, GAMMA_SRGB, 3);   
+    process_mtl_map(&maps[MAP_TYPE_SPECULAR_COLOR], material.map_specular_color, GAMMA_SRGB, 3);    
+    process_mtl_map(&maps[MAP_TYPE_SPECULAR_HIGHLIGHT], material.map_specular_highlight, GAMMA_LINEAR, 1);
 
-        process_mtl_map(&phong->map_reflection_cube.top, material.map_reflection_cube_top, GAMMA_SRGB, 3);
-        process_mtl_map(&phong->map_reflection_cube.bottom, material.map_reflection_cube_bottom, GAMMA_SRGB, 3);
-        process_mtl_map(&phong->map_reflection_cube.front, material.map_reflection_cube_front, GAMMA_SRGB, 3);
-        process_mtl_map(&phong->map_reflection_cube.back, material.map_reflection_cube_back, GAMMA_SRGB, 3);
-        process_mtl_map(&phong->map_reflection_cube.left, material.map_reflection_cube_left, GAMMA_SRGB, 3);
-        process_mtl_map(&phong->map_reflection_cube.right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
-    }
-}
+    process_mtl_map(&maps[MAP_TYPE_BUMP], material.map_bump, GAMMA_LINEAR, 1);
+    process_mtl_map(&maps[MAP_TYPE_DISPLACEMENT], material.map_displacement, GAMMA_LINEAR, 1);
+    process_mtl_map(&maps[MAP_TYPE_STENCIL], material.map_stencil, GAMMA_LINEAR, 1);
+    process_mtl_map(&maps[MAP_TYPE_NORMAL], material.map_normal, GAMMA_LINEAR, 3);
 
-String path_get_file_directory(String file_path)
-{
-    //@TODO: refactor out. Make handling of paths consistent!
-    isize last_dir_index = string_find_last_char(file_path, '/') + 1;
+    process_mtl_map(&maps[MAP_TYPE_REFLECTION], material.map_reflection_sphere, GAMMA_SRGB, 3);
 
-    //@TODO: remove builder_from_string and make builder_from_string_alloc the default
-    String dir_path = string_head(file_path, last_dir_index);
-    return dir_path;
+    process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].top, material.map_reflection_cube_top, GAMMA_SRGB, 3);
+    process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].bottom, material.map_reflection_cube_bottom, GAMMA_SRGB, 3);
+    process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].front, material.map_reflection_cube_front, GAMMA_SRGB, 3);
+    process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].back, material.map_reflection_cube_back, GAMMA_SRGB, 3);
+    process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].left, material.map_reflection_cube_left, GAMMA_SRGB, 3);
+    process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
 }
 
 EXPORT Error material_load_images(Resources* resources, Material* material, Material_Description description, Error_Array* errors_or_null, isize max_errors)
 {
     Error out_error = {0};
-    
-    typedef struct {
-        Map* to;
-        Map_Description* from;
-    } Map_Pairing;
-
-    Map_Pairing pairings[] = {
-        #define MAP_PAIRING(name) {&material->name, &description.name}
-
-        MAP_PAIRING(map_albedo),  
-        MAP_PAIRING(map_roughness),           
-        MAP_PAIRING(map_ambient_occlusion),           
-        MAP_PAIRING(map_metallic),           
-        MAP_PAIRING(map_emmisive),
-    
-        MAP_PAIRING(map_alpha),  
-        MAP_PAIRING(map_bump),              
-        MAP_PAIRING(map_displacement),      
-        MAP_PAIRING(map_stencil),  
-        MAP_PAIRING(map_normal),
-    
-        MAP_PAIRING(map_reflection_sphere), 
-        MAP_PAIRING(map_reflection_cube.top), 
-        MAP_PAIRING(map_reflection_cube.bottom), 
-        MAP_PAIRING(map_reflection_cube.front), 
-        MAP_PAIRING(map_reflection_cube.back), 
-        MAP_PAIRING(map_reflection_cube.left), 
-        MAP_PAIRING(map_reflection_cube.right), 
-
-        #undef MAP_PAIRING
-    };
 
     array_copy(&material->name, description.name);
     array_copy(&material->path, description.path);
     
-    //@TODO: maka this into an info object or completely merge descriptions with representations and add bool is_loaded to Maps
-    material->albedo = description.albedo;
-    material->emissive = description.emissive;
-    material->roughness = description.roughness;
-    material->metallic = description.metallic;
-    material->ambient_occlusion = description.ambient_occlusion;
-    material->opacity = description.opacity;
-    material->emissive_power = description.emissive_power;
+    material->info = description.info;
 
-    material->emissive_power_map = description.emissive_power_map;
-    material->bump_multiplier_minus_one = description.bump_multiplier_minus_one;
+    Map* to_all[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {NULL};
+    Map_Description* desc_all[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {NULL};
 
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(pairings); i++)
+    //Add all images to be loaded
+    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
     {
-        Map_Pairing pairing = pairings[i];
-        
-        //if this image does not have a path dont even try
-        if(pairing.from->path.size <= 0)
+        to_all[i] = &material->maps[i];
+        desc_all[i] = &description.maps[i];
+    }
+    
+    //Add all cubemaps to be loaded
+    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+    {
+        for(isize j = 0; j < 6; j++)
+        {
+            isize index = MAP_TYPE_ENUM_COUNT + i*6 + j;
+            to_all[index] = &material->cubemaps[i].faces[j];;
+            desc_all[index] = &description.cubemaps[i].faces[j];
+        }
+    }
+
+    for(isize i = 0; i < STATIC_ARRAY_SIZE(to_all); i++)
+    {
+        Map* to = to_all[i];
+        Map_Description* desc = desc_all[i];
+
+        //if this image is not enabled or does not have a path dont even try
+        if(desc->info.is_enabled == false || desc->path.size <= 0)
             continue;
         
-        String item_path = string_from_builder(pairing.from->path);
+        String item_path = string_from_builder(desc->path);
         String dir_path = path_get_file_directory(string_from_builder(description.path));
             
         String_Builder composed_path = builder_from_string(dir_path, NULL);
@@ -448,7 +399,6 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
         //@TODO: make macro for checking null handles
         if(found_handle.h.index == 0)
         {
-
             Loaded_Image loaded = {0};
             loaded_image_init(&loaded, resources->alloc);
 
@@ -467,9 +417,9 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
             loaded_image_deinit(&loaded);
         }
 
-         pairing.to->image = found_handle;
-         pairing.to->info = pairing.from->info;
-         array_copy(&pairing.to->path, pairing.from->path);
+         to->image = found_handle;
+         to->info = desc->info;
+         array_copy(&to->path, desc->path);
          out_error = ERROR_OR(out_error) load_error;
 
          array_deinit(&composed_path);
@@ -595,7 +545,7 @@ EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* m
             
                 //@TODO: handle phong materials
                 Material_Description material_desription = {0};
-                process_mtl_material(&material_desription, NULL, mtl_materials.data[i]);
+                process_mtl_material(&material_desription, mtl_materials.data[i]);
                 array_copy(&material_desription.path, full_path);
 
                 material_load_images(resources, &material, material_desription, errors_or_null, max_errors);
@@ -637,8 +587,6 @@ EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, Str
 
     if(error_is_ok(error))
     {
-    
-
         //search for an object. If found return its duplicated handle.
         HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, found_object)
             if(builder_is_equal(full_path, found_object->path))

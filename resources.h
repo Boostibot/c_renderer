@@ -8,6 +8,19 @@
 
 //@TODO: cubemap info!
 
+typedef enum Map_Scale_Filter {
+    MAP_SCALE_FILTER_NEAREST,
+    MAP_SCALE_FILTER_BILINEAR,
+    MAP_SCALE_FILTER_TRILINEAR,
+} Map_Scale_Filter;
+
+typedef enum Map_Repeat {
+    MAP_REPEAT_REPEAT,
+    MAP_REPEAT_MIRRORED_REPEAT,
+    MAP_REPEAT_CLAMP_TO_EDGE,
+    MAP_REPEAT_CLAMP_TO_BORDER
+} Map_Repeat;
+
 #define MAX_CHANNELS 4
 typedef struct Map_Info {
     Vec2 offset;                
@@ -19,13 +32,18 @@ typedef struct Map_Info {
     //If value is 0 then it is assumed to be equal to its index ie.:
     // channels_idices1 = {0, 0, 0, 0} ~~assumed~~> channels_idices1 = {1, 2, 3, 4}
 
+    Map_Scale_Filter filter_minify;
+    Map_Scale_Filter filter_magnify;
+    Map_Repeat repeat_u;
+    Map_Repeat repeat_v;
+    Map_Repeat repeat_w;
+
     //linear_color = (contrast_minus_one + 1) * color^(1/gamma) + brigthness;
     //output_color = linear_color^screen_gamma
-    f32 gamma;                //default 1
-    f32 brigthness;           //default 0
-    f32 contrast_minus_one;   //default 0
+    f32 gamma;          //default 1
+    f32 brigthness;     //default 0
+    f32 contrast;       //default 0
 
-    bool is_clamped; //wheter or not does this texture not tile. Defaults to tile ie. false;
     bool is_enabled; //whether or not to use this texture. Maybe [0, 1] float?
 } Map_Info;
 
@@ -53,60 +71,74 @@ typedef union Cubemap_Description {
     Map_Description faces[6];
 } Cubemap_Description;
 
-typedef struct Material_Phong_Description {
-    String_Builder name;
-    String_Builder path;
+//@TODO: fuse the two material descriptions and materials in general to one uber material.
+//       Try to keep the rendering stuff independent from the storage.
+//       Add more functions to make it easier to manage objects automatically
+//       Do the allocator stuff
+//       Get the stack allocator here
+//       Add perf counters everywhere
+//       Do instanced rendering! THIS IS IMPORTANT FOR ACHITECTURE!
+//       DO CONSTANT BUFFERS AND SINGLE PIXEL IMAGES
+
+typedef enum Map_Type{
+    MAP_TYPE_ALBEDO,
+    MAP_TYPE_ROUGNESS,
+    MAP_TYPE_AMBIENT_OCCLUSION,
+    MAP_TYPE_METALLIC,
     
+    MAP_TYPE_AMBIENT,
+    MAP_TYPE_DIFFUSE,
+    MAP_TYPE_SPECULAR_COLOR,
+    MAP_TYPE_SPECULAR_HIGHLIGHT,
+    
+    MAP_TYPE_ALPHA,
+    MAP_TYPE_BUMP,
+    MAP_TYPE_DISPLACEMENT,
+    MAP_TYPE_STENCIL,
+    MAP_TYPE_NORMAL,
+    MAP_TYPE_REFLECTION,
+    MAP_TYPE_EMMISIVE,
+
+    MAP_TYPE_ENUM_COUNT,
+} Map_Type;
+
+typedef enum Cubemap_Type{
+    CUBEMAP_TYPE_SKYBOX,
+    CUBEMAP_TYPE_IRRADIANCE,
+    CUBEMAP_TYPE_PREFILTER,
+    CUBEMAP_TYPE_REFLECTION,
+
+    CUBEMAP_TYPE_ENUM_COUNT,
+} Cubemap_Type;
+
+typedef struct Material_Info {
     Vec3 ambient_color;                     
     Vec3 diffuse_color;                     
     Vec3 specular_color;                    
-    f32 specular_exponent;                  
-    f32 opacity;      
+    f32 specular_exponent;    
     
-    f32 bump_multiplier_minus_one;                    
-
-    Map_Description map_ambient;           
-    Map_Description map_diffuse;   
-    Map_Description map_specular_color;    
-    Map_Description map_specular_highlight;
-    Map_Description map_alpha;             
-    Map_Description map_bump;              
-    Map_Description map_displacement;      
-    Map_Description map_stencil;           
-    Map_Description map_normal;           
-    Map_Description map_reflection_sphere;
-    Cubemap_Description map_reflection_cube;
-} Material_Phong_Description;
-
-typedef struct Material_Description {
-    String_Builder name;
-    String_Builder path;
-
     Vec3 albedo;
     Vec3 emissive;
     f32 roughness;
     f32 metallic;
     f32 ambient_occlusion;
     f32 opacity;
-    f32 emissive_power;
 
+    Vec3 reflection_at_zero_incidence;
+
+    f32 emissive_power;
     f32 emissive_power_map;
-    f32 bump_multiplier_minus_one;
+    f32 bump_multiplier;
+} Material_Info;
+
+typedef struct Material_Description {
+    String_Builder name;
+    String_Builder path;
     
-    Map_Description map_albedo;  
-    Map_Description map_roughness;           
-    Map_Description map_ambient_occlusion;           
-    Map_Description map_metallic;           
-    Map_Description map_emmisive;
-    
-    Map_Description map_alpha;  
-    Map_Description map_bump;              
-    Map_Description map_displacement;      
-    Map_Description map_stencil;  
-    Map_Description map_normal;
-    
-    Map_Description map_reflection_sphere;   
-    Cubemap_Description map_reflection_cube;
+    Material_Info info;
+
+    Map_Description maps[MAP_TYPE_ENUM_COUNT];
+    Cubemap_Description cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
 } Material_Description;
 
 typedef struct Object_Group_Description {
@@ -123,7 +155,6 @@ typedef struct Object_Group_Description {
 } Object_Group_Description;
 
 DEFINE_ARRAY_TYPE(Material_Description, Material_Description_Array);
-DEFINE_ARRAY_TYPE(Material_Phong_Description, Material_Phong_Description_Array);
 DEFINE_ARRAY_TYPE(Object_Group_Description, Object_Group_Description_Array);
 
 typedef struct Object_Description {
@@ -141,9 +172,6 @@ void map_description_deinit(Map_Description* description);
 
 void cubemap_description_init(Cubemap_Description* description, Allocator* alloc);
 void cubemap_description_deinit(Cubemap_Description* description);
-
-void material_phong_description_init(Material_Phong_Description* description, Allocator* alloc);
-void material_phong_description_deinit(Material_Phong_Description* description);
 
 void material_description_init(Material_Description* description, Allocator* alloc);
 void material_description_deinit(Material_Description* description);
@@ -189,7 +217,6 @@ typedef struct Resources
     Handle_Table images;
     Handle_Table shapes;
     Handle_Table materials;
-    Handle_Table materials_phong;
     Handle_Table objects;
 } Resources;
 
@@ -216,32 +243,11 @@ typedef union Cubemap {
 typedef struct Material {
     String_Builder name;
     String_Builder path;
-
-    Vec3 albedo;
-    Vec3 emissive;
-    f32 roughness;
-    f32 metallic;
-    f32 ambient_occlusion;
-    f32 opacity;
-    f32 emissive_power;
-
-    f32 emissive_power_map;
-    f32 bump_multiplier_minus_one;
-
-    Map map_albedo;  
-    Map map_roughness;           
-    Map map_ambient_occlusion;           
-    Map map_metallic;           
-    Map map_emmisive;
     
-    Map map_alpha;  
-    Map map_bump;              
-    Map map_displacement;      
-    Map map_stencil;  
-    Map map_normal;
-    
-    Map map_reflection_sphere;   
-    Cubemap map_reflection_cube;
+    Material_Info info;
+
+    Map maps[MAP_TYPE_ENUM_COUNT];
+    Cubemap cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
 } Material;
 
 DEFINE_ARRAY_TYPE(Material, Material_Array);
@@ -358,86 +364,33 @@ void cubemap_description_deinit(Cubemap_Description* description)
         map_description_deinit(&description->faces[i]);
 }
 
-void material_phong_description_init(Material_Phong_Description* description, Allocator* alloc)
-{
-    material_phong_description_deinit(description);
-    
-    array_init(&description->path, alloc);
-    array_init(&description->path, alloc);
-
-    map_description_init(&description->map_ambient, alloc);           
-    map_description_init(&description->map_diffuse, alloc);   
-    map_description_init(&description->map_specular_color, alloc);    
-    map_description_init(&description->map_specular_highlight, alloc);
-    map_description_init(&description->map_alpha, alloc);             
-    map_description_init(&description->map_bump, alloc);              
-    map_description_init(&description->map_displacement, alloc);      
-    map_description_init(&description->map_stencil, alloc);           
-    map_description_init(&description->map_normal, alloc);           
-    map_description_init(&description->map_reflection_sphere, alloc);
-    cubemap_description_init(&description->map_reflection_cube, alloc);
-    
-    memset(description, 0, sizeof *description);
-}
-void material_phong_description_deinit(Material_Phong_Description* description)
-{
-    array_deinit(&description->path);
-    array_deinit(&description->path);
-
-    map_description_deinit(&description->map_ambient);           
-    map_description_deinit(&description->map_diffuse);   
-    map_description_deinit(&description->map_specular_color);    
-    map_description_deinit(&description->map_specular_highlight);
-    map_description_deinit(&description->map_alpha);             
-    map_description_deinit(&description->map_bump);              
-    map_description_deinit(&description->map_displacement);      
-    map_description_deinit(&description->map_stencil);           
-    map_description_deinit(&description->map_normal);           
-    map_description_deinit(&description->map_reflection_sphere);
-    cubemap_description_deinit(&description->map_reflection_cube);
-    
-    memset(description, 0, sizeof *description);
-}
-
 void material_description_init(Material_Description* description, Allocator* alloc)
 {
     material_description_deinit(description);
 
     array_init(&description->path, alloc);
-    array_init(&description->path, alloc);
+    array_init(&description->name, alloc);
 
-    map_description_init(&description->map_alpha, alloc);  
-    map_description_init(&description->map_bump, alloc);              
-    map_description_init(&description->map_displacement, alloc);      
-    map_description_init(&description->map_stencil, alloc);  
-    map_description_init(&description->map_roughness, alloc);    
-    map_description_init(&description->map_ambient_occlusion, alloc);    
-    map_description_init(&description->map_metallic, alloc);        
-    map_description_init(&description->map_albedo, alloc);        
-    map_description_init(&description->map_emmisive, alloc);           
-    map_description_init(&description->map_normal, alloc);             
-    map_description_init(&description->map_reflection_sphere, alloc);   
-    cubemap_description_init(&description->map_reflection_cube, alloc);
+    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+        map_description_init(&description->maps[i], alloc);  
+        
+    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+        cubemap_description_init(&description->cubemaps[i], alloc);  
 
     memset(description, 0, sizeof *description);
 }
+
 void material_description_deinit(Material_Description* description)
 {
     array_deinit(&description->path);
-    array_deinit(&description->path);
+    array_deinit(&description->name);
+    
+    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+        map_description_deinit(&description->maps[i]);  
+        
+    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+        cubemap_description_deinit(&description->cubemaps[i]);  
 
-    map_description_deinit(&description->map_alpha);  
-    map_description_deinit(&description->map_bump);              
-    map_description_deinit(&description->map_displacement);      
-    map_description_deinit(&description->map_stencil);  
-    map_description_deinit(&description->map_roughness);
-    map_description_deinit(&description->map_ambient_occlusion);
-    map_description_deinit(&description->map_metallic);           
-    map_description_deinit(&description->map_albedo);           
-    map_description_deinit(&description->map_emmisive);           
-    map_description_deinit(&description->map_normal);             
-    map_description_deinit(&description->map_reflection_sphere);   
-    cubemap_description_deinit(&description->map_reflection_cube);
 
     memset(description, 0, sizeof *description);
 }
@@ -514,7 +467,6 @@ void object_description_deinit(Object_Description* description)
 DEFINE_RESOURCES_RESOURCE(Loaded_Image, loaded_image, images)
 DEFINE_RESOURCES_RESOURCE(Shape_Assembly, shape, shapes)
 DEFINE_RESOURCES_RESOURCE(Material, material, materials)
-DEFINE_RESOURCES_RESOURCE(Material, material_phong, materials_phong)
 DEFINE_RESOURCES_RESOURCE(Object, object, objects)
 
 //Remove functions have to be done by hand since each type requires its own deinit.
@@ -536,12 +488,6 @@ void resources_material_remove(Resources* resources, Material_Handle handle)
 {                                                                               
     Material removed = {0};
     if(handle_table_remove(&resources->materials, handle.h, &removed))
-        material_deinit(&removed, resources);
-}  
-void resources_material_phong_remove(Resources* resources, Material_Handle handle)      
-{                                                                               
-    Material removed = {0};
-    if(handle_table_remove(&resources->materials_phong, handle.h, &removed))
         material_deinit(&removed, resources);
 }  
 void resources_object_remove(Resources* resources, Object_Handle handle)      
@@ -574,26 +520,22 @@ void resources_init(Resources* resources, Allocator* alloc)
     handle_table_init(&resources->images, alloc,            sizeof(Loaded_Image), DEF_ALIGN);
     handle_table_init(&resources->shapes, alloc,            sizeof(Shape_Assembly), DEF_ALIGN);
     handle_table_init(&resources->materials, alloc,         sizeof(Material), DEF_ALIGN);
-    handle_table_init(&resources->materials_phong, alloc,   sizeof(Material), DEF_ALIGN);
     handle_table_init(&resources->objects, alloc,           sizeof(Object), DEF_ALIGN);
 }
 
 void resources_deinit(Resources* resources)
 {
+    
+    HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, loaded_image)
+        loaded_image_deinit(loaded_image);
+    HANDLE_TABLE_FOR_EACH_END
+
     HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, object)
         object_deinit(object, resources);
     HANDLE_TABLE_FOR_EACH_END
     
     HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials, h, Material*, material)
         material_deinit(material, resources);
-    HANDLE_TABLE_FOR_EACH_END
-    
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials_phong, h, Material*, material)
-        material_deinit(material, resources);
-    HANDLE_TABLE_FOR_EACH_END
-
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, loaded_image)
-        loaded_image_deinit(loaded_image);
     HANDLE_TABLE_FOR_EACH_END
     
     HANDLE_TABLE_FOR_EACH_BEGIN(resources->shapes, h, Shape_Assembly*, shape_assembly)
@@ -603,7 +545,6 @@ void resources_deinit(Resources* resources)
     handle_table_deinit(&resources->images);
     handle_table_deinit(&resources->shapes);
     handle_table_deinit(&resources->materials);
-    handle_table_deinit(&resources->materials_phong);
     handle_table_deinit(&resources->objects);
 
     memset(resources, 0, sizeof *resources);
@@ -643,39 +584,26 @@ void material_init(Material* item, Resources* resources)
     material_deinit(item, resources);
     array_init(&item->path, resources->alloc);
     array_init(&item->name, resources->alloc);
-
-    map_init(&item->map_alpha, resources);  
-    map_init(&item->map_bump, resources);              
-    map_init(&item->map_displacement, resources);      
-    map_init(&item->map_stencil, resources);  
-    map_init(&item->map_roughness, resources);
-    map_init(&item->map_ambient_occlusion, resources);
-    map_init(&item->map_metallic, resources);     
-    map_init(&item->map_albedo, resources);     
-    map_init(&item->map_emmisive, resources);           
-    map_init(&item->map_normal, resources);             
-    map_init(&item->map_reflection_sphere, resources);   
-    cubemap_init(&item->map_reflection_cube, resources);
+    
+    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+        map_init(&item->maps[i], resources);  
+        
+    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+        cubemap_init(&item->cubemaps[i], resources);  
 }
 
 void material_deinit(Material* item, Resources* resources)
 {
     array_deinit(&item->path);
     array_deinit(&item->name);
-    memset(item, 0, sizeof *item);
     
-    map_deinit(&item->map_alpha, resources);  
-    map_deinit(&item->map_bump, resources);              
-    map_deinit(&item->map_displacement, resources);      
-    map_deinit(&item->map_stencil, resources);  
-    map_deinit(&item->map_roughness, resources);
-    map_deinit(&item->map_ambient_occlusion, resources);
-    map_deinit(&item->map_metallic, resources);           
-    map_deinit(&item->map_albedo, resources);           
-    map_deinit(&item->map_emmisive, resources);           
-    map_deinit(&item->map_normal, resources);             
-    map_deinit(&item->map_reflection_sphere, resources);   
-    cubemap_deinit(&item->map_reflection_cube, resources);
+    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+        map_deinit(&item->maps[i], resources);  
+        
+    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+        cubemap_deinit(&item->cubemaps[i], resources);  
+
+    memset(item, 0, sizeof *item);
 }
 
 void object_group_init(Object_Group* item, Resources* resources)
@@ -714,9 +642,5 @@ void object_deinit(Object* item, Resources* resources)
 
     memset(item, 0, sizeof *item);
 }
-
-
-
-
 
 #endif

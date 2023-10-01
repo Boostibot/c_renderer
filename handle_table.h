@@ -137,9 +137,14 @@ EXPORT void handle_table_deinit(Handle_Table* table)
     table->type_size = 0;
 }
 
-INTERNAL Allocator* _handle_table_get_allocator(const Handle_Table* table)
+INTERNAL Allocator* _handle_table_get_allocator(Handle_Table* table)
 {
     Allocator* alloc = array_get_allocator(table->slots);
+    if(alloc == NULL)
+    {
+        table->slots.allocator = allocator_get_default();
+        alloc = table->slots.allocator;
+    }
     return alloc;
 }
 
@@ -174,6 +179,8 @@ EXPORT Handle handle_table_add(Handle_Table* table)
     Handle_Table_Slot* empty_slot = &table->slots.data[out_handle.index - 1];
     empty_slot->generation += 1;
     empty_slot->references += 1;
+
+    ASSERT_MSG(is_power_of_two(table->type_align) && table->type_size > 0, "Must be valid! Handle_Table was not init?");
     empty_slot->ptr = allocator_allocate(alloc, table->type_size, table->type_align, SOURCE_INFO());
     memset(empty_slot->ptr, 0, table->type_size);
 

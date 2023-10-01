@@ -100,12 +100,11 @@ typedef struct PBR_Params
     Vec3 ambient_color;
 } PBR_Params;
 
-
 DEFINE_HANDLE_TYPES(Render_Mesh);
 DEFINE_HANDLE_TYPES(Render_Image);
 DEFINE_HANDLE_TYPES(Render_Cubeimage);
 DEFINE_HANDLE_TYPES(Render_Shader);
-DEFINE_HANDLE_TYPES(Render_PBR_Material);
+DEFINE_HANDLE_TYPES(Render_Material);
 
 typedef struct Render_Map
 {
@@ -119,38 +118,16 @@ typedef struct Render_Cubemap
     Map_Info info;
 } Render_Cubemap;
 
-typedef struct Render_PBR_Material
+typedef struct Render_Material
 {
     String_Builder name;
     String_Builder path;
 
-    Vec3 albedo;
-    Vec3 emissive;
-    f32 roughness;
-    f32 metallic;
-    f32 ambient_occlusion;
-    f32 opacity;
-    f32 emissive_power;
-    Vec3 reflection_at_zero_incidence;
+    Material_Info info;
 
-    f32 emissive_power_map;
-    f32 bump_multiplier_minus_one;
-    
-    Render_Map map_albedo;  
-    Render_Map map_roughness;           
-    Render_Map map_ambient_occlusion;           
-    Render_Map map_metallic;           
-    Render_Map map_emmisive;
-    
-    Render_Map map_alpha;  
-    Render_Map map_bump;              
-    Render_Map map_displacement;      
-    Render_Map map_stencil;  
-    Render_Map map_normal;
-    
-    Render_Map map_reflection_sphere;   
-    Render_Cubemap map_reflection_cube;
-} Render_PBR_Material;
+    Render_Map maps[MAP_TYPE_ENUM_COUNT];
+    Render_Cubemap cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
+} Render_Material;
 
 #define MAX_SINGLE_COLOR_MAPS 20
 #define MAX_PBR_UNIFORM_BUFFERS 10
@@ -1006,13 +983,13 @@ void render_mesh_draw_using_skybox(Render_Mesh mesh, const Render_Shader* skybox
     glDepthFunc(GL_LESS);
 }
 
-void render_pbr_material_deinit(Render_PBR_Material* material, Renderer* renderer);
-void render_pbr_material_init(Render_PBR_Material* material, Renderer* renderer);
+void render_pbr_material_deinit(Render_Material* material, Renderer* renderer);
+void render_pbr_material_init(Render_Material* material, Renderer* renderer);
 
 
 void renderer_deinit(Renderer* renderer)
 {
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_PBR_Material*, render_pbr_material)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->materials, h, Render_Material*, render_pbr_material)
         render_pbr_material_deinit(render_pbr_material, renderer);
     HANDLE_TABLE_FOR_EACH_END
 
@@ -1020,11 +997,11 @@ void renderer_deinit(Renderer* renderer)
         render_image_deinit(render_image);
     HANDLE_TABLE_FOR_EACH_END
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Shader*, render_shader)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->shaders, h, Render_Shader*, render_shader)
         render_shader_deinit(render_shader);
     HANDLE_TABLE_FOR_EACH_END
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Mesh*, render_mesh)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->meshes, h, Render_Mesh*, render_mesh)
         render_mesh_deinit(render_mesh);
     HANDLE_TABLE_FOR_EACH_END
     
@@ -1045,7 +1022,7 @@ void renderer_init(Renderer* renderer, Allocator* alloc)
     handle_table_init(&renderer->cubeimages, alloc, sizeof(Render_Cubeimage), DEF_ALIGN);
     handle_table_init(&renderer->shaders, alloc, sizeof(Render_Shader), DEF_ALIGN);
     handle_table_init(&renderer->meshes, alloc, sizeof(Render_Mesh), DEF_ALIGN);
-    handle_table_init(&renderer->materials, alloc, sizeof(Render_PBR_Material), DEF_ALIGN);
+    handle_table_init(&renderer->materials, alloc, sizeof(Render_Material), DEF_ALIGN);
 }
 
 
@@ -1083,7 +1060,7 @@ DEFINE_RENDERER_RESOURCE(Render_Image, image, images)
 DEFINE_RENDERER_RESOURCE(Render_Cubeimage, cubeimage, cubeimages)
 DEFINE_RENDERER_RESOURCE(Render_Shader, shader, shaders)
 DEFINE_RENDERER_RESOURCE(Render_Mesh, mesh, meshes)
-DEFINE_RENDERER_RESOURCE(Render_PBR_Material, material, materials)
+DEFINE_RENDERER_RESOURCE(Render_Material, material, materials)
 
 void renderer_image_remove(Renderer* renderer, Render_Image_Handle handle)      
 {                                                                               
@@ -1112,37 +1089,28 @@ void renderer_mesh_remove(Renderer* renderer, Render_Mesh_Handle handle)
         render_mesh_deinit(&removed);
 }  
 
-void renderer_material_remove(Renderer* renderer, Render_PBR_Material_Handle handle)      
+void renderer_material_remove(Renderer* renderer, Render_Material_Handle handle)      
 {                                                                               
-    Render_PBR_Material removed = {0};
+    Render_Material removed = {0};
     if(handle_table_remove(&renderer->materials, handle.h, &removed))
         render_pbr_material_init(&removed, renderer);
 }  
 
-void render_pbr_material_deinit(Render_PBR_Material* material, Renderer* renderer)
+void render_pbr_material_deinit(Render_Material* material, Renderer* renderer)
 {
     array_deinit(&material->name);
     array_deinit(&material->path);
     
-    renderer_image_remove(renderer, material->map_albedo.image);  
-    renderer_image_remove(renderer, material->map_roughness.image);           
-    renderer_image_remove(renderer, material->map_ambient_occlusion.image);           
-    renderer_image_remove(renderer, material->map_metallic.image);           
-    renderer_image_remove(renderer, material->map_emmisive.image);
-    
-    renderer_image_remove(renderer, material->map_alpha.image);  
-    renderer_image_remove(renderer, material->map_bump.image);              
-    renderer_image_remove(renderer, material->map_displacement.image);      
-    renderer_image_remove(renderer, material->map_stencil.image);  
-    renderer_image_remove(renderer, material->map_normal.image);
-    
-    renderer_image_remove(renderer, material->map_reflection_sphere.image);
-    renderer_cubeimage_remove(renderer, material->map_reflection_cube.image);
+    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+        renderer_image_remove(renderer, material->maps[i].image);  
+
+    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+        renderer_cubeimage_remove(renderer, material->cubemaps[i].image);  
 
     memset(material, 0, sizeof *material);
 }
 
-void render_pbr_material_init(Render_PBR_Material* material, Renderer* renderer)
+void render_pbr_material_init(Render_Material* material, Renderer* renderer)
 {
     render_pbr_material_deinit(material, renderer);
     array_init(&material->name, renderer->alloc);
@@ -1184,7 +1152,6 @@ Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources
 
 Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer, Resources* resources)
 {
-
     String_Builder concatenated_paths = {renderer->alloc};
 
     bool had_at_least_one_size = false;
@@ -1233,18 +1200,6 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer, 
     return out;
 }
 
-bool render_map_use(Render_Map map, Renderer* renderer, const Render_Shader* shader, const char* name, isize* slot)
-{
-    Render_Image* image = renderer_image_get(renderer, map.image);
-    if(image)
-    {
-        render_image_use(image, *slot);
-        render_shader_set_i32(shader, name, (i32) *slot);
-    }
-    
-    *slot += 1;
-    return image != NULL;
-}
 
 void render_map_unuse(Render_Map map)
 {
@@ -1252,7 +1207,7 @@ void render_map_unuse(Render_Map map)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void render_pbr_material_init_from_material(Render_PBR_Material* render_material, Renderer* renderer, Material* material, Resources* resources)
+void render_pbr_material_init_from_material(Render_Material* render_material, Renderer* renderer, Material* material, Resources* resources)
 {
     render_pbr_material_init(render_material, renderer);
 
@@ -1262,32 +1217,13 @@ void render_pbr_material_init_from_material(Render_PBR_Material* render_material
         array_copy(&render_material->name, material->name);
         array_copy(&render_material->path, material->path);
 
-        //@TODO: make struct for this similar to Map_Info
-        render_material->albedo = material->albedo;
-        render_material->emissive = material->emissive;
-        render_material->roughness = material->roughness;
-        render_material->metallic = material->metallic;
-        render_material->ambient_occlusion = material->ambient_occlusion;
-        render_material->opacity = material->opacity;
-        render_material->emissive_power = material->emissive_power;
-        render_material->reflection_at_zero_incidence = vec3_of(0);
-        render_material->emissive_power_map = material->emissive_power_map;
-        render_material->bump_multiplier_minus_one = material->bump_multiplier_minus_one;
+        render_material->info = material->info;
     
-        render_material->map_albedo = render_map_from_map(material->map_albedo, renderer, resources);  
-        render_material->map_roughness = render_map_from_map(material->map_roughness, renderer, resources);           
-        render_material->map_ambient_occlusion = render_map_from_map(material->map_ambient_occlusion, renderer, resources);           
-        render_material->map_metallic = render_map_from_map(material->map_metallic, renderer, resources);           
-        render_material->map_emmisive = render_map_from_map(material->map_emmisive, renderer, resources);
-    
-        render_material->map_alpha = render_map_from_map(material->map_alpha, renderer, resources);  
-        render_material->map_bump = render_map_from_map(material->map_bump, renderer, resources);              
-        render_material->map_displacement = render_map_from_map(material->map_displacement, renderer, resources);      
-        render_material->map_stencil = render_map_from_map(material->map_stencil, renderer, resources);  
-        render_material->map_normal = render_map_from_map(material->map_normal, renderer, resources);
-    
-        render_material->map_reflection_sphere = render_map_from_map(material->map_reflection_sphere, renderer, resources);   
-        render_material->map_reflection_cube = render_cubemap_from_cubemap(material->map_reflection_cube, renderer, resources);   
+        for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+            render_material->maps[i] = render_map_from_map(material->maps[i], renderer, resources);  
+
+        for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+            render_material->cubemaps[i] = render_cubemap_from_cubemap(material->cubemaps[i], renderer, resources);  
     }
 }
 
@@ -1297,7 +1233,7 @@ typedef struct Render_Object_Leaf_Group {
     i32 triangles_from;
     i32 triangles_to;
 
-    Render_PBR_Material material;
+    Render_Material material;
 } Render_Object_Leaf_Group;
 
 DEFINE_ARRAY_TYPE(Render_Object_Leaf_Group, Render_Object_Leaf_Group_Array);
@@ -1366,9 +1302,53 @@ typedef struct Triangle_Sub_Range
     isize triangles_to;
 } Triangle_Sub_Range;
 
-//@TODO: restore esentially to the previous version. Ie do the querying from Renderer to outside of this func and supply something like Render_PBR_Material_Pointers.
+
+typedef struct Render_Filled_Map
+{
+    Map_Info info;
+    const Render_Image* image;
+} Render_Filled_Map;
+
+typedef struct Render_Filled_Material
+{
+    Material_Info info;
+
+    Render_Filled_Map albedo;
+    Render_Filled_Map metallic;
+    Render_Filled_Map roughness;
+    Render_Filled_Map ambient_occlusion;
+    Render_Filled_Map normal;
+} Render_Filled_Material; 
+
+bool render_filled_map_use(Render_Filled_Map map, const Render_Shader* shader, const char* name, isize* slot)
+{
+    if(map.image)
+    {
+        render_image_use(map.image, *slot);
+        render_shader_set_i32(shader, name, (i32) *slot);
+    }
+    
+    *slot += 1;
+    return map.image != NULL;
+}
+
+//@TODO: remove till 20/10/2023 
+bool render_map_use(Render_Map map, Renderer* renderer, const Render_Shader* shader, const char* name, isize* slot)
+{
+    Render_Image* image = renderer_image_get(renderer, map.image);
+    if(image)
+    {
+        render_image_use(image, *slot);
+        render_shader_set_i32(shader, name, (i32) *slot);
+    }
+    
+    *slot += 1;
+    return image != NULL;
+}
+
+//@TODO: restore esentially to the previous version. Ie do the querying from Renderer to outside of this func and supply something like Render_Material_Pointers.
 // This is necessary so that this whole thing becomes at least a bit disentagled from the handle mess. I want concrete things in my life again :( 
-void render_mesh_draw_using_pbr(Render_Mesh mesh, Renderer* renderer, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material, 
+void render_mesh_draw_using_pbr(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Filled_Material* material, 
     const Triangle_Sub_Range* sub_range_or_null)
 {
     render_shader_use(pbr_shader);
@@ -1403,24 +1383,18 @@ void render_mesh_draw_using_pbr(Render_Mesh mesh, Renderer* renderer, const Rend
     render_shader_set_vec3(pbr_shader, "ambient_color", params->ambient_color);
 
     //material
-    Vec3 reflection_at_zero_incidence = material->reflection_at_zero_incidence;
+    Vec3 reflection_at_zero_incidence = material->info.reflection_at_zero_incidence;
     if(vec3_is_equal(reflection_at_zero_incidence, vec3_of(0)))
         reflection_at_zero_incidence = vec3_of(0.04f);
     render_shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
 
     isize slot = 0;
-    
-    bool use_albedo_map = false;
-    bool use_normal_map = false;
-    bool use_metallic_map = false;
-    bool use_roughness_map = false;
-    bool use_ao_map = false;
 
-    use_albedo_map = render_map_use(material->map_albedo, renderer, pbr_shader, "map_albedo", &slot);
-    use_normal_map = render_map_use(material->map_normal, renderer, pbr_shader, "map_normal", &slot);
-    use_metallic_map = render_map_use(material->map_metallic, renderer, pbr_shader, "map_metallic", &slot);
-    use_roughness_map = render_map_use(material->map_roughness, renderer, pbr_shader, "map_roughness", &slot);
-    use_ao_map = render_map_use(material->map_ambient_occlusion, renderer, pbr_shader, "map_ao", &slot);
+    bool use_albedo_map = render_filled_map_use(material->albedo, pbr_shader, "map_albedo", &slot);
+    bool use_normal_map = render_filled_map_use(material->normal, pbr_shader, "map_normal", &slot);
+    bool use_metallic_map = render_filled_map_use(material->metallic, pbr_shader, "map_metallic", &slot);
+    bool use_roughness_map = render_filled_map_use(material->roughness, pbr_shader, "map_roughness", &slot);
+    bool use_ao_map = render_filled_map_use(material->ambient_occlusion, pbr_shader, "map_ao", &slot);
 
     render_shader_set_i32(pbr_shader, "use_albedo_map", use_albedo_map);
     render_shader_set_i32(pbr_shader, "use_normal_map", use_normal_map);
@@ -1428,12 +1402,11 @@ void render_mesh_draw_using_pbr(Render_Mesh mesh, Renderer* renderer, const Rend
     render_shader_set_i32(pbr_shader, "use_roughness_map", use_roughness_map);
     render_shader_set_i32(pbr_shader, "use_ao_map", use_ao_map);
     
-    //@TEMP
     //@TODO: add the solid color images
-    render_shader_set_vec3(pbr_shader, "solid_albedo", material->albedo);
-    render_shader_set_f32(pbr_shader, "solid_metallic", material->metallic);
-    render_shader_set_f32(pbr_shader, "solid_roughness", material->roughness);
-    render_shader_set_f32(pbr_shader, "solid_ao", material->ambient_occlusion);
+    render_shader_set_vec3(pbr_shader, "solid_albedo", material->info.albedo);
+    render_shader_set_f32(pbr_shader, "solid_metallic", material->info.metallic);
+    render_shader_set_f32(pbr_shader, "solid_roughness", material->info.roughness);
+    render_shader_set_f32(pbr_shader, "solid_ao", material->info.ambient_occlusion);
     
     if(sub_range_or_null)
         render_mesh_draw_range(mesh, sub_range_or_null->triangles_from, sub_range_or_null->triangles_to);
@@ -1452,6 +1425,16 @@ void render_mesh_draw_using_pbr(Render_Mesh mesh, Renderer* renderer, const Rend
     render_shader_unuse(pbr_shader);
 }
 
+
+Render_Filled_Map render_filled_map_from_map(Renderer* renderer, Render_Map map)
+{
+    Render_Filled_Map filled_map = {0};
+    filled_map.image = renderer_image_get(renderer, map.image);
+    filled_map.info = map.info;
+
+    return filled_map;
+}
+
 void render_object(const Render_Object* render_object, Renderer* renderer, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params)
 {
     Render_Mesh* mesh = renderer_mesh_get(renderer, render_object->mesh);
@@ -1460,20 +1443,27 @@ void render_object(const Render_Object* render_object, Renderer* renderer, const
         LOG_ERROR("RENDER", "render object does not have mesh! " SOURCE_INFO_FMT, SOURCE_INFO_PRINT(SOURCE_INFO()));
         return;
     }
-
+    Render_Filled_Material filled_material = {0};
     Triangle_Sub_Range sub_range = {0};
     for(isize i = 0; i < render_object->leaf_groups.size; i++)
     {
         Render_Object_Leaf_Group* group = &render_object->leaf_groups.data[i];
         sub_range.triangles_from = group->triangles_from;
         sub_range.triangles_to = group->triangles_to;
+        filled_material.info = group->material.info;
+        
+        filled_material.albedo = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_ALBEDO]);
+        filled_material.normal = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_NORMAL]);
+        filled_material.metallic = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_METALLIC]);
+        filled_material.roughness = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_ROUGNESS]);
+        filled_material.ambient_occlusion = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_AMBIENT_OCCLUSION]);
 
-        render_mesh_draw_using_pbr(*mesh, renderer, pbr_shader, projection, view, model, params, &group->material, &sub_range);
+        render_mesh_draw_using_pbr(*mesh, pbr_shader, projection, view, model, params, &filled_material, &sub_range);
     }
 }
 
 #if 0
-void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material, 
+void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Material* material, 
     const Render_Cubeimage* environment, const Render_Cubeimage* irradience, const Render_Cubeimage* prefilter, const Render_Image* brdf_lut)
 {
     render_shader_use(pbr_shader);
