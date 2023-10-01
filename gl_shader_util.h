@@ -147,7 +147,7 @@ Error render_shader_init(Render_Shader* shader, const char* vertex, const char* 
     }
 
     shader->shader = shader_program;
-    shader->name = builder_from_string(name);
+    shader->name = builder_from_string(name, NULL);
     
     PERF_COUNTER_END(c);
 
@@ -329,7 +329,7 @@ GLint render_shader_get_uniform_location(const Render_Shader* shader, const char
 
         isize found = hash_index_find_or_insert(&error_hash_index, final_hash, 0);
         u64* error_count = &error_hash_index.entries[found].value;
-        if(is_power_of_two_zero((*error_count)++))
+        if(is_power_of_two_or_zero((*error_count)++))
             LOG_ERROR("RENDER", "failed to find uniform location %-25s shader: " STRING_FMT, uniform, STRING_PRINT(shader->name));
     }
     PERF_COUNTER_END(c);
@@ -337,23 +337,23 @@ GLint render_shader_get_uniform_location(const Render_Shader* shader, const char
     return location;
 }
 
-bool render_shader_set_i32(const Render_Shader* shader, const char* name, GLint val)
+bool render_shader_set_i32(const Render_Shader* shader, const char* name, i32 val)
 {
     GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1) 
         return false;
 
-    glUniform1i(location, val);
+    glUniform1i(location, (GLint) val);
     return true;
 }
     
-bool render_shader_set_f32(const Render_Shader* shader, const char* name, GLfloat val)
+bool render_shader_set_f32(const Render_Shader* shader, const char* name, f32 val)
 {
     GLint location = render_shader_get_uniform_location(shader, name);
     if(location == -1)
         return false;
 
-    glUniform1f(location, val);
+    glUniform1f(location, (GLfloat) val);
     return true;
 }
 

@@ -231,9 +231,11 @@
     <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
     <ClInclude Include="format_netbpm.h" />
-    <ClInclude Include="geometry_manager.h" />
+    <ClInclude Include="render.h" />
+    <ClInclude Include="resource_loading.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="gl_debug_output.h" />
+    <ClInclude Include="handle_table.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="hash_index.h" />
     <ClInclude Include="hash_table.h" />
@@ -247,10 +249,12 @@
     <ClInclude Include="profile.h" />
     <ClInclude Include="random.h" />
     <ClInclude Include="gl_shader_util.h" />
+    <ClInclude Include="resources.h" />
     <ClInclude Include="shapes.h" />
     <ClInclude Include="string.h" />
     <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />
+    <ClInclude Include="todo.h" />
     <ClInclude Include="unicode.h" />
     <ClInclude Include="vformat.h" />
     <ClInclude Include="_test.h" />

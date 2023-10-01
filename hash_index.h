@@ -274,7 +274,7 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
             allocator_inv = table.allocator != NULL;
 
         bool sizes_inv = table.size >= 0 && table.entries_count >= 0 && table.entries_count >= table.size;
-        bool cap_inv = is_power_of_two_zero(table.entries_count);
+        bool cap_inv = is_power_of_two_or_zero(table.entries_count);
         bool final_inv = ptr_size_inv && allocator_inv && cap_inv && sizes_inv && cap_inv;
 
         ASSERT(final_inv);

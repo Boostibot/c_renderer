@@ -3,18 +3,19 @@
 
 #ifdef RUN_TESTS
 
-#include "_test_unicode.h"
-
 //Try including multiple times
 #include "unicode.h"
 #include "unicode.h"
 #include "unicode.h"
+
+#include "_test_unicode.h"
 
 #define LIB_ALL_IMPL
 #include "unicode.h"
 
 void main()
 {
+
     test_unicode(3.0);
 }
 
@@ -42,6 +43,9 @@ void main()
 #include "shapes.h"
 #include "format_obj.h"
 #include "image_loader.h"
+#include "todo.h"
+#include "resource_loading.h"
+#include "render.h"
 
 //#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
@@ -647,1146 +651,6 @@ int main()
     return 0;    
 }
 
-typedef struct Render_Screen_Frame_Buffers
-{
-    GLuint frame_buff;
-    GLuint screen_color_buff;
-    GLuint render_buff;
-
-    i32 width;
-    i32 height;
-
-    String_Builder name;
-} Render_Screen_Frame_Buffers;
-
-void render_screen_frame_buffers_deinit(Render_Screen_Frame_Buffers* buffer)
-{
-    glBindVertexArray(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    glDeleteFramebuffers(1, &buffer->frame_buff);
-    glDeleteBuffers(1, &buffer->screen_color_buff);
-    glDeleteRenderbuffers(1, &buffer->render_buff);
-
-    array_deinit(&buffer->name); 
-
-    memset(buffer, 0, sizeof *buffer);
-}
-
-void render_screen_frame_buffers_init(Render_Screen_Frame_Buffers* buffer, i32 width, i32 height)
-{
-    render_screen_frame_buffers_deinit(buffer);
-
-    LOG_INFO("RENDER", "render_screen_frame_buffers_init %-4d x %-4d", width, height);
-    
-    buffer->width = width;
-    buffer->height = height;
-    buffer->name = builder_from_cstring("Render_Screen_Frame_Buffers");
-
-    //@NOTE: 
-    //The lack of the following line caused me 2 hours of debugging why my application crashed due to NULL ptr 
-    //deref in glDrawArrays. I still dont know why this occurs but just for safety its better to leave this here.
-    glBindVertexArray(0);
-
-    glGenFramebuffers(1, &buffer->frame_buff);
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff);    
-
-    // generate texture
-    glGenTextures(1, &buffer->screen_color_buff);
-    glBindTexture(GL_TEXTURE_2D, buffer->screen_color_buff);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // attach it to currently bound render_screen_frame_buffers object
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer->screen_color_buff, 0);
-
-    glGenRenderbuffers(1, &buffer->render_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, buffer->render_buff); 
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);  
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, buffer->render_buff);
-
-    TEST_MSG(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "frame buffer creation failed!");
-
-    glDisable(GL_FRAMEBUFFER_SRGB);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
-}
-
-void render_screen_frame_buffers_render_begin(Render_Screen_Frame_Buffers* buffer)
-{
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff); 
-        
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT); 
-    glFrontFace(GL_CW); 
-}
-
-void render_screen_frame_buffers_render_end(Render_Screen_Frame_Buffers* buffer)
-{
-    (void) buffer;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void render_screen_frame_buffers_post_process_begin(Render_Screen_Frame_Buffers* buffer)
-{
-    (void) buffer;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-}
-
-void render_screen_frame_buffers_post_process_end(Render_Screen_Frame_Buffers* buffer)
-{
-    (void) buffer;
-    //nothing
-}
-
-typedef struct Render_Screen_Frame_Buffers_MSAA
-{
-    GLuint frame_buff;
-    GLuint texture_color_multisampled_buff;
-    GLuint render_buff;
-    GLuint intermediate_frame_buff;
-    GLuint screen_color_buff;
-
-    i32 width;
-    i32 height;
-    
-    //used so that this becomes visible to debug_allocator
-    // and thus we prevent leaking
-    String_Builder name;
-} Render_Screen_Frame_Buffers_MSAA;
-
-void render_screen_frame_buffers_msaa_deinit(Render_Screen_Frame_Buffers_MSAA* buffer)
-{
-    glBindVertexArray(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    glDeleteFramebuffers(1, &buffer->frame_buff);
-    glDeleteBuffers(1, &buffer->texture_color_multisampled_buff);
-    glDeleteRenderbuffers(1, &buffer->render_buff);
-    glDeleteFramebuffers(1, &buffer->intermediate_frame_buff);
-    glDeleteBuffers(1, &buffer->screen_color_buff);
-
-    array_deinit(&buffer->name);
-
-    memset(buffer, 0, sizeof *buffer);
-}
-
-bool render_screen_frame_buffers_msaa_init(Render_Screen_Frame_Buffers_MSAA* buffer, i32 width, i32 height, i32 sample_count)
-{
-    render_screen_frame_buffers_msaa_deinit(buffer);
-    LOG_INFO("RENDER", "render_screen_frame_buffers_msaa_init %-4d x %-4d samples: %d", width, height, sample_count);
-
-    glBindVertexArray(0);
-
-    buffer->width = width;
-    buffer->height = height;
-    buffer->name = builder_from_cstring("Render_Screen_Frame_Buffers_MSAA");
-
-    bool state = true;
-    glGenFramebuffers(1, &buffer->frame_buff);
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff);
-
-    // create a multisampled color attachment texture
-    glGenTextures(1, &buffer->texture_color_multisampled_buff);
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, buffer->texture_color_multisampled_buff);
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, sample_count, GL_RGB32F, width, height, GL_TRUE);
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, buffer->texture_color_multisampled_buff, 0);
-
-    // create a (also multisampled) renderbuffer object for depth and stencil attachments
-    glGenRenderbuffers(1, &buffer->render_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, buffer->render_buff);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, sample_count, GL_DEPTH24_STENCIL8, width, height);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, buffer->render_buff);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-    {
-        LOG_ERROR("RENDER", "frame buffer creation failed!");
-        ASSERT(false);
-        state = false;
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    // configure second post-processing framebuffer
-    glGenFramebuffers(1, &buffer->intermediate_frame_buff);
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->intermediate_frame_buff);
-
-    // create a color attachment texture
-    glGenTextures(1, &buffer->screen_color_buff);
-    glBindTexture(GL_TEXTURE_2D, buffer->screen_color_buff);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer->screen_color_buff, 0);	// we only need a color buffer
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-    {
-        LOG_ERROR("RENDER", "frame buffer creation failed!");
-        ASSERT(false);
-        state = false;
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    return false;
-}
-
-void render_screen_frame_buffers_msaa_render_begin(Render_Screen_Frame_Buffers_MSAA* buffer)
-{
-    glBindFramebuffer(GL_FRAMEBUFFER, buffer->frame_buff); 
-        
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT); 
-    glFrontFace(GL_CW); 
-}
-
-void render_screen_frame_buffers_msaa_render_end(Render_Screen_Frame_Buffers_MSAA* buffer)
-{
-    (void) buffer;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void render_screen_frame_buffers_msaa_post_process_begin(Render_Screen_Frame_Buffers_MSAA* buffer)
-{
-    // 2. now blit multisampled buffer(s) to normal colorbuffer of intermediate FBO. Image_Builder is stored in screenTexture
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, buffer->frame_buff);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, buffer->intermediate_frame_buff);
-    glBlitFramebuffer(0, 0, buffer->width, buffer->height, 0, 0, buffer->width, buffer->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-}
-
-void render_screen_frame_buffers_msaa_post_process_end(Render_Screen_Frame_Buffers_MSAA* buffer)
-{
-    (void) buffer;
-}
-
-
-#define VEC2_FMT "{%f, %f}"
-#define VEC2_PRINT(vec) (vec).x, (vec).y
-
-#define VEC3_FMT "{%f, %f, %f}"
-#define VEC3_PRINT(vec) (vec).x, (vec).y, (vec).z
-
-#define VEC4_FMT "{%f, %f, %f, %f}"
-#define VEC4_PRINT(vec) (vec).x, (vec).y, (vec).z, (vec).w
-
-typedef struct Render_Mesh
-{
-    String_Builder name;
-
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
-
-    GLuint vertex_count;
-    GLuint triangle_count;
-} Render_Mesh;
-
-typedef struct Render_Texture
-{
-    GLuint texture;
-    isize width;
-    isize height;
-    
-    GLuint pixel_format;
-    GLuint channel_count;
-    String_Builder name;
-} Render_Texture;
-
-typedef struct Render_Cubemap
-{
-    GLuint texture;
-
-    isize widths[6];
-    isize heights[6];
-    
-    String_Builder name;
-} Render_Cubemap;
-
-void render_texture_deinit(Render_Texture* render)
-{
-    if(render->texture != 0)
-        glDeleteTextures(1, &render->texture);
-    array_deinit(&render->name);
-    memset(&render, 0, sizeof(render));
-}
-
-GLenum render_pixel_format_from_image_pixel_format(isize pixel_format)
-{
-    switch(pixel_format)
-    {
-        case PIXEL_FORMAT_U8:  return GL_UNSIGNED_BYTE;
-        case PIXEL_FORMAT_U16: return GL_UNSIGNED_SHORT;
-        case PIXEL_FORMAT_F32: return GL_FLOAT;
-        default: ASSERT(false); return 0;
-    }
-}
-
-GLenum render_channel_format_from_image_builder_channel_count(isize channel_count)
-{
-    switch(channel_count)
-    {
-        case 1: return GL_RED;
-        case 2: return GL_RG;
-        case 3: return GL_RGB;
-        case 4: return GL_RGBA;
-        default: ASSERT(false); return 0;
-    }
-}
-void render_texture_init(Render_Texture* render, Image image, String name, GLenum internal_format_or_zero)
-{
-    GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.pixel_format);
-    GLenum channel_format = render_channel_format_from_image_builder_channel_count(image_channel_count(image));
-
-    Image_Builder contiguous = {0};
-
-    //not contigous in memory => make contiguous copy
-    if(image_is_contiguous(image) == false)
-    {
-        image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
-        image = image_from_builder(contiguous);
-    }
-
-    if(internal_format_or_zero == 0)
-        internal_format_or_zero = channel_format;
-
-    render_texture_deinit(render);
-    render->height = image.height;
-    render->width = image.width;
-    render->pixel_format = pixel_format;
-    render->channel_count = (u32) image_channel_count(image);
-    render->name = builder_from_string(name);
-    glGenTextures(1, &render->texture);
-    glBindTexture(GL_TEXTURE_2D, render->texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, internal_format_or_zero, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    image_builder_deinit(&contiguous);
-} 
-
-void render_texture_init_from_single_pixel(Render_Texture* render, Vec4 color, u8 channels, String name)
-{
-    Image image = {0};
-    u8 channel_values[4] = {
-        (u8) (255*CLAMP(color.x, 0, 1)), 
-        (u8) (255*CLAMP(color.y, 0, 1)), 
-        (u8) (255*CLAMP(color.z, 0, 1)), 
-        (u8) (255*CLAMP(color.w, 0, 1)), 
-    };
-
-    image.pixels = channel_values;
-    image.pixel_size = channels;
-    image.pixel_format = PIXEL_FORMAT_U8;
-    image.width = 1;
-    image.height = 1;
-    image.containing_width = 1;
-    image.containing_height = 1;
-
-    render_texture_init(render, image, name, 0);
-}
-
-void render_texture_use(const Render_Texture* render, isize slot)
-{
-    glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
-    glBindTexture(GL_TEXTURE_2D, render->texture);
-}
-
-void render_texture_unuse(const Render_Texture* render)
-{
-    (void) render;
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-void render_cubemap_deinit(Render_Cubemap* render)
-{
-    if(render->texture != 0)
-        glDeleteTextures(1, &render->texture);
-    array_deinit(&render->name);
-    memset(&render, 0, sizeof(render));
-}
-
-void render_cubemap_init(Render_Cubemap* render, const Image images[6], String name)
-{
-    for (isize i = 0; i < 6; i++)
-    {
-        ASSERT(image_pixel_count(images[i]) != 0);
-        ASSERT(images[i].pixels != NULL && "cannot miss data");
-    }
-
-    render_cubemap_deinit(render);
-    render->name = builder_from_string(name);
-
-    glGenTextures(1, &render->texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, render->texture);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    for (isize i = 0; i < 6; i++)
-    {
-        Image image = images[i];
-        render->heights[i] = image.height;
-        render->widths[i] = image.width;
-
-        Image_Builder contiguous = {0};
-        if(image_is_contiguous(image) == false)
-        {
-            image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
-            image = image_from_builder(contiguous);
-        }
-        
-        GLenum channel_format = render_channel_format_from_image_builder_channel_count(image_channel_count(image));
-        GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.pixel_format);
-        //glTexImage2D(GL_TEXTURE_2D, 0, internal_format_or_zero, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + (GLenum) i, 0, channel_format, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
-
-        image_builder_deinit(&contiguous);
-    }
-
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-} 
-
-void render_cubemap_use(const Render_Cubemap* render, isize slot)
-{
-    glActiveTexture(GL_TEXTURE0 + (GLenum) slot);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, render->texture);
-}
-
-void render_cubemap_unuse(const Render_Cubemap* render)
-{
-    (void) render;
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-}
-
-Error render_texture_init_from_disk(Render_Texture* tetxure, String path, String name)
-{
-    Image_Builder image_builder = {0};
-    
-    Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
-    Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
-    allocator_set(prev_allocs);
-    
-    ASSERT(error_is_ok(error));
-    if(error_is_ok(error))
-        render_texture_init(tetxure, image_from_builder(image_builder), name, 0);
-
-    image_builder_deinit(&image_builder);
-
-    return error;
-}
-
-Error render_texture_init_hdr_from_disk(Render_Texture* tetxure, String path, String name)
-{
-    Image_Builder image_builder = {0};
-    
-    Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
-    Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_F32, IMAGE_LOAD_FLAG_FLIP_Y);
-    allocator_set(prev_allocs);
-    
-    ASSERT(error_is_ok(error));
-    if(error_is_ok(error))
-        render_texture_init(tetxure, image_from_builder(image_builder), name, GL_RGB16F);
-
-    image_builder_deinit(&image_builder);
-    
-    return error;
-}
-
-Error render_cubemap_init_from_disk(Render_Cubemap* render, String front, String back, String top, String bot, String right, String left, String name)
-{
-    Image_Builder face_image_builders[6] = {0};
-    Image face_images[6] = {0};
-    String face_paths[6] = {right, left, top, bot, front, back};
-
-    Error error = {0};
-    for (isize i = 0; i < 6; i++)
-    {
-        error = ERROR_OR(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
-        face_images[i] = image_from_builder(face_image_builders[i]);
-    }
-    
-    render_cubemap_init(render, face_images, name);
-    
-    for (isize i = 0; i < 6; i++)
-        image_builder_deinit(&face_image_builders[i]);
-
-    return error;
-}
-
-void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Index* triangles, isize triangles_count, String name)
-{
-    memset(mesh, 0, sizeof *mesh);
-
-    glGenVertexArrays(1, &mesh->vao);
-    glGenBuffers(1, &mesh->vbo);
-    glGenBuffers(1, &mesh->ebo);
-  
-    glBindVertexArray(mesh->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangles_count * sizeof(Triangle_Index), triangles, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
-    
-    glEnableVertexAttribArray(0);	
-    glEnableVertexAttribArray(1);	
-    glEnableVertexAttribArray(2);	
-    
-    //@NOTE: this causes crashes??
-    //@TODO: investigate
-    
-    //glBindBuffer(GL_ARRAY_BUFFER, 0);
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    glBindVertexArray(0);   
-    
-    builder_append(&mesh->name, name);
-    mesh->triangle_count = (GLuint) triangles_count;
-    mesh->vertex_count = (GLuint) vertices_count;
-}
-
-void render_mesh_init_from_shape(Render_Mesh* mesh, Shape shape, String name)
-{
-    render_mesh_init(mesh, shape.vertices.data, shape.vertices.size, shape.triangles.data, shape.triangles.size, name);
-}
-
-void render_mesh_deinit(Render_Mesh* mesh)
-{
-    array_deinit(&mesh->name);
-    glDeleteVertexArrays(1, &mesh->vao);
-    glDeleteBuffers(1, &mesh->ebo);
-    glDeleteBuffers(1, &mesh->vbo);
-    memset(mesh, 0, sizeof *mesh);
-}
-
-void render_mesh_draw(Render_Mesh mesh)
-{
-    glBindVertexArray(mesh.vao);
-    glDrawElements(GL_TRIANGLES, mesh.triangle_count * 3, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
-typedef struct Render_Capture_Buffers
-{
-    GLuint frame_buff;
-    GLuint render_buff;
-
-    String_Builder name;
-} Render_Capture_Buffers;
-
-void render_capture_buffers_deinit(Render_Capture_Buffers* capture)
-{
-    glDeleteFramebuffers(1, &capture->frame_buff);
-    glDeleteRenderbuffers(1, &capture->render_buff);
-    array_deinit(&capture->name);
-    memset(capture, 0, sizeof(*capture));
-}
-
-void render_capture_buffers_init(Render_Capture_Buffers* capture, i32 prealloc_width, i32 prealloc_height)
-{
-    render_capture_buffers_deinit(capture);
-    capture->name = builder_from_cstring("Render_Capture_Buffers");
-
-    glGenFramebuffers(1, &capture->frame_buff);
-    glGenRenderbuffers(1, &capture->render_buff);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, prealloc_width, prealloc_height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, capture->render_buff);
-    
-    TEST_MSG(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "frame buffer creation failed!");
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-INTERNAL void _make_capture_projections(Mat4* capture_projection, Mat4 capture_images[6])
-{
-    *capture_projection = mat4_perspective_projection(TAU/4, 1.0f, 0.1f, 10.0f);
-    capture_images[0] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
-    capture_images[1] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3(-1.0f,  0.0f,  0.0f), vec3(0.0f, -1.0f,  0.0f));
-    capture_images[2] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  1.0f,  0.0f), vec3(0.0f,  0.0f,  1.0f));
-    capture_images[3] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f, -1.0f,  0.0f), vec3(0.0f,  0.0f, -1.0f));
-    capture_images[4] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f,  1.0f), vec3(0.0f, -1.0f,  0.0f));
-    capture_images[5] = mat4_look_at(vec3(0.0f, 0.0f, 0.0f), vec3( 0.0f,  0.0f, -1.0f), vec3(0.0f, -1.0f,  0.0f));
-}
-
-
-void render_cubemap_init_environment_from_environment_texture(Render_Cubemap* cubemap_environment, i32 width, i32 height, const Render_Texture* environment_tetxure, f32 texture_gamma,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_equi_to_cubemap, Render_Mesh cube_mesh)
-{
-    render_cubemap_deinit(cubemap_environment);
-    cubemap_environment->name = builder_from_cstring("environment");
-
-    glGenTextures(1, &cubemap_environment->texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_environment->texture);
-    for (u32 i = 0; i < 6; ++i)
-    {
-        cubemap_environment->widths[i] = width;
-        cubemap_environment->heights[i] = height;
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, NULL);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // pbr: convert HDR equirectangular environment map to cubemap equivalent
-    // ----------------------------------------------------------------------
-    glViewport(0, 0, width, height); // don't forget to configure the viewport to the capture dimensions.
-    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    
-    Mat4 capture_projection = {0};
-    Mat4 capture_images[6] = {0};
-    _make_capture_projections(&capture_projection, capture_images);
-
-    render_shader_use(shader_equi_to_cubemap);
-    render_shader_set_mat4(shader_equi_to_cubemap, "projection", capture_projection);
-    render_shader_set_f32(shader_equi_to_cubemap, "gamma", texture_gamma);
-    render_texture_use(environment_tetxure, 0);
-    render_shader_set_i32(shader_equi_to_cubemap, "equirectangularMap", 0);
-
-    for (u32 i = 0; i < 6; ++i)
-    {
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_environment->texture, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        render_shader_set_mat4(shader_equi_to_cubemap, "view", capture_images[i]);
-        render_mesh_draw(cube_mesh);
-    }
-    render_shader_unuse(shader_equi_to_cubemap);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    
-    // then let OpenGL generate mipmaps from first mip face (combatting visible dots artifact)
-    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_environment->texture);
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-}
-
-void render_cubemap_init_irradiance_from_environment(
-    Render_Cubemap* cubemap_irradiance, i32 width, i32 height, f32 sample_delta, const Render_Cubemap* cubemap_environment,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_irradiance_gen, Render_Mesh cube_mesh)
-{
-    // pbr: create an irradiance cubemap, and re-scale capture FBO to irradiance scale.
-    // --------------------------------------------------------------------------------
-    render_cubemap_deinit(cubemap_irradiance);
-    cubemap_irradiance->name = builder_from_cstring("irradiance");
-
-    glGenTextures(1, &cubemap_irradiance->texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_irradiance->texture);
-    for (u32 i = 0; i < 6; ++i)
-    {
-        cubemap_irradiance->widths[i] = width;
-        cubemap_irradiance->heights[i] = height;
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, NULL);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
-
-    // pbr: solve diffuse integral by convolution to create an irradiance (cube)map.
-    // -----------------------------------------------------------------------------
-    
-    Mat4 capture_projection = {0};
-    Mat4 capture_images[6] = {0};
-    _make_capture_projections(&capture_projection, capture_images);
-
-    render_shader_use(shader_irradiance_gen);
-    render_shader_set_mat4(shader_irradiance_gen, "projection", capture_projection);
-    render_shader_set_f32(shader_irradiance_gen, "sample_delta", sample_delta);
-    render_cubemap_use(cubemap_environment, 0);
-    render_shader_set_i32(shader_irradiance_gen, "environmentMap", 0);
-
-    glViewport(0, 0, width, height); // don't forget to configure the viewport to the capture dimensions.
-    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
-    for (u32 i = 0; i < 6; ++i)
-    {
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_irradiance->texture, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        
-        render_shader_set_mat4(shader_irradiance_gen, "view", capture_images[i]);
-        render_mesh_draw(cube_mesh);
-    }
-    render_cubemap_unuse(cubemap_environment);
-    render_shader_unuse(shader_irradiance_gen);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void render_cubemap_init_prefilter_from_environment(
-    Render_Cubemap* cubemap_irradiance, i32 width, i32 height, const Render_Cubemap* cubemap_environment,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_prefilter, Render_Mesh cube_mesh)
-{
-    // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
-    // --------------------------------------------------------------------------------
-    render_cubemap_deinit(cubemap_irradiance);
-    cubemap_irradiance->name = builder_from_cstring("pbr_prefilter");
-
-    glGenTextures(1, &cubemap_irradiance->texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_irradiance->texture);
-    for (u32 i = 0; i < 6; ++i)
-    {
-        cubemap_irradiance->widths[i] = width;
-        cubemap_irradiance->heights[i] = height;
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, NULL);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // be sure to set minification filter to mip_linear 
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // generate mipmaps for the cubemap so OpenGL automatically allocates the required memory.
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-
-    // pbr: run a quasi monte-carlo simulation on the environment lighting to create a prefilter (cube)map.
-    // ----------------------------------------------------------------------------------------------------
-    Mat4 capture_projection = {0};
-    Mat4 capture_images[6] = {0};
-    _make_capture_projections(&capture_projection, capture_images);
-
-    render_shader_use(shader_prefilter);
-    render_shader_set_mat4(shader_prefilter, "projection", capture_projection);
-    render_cubemap_use(cubemap_environment, 0);
-    render_shader_set_i32(shader_prefilter, "environmentMap", 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
-    u32 maxMipLevels = 5; //@TODO: hoist out
-    for (u32 mip = 0; mip < maxMipLevels; ++mip)
-    {
-        // reisze framebuffer according to mip-level size.
-        i32 mipWidth  = (i32)(width * pow(0.5, mip));
-        i32 mipHeight = (i32)(height * pow(0.5, mip));
-        glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
-        glViewport(0, 0, mipWidth, mipHeight);
-
-        f32 roughness = (f32)mip / (f32)(maxMipLevels - 1);
-        render_shader_set_f32(shader_prefilter, "roughness", roughness);
-        for (u32 i = 0; i < 6; ++i)
-        {
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, cubemap_irradiance->texture, mip);
-
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            
-            render_shader_set_mat4(shader_prefilter, "view", capture_images[i]);
-            render_mesh_draw(cube_mesh);
-        }
-    }
-    render_cubemap_unuse(cubemap_environment);
-    render_shader_unuse(shader_prefilter);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void render_texture_init_BRDF_LUT(
-    Render_Texture* cubemap_irradiance, i32 width, i32 height,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_brdf_lut, Render_Mesh screen_quad_mesh)
-{
-    // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
-    // --------------------------------------------------------------------------------
-    render_texture_deinit(cubemap_irradiance);
-    cubemap_irradiance->height = height;
-    cubemap_irradiance->width = width;
-    cubemap_irradiance->name = builder_from_cstring("BRDF_LUT");
-
-    glGenTextures(1, &cubemap_irradiance->texture);
-    glBindTexture(GL_TEXTURE_2D, cubemap_irradiance->texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, height, 0, GL_RG, GL_FLOAT, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // then re-configure capture framebuffer object and render screen-space quad with BRDF shader.
-    glBindFramebuffer(GL_FRAMEBUFFER, capture->frame_buff);
-    glBindRenderbuffer(GL_RENDERBUFFER, capture->render_buff);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cubemap_irradiance->texture, 0);
-
-    glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    render_shader_use(shader_brdf_lut);
-    render_mesh_draw(screen_quad_mesh);
-    render_shader_unuse(shader_brdf_lut);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color, f32 gamma)
-{
-    render_shader_use(shader_depth_color);
-    render_shader_set_vec3(shader_depth_color, "color", color);
-    render_shader_set_mat4(shader_depth_color, "projection", projection);
-    render_shader_set_mat4(shader_depth_color, "view", view);
-    render_shader_set_mat4(shader_depth_color, "model", model);
-    render_shader_set_f32(shader_depth_color, "gamma", gamma);
-    render_mesh_draw(mesh);
-    render_shader_unuse(shader_depth_color);
-}
-
-void render_mesh_draw_using_depth_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
-{
-    render_shader_use(shader_depth_color);
-    render_shader_set_vec3(shader_depth_color, "color", color);
-    render_shader_set_mat4(shader_depth_color, "projection", projection);
-    render_shader_set_mat4(shader_depth_color, "view", view);
-    render_shader_set_mat4(shader_depth_color, "model", model);
-    render_mesh_draw(mesh);
-    render_shader_unuse(shader_depth_color);
-}
-
-void render_mesh_draw_using_uv_debug(Render_Mesh mesh, const Render_Shader* uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
-{
-    render_shader_use(uv_shader_debug);
-    Mat4 inv = mat4_inverse_nonuniform_scale(model);
-    Mat3 normal_matrix = mat3_from_mat4(inv);
-    normal_matrix = mat3_from_mat4(model);
-
-    render_shader_set_mat4(uv_shader_debug, "projection", projection);
-    render_shader_set_mat4(uv_shader_debug, "view", view);
-    render_shader_set_mat4(uv_shader_debug, "model", model);
-    render_shader_set_mat3(uv_shader_debug, "normal_matrix", normal_matrix);
-    render_mesh_draw(mesh);
-    render_shader_unuse(uv_shader_debug);
-}
-
-typedef struct Blinn_Phong_Params
-{
-    f32 light_ambient_strength;
-    f32 light_specular_strength;
-    f32 light_specular_sharpness;
-    f32 light_linear_attentuation;
-    f32 light_quadratic_attentuation;
-    f32 light_specular_effect;
-    f32 gamma;
-} Blinn_Phong_Params;
-
-void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, const Render_Shader* blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Render_Texture diffuse)
-{
-    render_shader_use(blin_phong_shader);
-    Mat4 inv = mat4_inverse_nonuniform_scale(model);
-    Mat3 normal_matrix = mat3_from_mat4(inv);
-    normal_matrix = mat3_from_mat4(model);
-
-    render_shader_set_mat4(blin_phong_shader, "projection", projection);
-    render_shader_set_mat4(blin_phong_shader, "view", view);
-    render_shader_set_mat4(blin_phong_shader, "model", model);
-    render_shader_set_mat3(blin_phong_shader, "normal_matrix", normal_matrix);
-
-    render_shader_set_vec3(blin_phong_shader, "view_pos", view_pos);
-    render_shader_set_vec3(blin_phong_shader, "light_pos", light_pos);
-    render_shader_set_vec3(blin_phong_shader, "light_color", light_color);
-    
-    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    render_shader_set_f32(blin_phong_shader, "light_specular_strength", params.light_specular_strength);
-    render_shader_set_f32(blin_phong_shader, "light_specular_sharpness", params.light_specular_sharpness);
-    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    render_shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
-    render_shader_set_f32(blin_phong_shader, "gamma", params.gamma);
-
-    render_texture_use(&diffuse, 0);
-    render_shader_set_i32(blin_phong_shader, "texture_diffuse", 0);
-    
-    render_mesh_draw(mesh);
-    render_texture_unuse(&diffuse);
-    render_shader_unuse(blin_phong_shader);
-}
-
-void render_mesh_draw_using_skybox(Render_Mesh mesh, const Render_Shader* skybox_shader, Mat4 projection, Mat4 view, Mat4 model, f32 gamma, Render_Cubemap skybox)
-{
-    glDepthFunc(GL_LEQUAL);
-    render_shader_use(skybox_shader);
-    render_shader_set_mat4(skybox_shader, "projection", projection);
-    render_shader_set_mat4(skybox_shader, "view", view);
-    render_shader_set_mat4(skybox_shader, "model", model);
-    render_shader_set_f32(skybox_shader, "gamma", gamma);
-    render_mesh_draw(mesh);
-    
-    render_cubemap_use(&skybox, 0);
-    render_shader_set_i32(skybox_shader, "cubemap_diffuse", 0);
-    
-    render_mesh_draw(mesh);
-    render_cubemap_unuse(&skybox);
-    render_shader_unuse(skybox_shader);
-    glDepthFunc(GL_LESS);
-}
-
-#define PBR_MAX_LIGHTS 4
-typedef struct PBR_Light
-{
-    Vec3 pos;
-    Vec3 color;
-    f32 radius;
-} PBR_Light;
-
-typedef struct PBR_Params
-{
-    PBR_Light lights[PBR_MAX_LIGHTS];
-    Vec3 view_pos;
-    f32 gamma;
-    f32 attentuation_strength;
-} PBR_Params;
-
-typedef struct Render_PBR_Material
-{
-    Render_Texture texture_albedo;
-    Render_Texture texture_normal;
-    Render_Texture texture_metallic;
-    Render_Texture texture_roughness;
-    Render_Texture texture_ao;
-
-    Vec3 solid_albedo;
-    f32 solid_metallic;
-    f32 solid_roughness;
-    f32 solid_ao;
-    Vec3 reflection_at_zero_incidence;
-} Render_PBR_Material;
-
-void render_pbr_material_deinit(Render_PBR_Material* material)
-{
-    render_texture_deinit(&material->texture_albedo);
-    render_texture_deinit(&material->texture_normal);
-    render_texture_deinit(&material->texture_metallic);
-    render_texture_deinit(&material->texture_roughness);
-    render_texture_deinit(&material->texture_ao);
-    memset(material, 0, sizeof(*material));
-}
-
-void render_mesh_draw_using_pbr(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material)
-{
-    render_shader_use(pbr_shader);
-    Mat4 inv = mat4_inverse_nonuniform_scale(model);
-    Mat3 normal_matrix = mat3_from_mat4(inv);
-    normal_matrix = mat3_from_mat4(model);
-
-    //shader
-    render_shader_set_mat4(pbr_shader, "projection", projection);
-    render_shader_set_mat4(pbr_shader, "view", view);
-    render_shader_set_mat4(pbr_shader, "model", model);
-    render_shader_set_mat3(pbr_shader, "normal_matrix", normal_matrix);
-
-    String_Builder name_str = {0};
-    array_init_backed(&name_str, allocator_get_scratch(), 256);
-    for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
-    {
-        format_into(&name_str, "lights_pos[%d]", (i32)i);
-        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].pos);
-
-        format_into(&name_str, "lights_color[%d]", (i32)i);
-        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].color);
-        
-        format_into(&name_str, "lights_radius[%d]", (i32)i);
-        render_shader_set_f32(pbr_shader, cstring_from_builder(name_str), params->lights[i].radius);
-    }
-    array_deinit(&name_str);
-    
-    render_shader_set_vec3(pbr_shader, "view_pos", params->view_pos);
-    render_shader_set_f32(pbr_shader, "gamma", params->gamma);
-    render_shader_set_f32(pbr_shader, "attentuation_strength", params->attentuation_strength);
-
-    //material
-    Vec3 reflection_at_zero_incidence = material->reflection_at_zero_incidence;
-    if(vec3_is_equal(reflection_at_zero_incidence, vec3_of(0)))
-        reflection_at_zero_incidence = vec3_of(0.04f);
-    render_shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
-
-    //Temp
-    bool use_textures = material->texture_albedo.texture 
-        || material->texture_normal.texture
-        || material->texture_metallic.texture
-        || material->texture_roughness.texture
-        || material->texture_ao.texture;
-    render_shader_set_i32(pbr_shader, "use_textures", use_textures);
-
-    if(use_textures)
-    {
-        render_texture_use(&material->texture_albedo, 0);
-        render_shader_set_i32(pbr_shader, "texture_albedo", 0);    
-        
-        render_texture_use(&material->texture_normal, 1);
-        render_shader_set_i32(pbr_shader, "texture_normal", 1);   
-        
-        render_texture_use(&material->texture_metallic, 2);
-        render_shader_set_i32(pbr_shader, "texture_metallic", 2);   
-        
-        render_texture_use(&material->texture_roughness, 3);
-        render_shader_set_i32(pbr_shader, "texture_roughness", 3);   
-        
-        render_texture_use(&material->texture_ao, 4);
-        render_shader_set_i32(pbr_shader, "texture_ao", 4);   
-    }
-    else
-    {
-        render_shader_set_vec3(pbr_shader, "solid_albedo", material->solid_albedo);
-        render_shader_set_f32(pbr_shader, "solid_metallic", material->solid_metallic);
-        render_shader_set_f32(pbr_shader, "solid_roughness", material->solid_roughness);
-        render_shader_set_f32(pbr_shader, "solid_ao", material->solid_ao);
-    }
-    
-    render_mesh_draw(mesh);
-
-    if(use_textures)
-    {
-        render_texture_unuse(&material->texture_albedo);
-        render_texture_unuse(&material->texture_normal);
-        render_texture_unuse(&material->texture_metallic);
-        render_texture_unuse(&material->texture_roughness);
-        render_texture_unuse(&material->texture_ao);
-    }
-    render_shader_unuse(pbr_shader);
-}
-
-
-void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_PBR_Material* material, 
-    const Render_Cubemap* environment, const Render_Cubemap* irradience, const Render_Cubemap* prefilter, const Render_Texture* brdf_lut)
-{
-    render_shader_use(pbr_shader);
-    Mat4 inv = mat4_inverse_nonuniform_scale(model);
-    Mat3 normal_matrix = mat3_from_mat4(inv);
-    normal_matrix = mat3_from_mat4(model);
-
-    (void) environment;
-    (void) prefilter;
-    (void) brdf_lut;
-
-    //shader
-    render_shader_set_mat4(pbr_shader, "projection", projection);
-    render_shader_set_mat4(pbr_shader, "view", view);
-    render_shader_set_mat4(pbr_shader, "model", model);
-    render_shader_set_mat3(pbr_shader, "normal_matrix", normal_matrix);
-
-    String_Builder name_str = {0};
-    array_init_backed(&name_str, allocator_get_scratch(), 256);
-    for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
-    {
-        format_into(&name_str, "lights_pos[%d]", (i32)i);
-        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].pos);
-
-        format_into(&name_str, "lights_color[%d]", (i32)i);
-        render_shader_set_vec3(pbr_shader, cstring_from_builder(name_str), params->lights[i].color);
-        
-        format_into(&name_str, "lights_radius[%d]", (i32)i);
-        render_shader_set_f32(pbr_shader, cstring_from_builder(name_str), params->lights[i].radius);
-    }
-    array_deinit(&name_str);
-    
-    render_shader_set_vec3(pbr_shader, "view_pos", params->view_pos);
-    render_shader_set_f32(pbr_shader, "gamma", params->gamma);
-    render_shader_set_f32(pbr_shader, "attentuation_strength", params->attentuation_strength);
-
-    //material
-    Vec3 reflection_at_zero_incidence = material->reflection_at_zero_incidence;
-    if(vec3_is_equal(reflection_at_zero_incidence, vec3_of(0)))
-        reflection_at_zero_incidence = vec3_of(0.04f);
-    render_shader_set_vec3(pbr_shader, "reflection_at_zero_incidence", reflection_at_zero_incidence);
-     
-    i32 slot = 0;
-    render_cubemap_use(irradience, slot);
-    render_shader_set_i32(pbr_shader, "cubemap_irradiance", slot++);  
-    
-    render_cubemap_use(prefilter, slot);
-    render_shader_set_i32(pbr_shader, "cubemap_prefilter", slot++);  
-    
-    render_texture_use(brdf_lut, slot);
-    render_shader_set_i32(pbr_shader, "texture_brdf_lut", slot++);  
-
-    //Temp
-    bool use_textures = material->texture_albedo.texture 
-        || material->texture_normal.texture
-        || material->texture_metallic.texture
-        || material->texture_roughness.texture
-        || material->texture_ao.texture;
-    render_shader_set_i32(pbr_shader, "use_textures", use_textures);
-
-    if(use_textures)
-    {
-        render_texture_use(&material->texture_albedo, slot);
-        render_shader_set_i32(pbr_shader, "texture_albedo", slot++);    
-        
-        render_texture_use(&material->texture_normal, slot);
-        render_shader_set_i32(pbr_shader, "texture_normal", slot++);   
-        
-        render_texture_use(&material->texture_metallic, slot);
-        render_shader_set_i32(pbr_shader, "texture_metallic", slot++);   
-        
-        render_texture_use(&material->texture_roughness, slot);
-        render_shader_set_i32(pbr_shader, "texture_roughness", slot++);   
-        
-        render_texture_use(&material->texture_ao, slot);
-        render_shader_set_i32(pbr_shader, "texture_ao", slot++);   
-    }
-    else
-    {
-        render_shader_set_vec3(pbr_shader, "solid_albedo", material->solid_albedo);
-        render_shader_set_f32(pbr_shader, "solid_metallic", material->solid_metallic);
-        render_shader_set_f32(pbr_shader, "solid_roughness", material->solid_roughness);
-        render_shader_set_f32(pbr_shader, "solid_ao", material->solid_ao);
-    }
-
-    render_mesh_draw(mesh);
-
-    if(use_textures)
-    {
-        render_texture_unuse(&material->texture_albedo);
-        render_texture_unuse(&material->texture_normal);
-        render_texture_unuse(&material->texture_metallic);
-        render_texture_unuse(&material->texture_roughness);
-        render_texture_unuse(&material->texture_ao);
-    }
-
-    render_cubemap_unuse(irradience);
-    render_cubemap_unuse(prefilter);
-    render_texture_unuse(brdf_lut);
-    render_shader_unuse(pbr_shader);
-}
-
-
-void render_mesh_draw_using_postprocess(Render_Mesh screen_quad, const Render_Shader* shader_screen, GLuint screen_texture, f32 gamma, f32 exposure)
-{
-    render_shader_use(shader_screen);
-    render_shader_set_f32(shader_screen, "gamma", gamma);
-    render_shader_set_f32(shader_screen, "exposure", exposure);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, screen_texture);
-    render_shader_set_i32(shader_screen, "screen", 0);
-            
-    render_mesh_draw(screen_quad);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    render_shader_unuse(shader_screen);
-}
-
 #include "profile.h"
 
 int perf_counter_compare_total_time_func(const void* a_, const void* b_)
@@ -1891,9 +755,58 @@ void log_perf_counters(bool sort_by_name)
     array_deinit(&counters);
 }
 
+void log_todos(const char* marker)
+{
+    Todo_Array todos = {0};
+    todo_parse_folder(&todos, STRING("./"), string_make(marker), 1);
+
+    String common_path_prefix = {0};
+    for(isize i = 0; i < todos.size; i++)
+    {
+        String curent_path = string_from_builder(todos.data[i].path);
+        if(common_path_prefix.data == NULL)
+            common_path_prefix = curent_path;
+        else
+        {
+            isize matches_to = 0;
+            isize min_size = MIN(common_path_prefix.size, curent_path.size);
+            for(; matches_to < min_size; matches_to++)
+            {
+                if(common_path_prefix.data[matches_to] != curent_path.data[matches_to])
+                    break;
+            }
+
+            common_path_prefix = string_safe_head(common_path_prefix, matches_to);
+        }
+    }
+    
+    for(isize i = 0; i < todos.size; i++)
+    {
+        Todo todo = todos.data[i];
+        String path = string_from_builder(todo.path);
+        
+        if(path.size > common_path_prefix.size)
+            path = string_safe_tail(path, common_path_prefix.size);
+
+        if(todo.signature.size > 0)
+            LOG_INFO("APP", "%-20s %4lld %s(%s) %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
+        else
+            LOG_INFO("APP", "%-20s %4lld %s %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
+    }
+}
+
+
+#define ERROR_FMT STRING_FMT " from " STRING_FMT
+#define ERROR_PRINT(error) STRING_PRINT(error_code(error)), STRING_PRINT(error_module(error))
+
 void run_func(void* context)
 {
-    ASSERT(1);
+    log_todos("@TODO");
+    log_todos("@TOOD");
+    log_todos("@TEMP");
+    log_todos("@SPEED");
+    log_todos("@PERF");
+
     LOG_INFO("APP", "run_func enter");
     
     Debug_Allocator debug_alloc = {0};
@@ -1924,12 +837,22 @@ void run_func(void* context)
     settings->mouse_sensitivity_scale_with_fov_ammount = 1.0f;
     settings->MSAA_samples = 4;
 
-
     mapping_make_default(app->control_mappings);
+    
+    Resources resources = {0};
+    Renderer renderer = {0};
+
+    resources_init(&resources, &debug_alloc.allocator);
+    renderer_init(&renderer, &debug_alloc.allocator);
+    
+    Object_Handle falcon_handle = {0};
+    Render_Object render_falcon = {0};
+    Object* falcon_object = NULL;
+
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
     Render_Capture_Buffers capture_buffers = {0};
-	
+
     i32 res_environment = 1024;
     i32 res_irradiance = 32;
     i32 res_prefilter = 128;
@@ -1943,26 +866,26 @@ void run_func(void* context)
     Shape screen_quad = {0};
     Shape unit_quad = {0};
     Shape unit_cube = {0};
-    Shape falcon = {0};
 
     Render_Mesh render_uv_sphere = {0};
     Render_Mesh render_cube_sphere = {0};
     Render_Mesh render_screen_quad = {0};
     Render_Mesh render_cube = {0};
     Render_Mesh render_quad = {0};
-    Render_Mesh render_falcon = {0};
+    //Render_Mesh render_falcon = {0};
 
-    Render_Texture texture_floor = {0};
-    Render_Texture texture_debug = {0};
-    Render_Texture texture_environment = {0};
-    Render_PBR_Material material_metal = {0};
 
-    Render_Cubemap cubemap_skybox = {0};
+    Render_Image image_floor = {0};
+    Render_Image image_debug = {0};
+    Render_Image image_environment = {0};
+    Render_Material material_metal = {0};
 
-    Render_Cubemap cubemap_environment = {0};
-    Render_Cubemap cubemap_irradiance = {0};
-    Render_Cubemap cubemap_prefilter = {0};
-    Render_Texture texture_brdf_lut = {0};
+    Render_Cubeimage cubemap_skybox = {0};
+
+    Render_Cubeimage cubemap_environment = {0};
+    Render_Cubeimage cubemap_irradiance = {0};
+    Render_Cubeimage cubemap_prefilter = {0};
+    Render_Image image_brdf_lut = {0};
 
     Render_Shader shader_depth_color = {0};
     Render_Shader shader_solid_color = {0};
@@ -1981,7 +904,7 @@ void run_func(void* context)
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
     String_Builder fps_display = {0};
-    bool use_mapping = true;
+    bool use_mapping = false;
 
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
@@ -2085,36 +1008,42 @@ void run_func(void* context)
             unit_quad = shapes_make_unit_quad();
             PERF_COUNTER_END(art_counter_shapes);
 
+
+            if(0)
+            {
+                object_read_entire(&resources, &falcon_handle, STRING("resources/sponza/sponza.obj"), NULL, 0);
+            
+                falcon_object = resources_object_get(&resources, falcon_handle);
+                //@TODO: add error returns here!
+                render_object_init_from_object(&render_falcon, &renderer, *falcon_object, &resources);
+            }
+
+            //@TODO: make Renderer and Resources globals. Make them changable however similar to allocator.
+            //       make Handle_Table type polymorphic!
+            //       add better way of reporting errors. USE A CALLBACK!
+            //       rework platform to include support for allocators
+            //       rework platform to include support for paths
+            //       think of a good way to represent a path (??? canoncalize : String -> Path = {String_Builder, Path_Info} ???)
+
             Error error = {0};
-            error = ERROR_OR(error) obj_parser_load(&falcon, STRING("resources/models/sponza.obj"), NULL, true);
 
             render_mesh_init_from_shape(&render_uv_sphere, uv_sphere, STRING("uv_sphere"));
             render_mesh_init_from_shape(&render_cube_sphere, cube_sphere, STRING("cube_sphere"));
             render_mesh_init_from_shape(&render_screen_quad, screen_quad, STRING("screen_quad"));
             render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
-            render_mesh_init_from_shape(&render_falcon, falcon, STRING("unit_cube"));
             
             PERF_COUNTER_START(art_counter_single_tex);
-            error = ERROR_OR(error) render_texture_init_from_disk(&texture_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            error = ERROR_OR(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
             PERF_COUNTER_END(art_counter_single_tex);
-            error = ERROR_OR(error) render_texture_init_from_disk(&texture_debug, STRING("resources/debug.png"), STRING("debug"));
-            error = ERROR_OR(error) render_cubemap_init_from_disk(&cubemap_skybox, 
+            error = ERROR_OR(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
+            error = ERROR_OR(error) render_cubeimage_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
                 STRING("resources/skybox_back.jpg"), 
                 STRING("resources/skybox_top.jpg"), 
                 STRING("resources/skybox_bottom.jpg"), 
                 STRING("resources/skybox_right.jpg"), 
                 STRING("resources/skybox_left.jpg"), STRING("skybox"));
-                
-            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_albedo, STRING("resources/rustediron2/rustediron2_basecolor.png"), STRING("rustediron2_basecolor"));
-            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2_metallic"));
-            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_normal, STRING("resources/rustediron2/rustediron2_normal.png"), STRING("rustediron2_normal"));
-            error = ERROR_OR(error) render_texture_init_from_disk(&material_metal.texture_roughness, STRING("resources/rustediron2/rustediron2_roughness.png"), STRING("rustediron2_roughness"));
-            render_texture_init_from_single_pixel(&material_metal.texture_ao, vec4_of(default_ao), 1, STRING("rustediron2_ao"));
-            
-            Obj_Material_Info_Array materials = {0};
-            error = ERROR_OR(error) obj_parser_load_mtl(&materials, STRING("resources/models/sponza.mtl"), NULL, true);
 
             if(0)
             {
@@ -2138,7 +1067,7 @@ void run_func(void* context)
                 image_builder_deinit(&test_image2);
             }
 
-            error = ERROR_OR(error) render_texture_init_from_disk(&texture_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("texture_environment"));
+            error = ERROR_OR(error) render_image_init_from_disk(&image_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("image_environment"));
             
 
             render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
@@ -2148,13 +1077,13 @@ void run_func(void* context)
                 use_gamma = 1.0f;
                 
             PERF_COUNTER_START(art_counter_environment);
-            render_cubemap_init_environment_from_environment_texture(
-                &cubemap_environment, res_environment, res_environment, &texture_environment, use_gamma, 
+            render_cubeimage_init_environment_from_environment_map(
+                &cubemap_environment, res_environment, res_environment, &image_environment, use_gamma, 
                 &capture_buffers, &shader_equi_to_cubemap, render_cube);
             PERF_COUNTER_END(art_counter_environment);
             
             PERF_COUNTER_START(art_counter_irafiance);
-            render_cubemap_init_irradiance_from_environment(
+            render_cubeimage_init_irradiance_from_environment(
                 &cubemap_irradiance, res_irradiance, res_irradiance, irradicance_sample_delta,
                 &cubemap_environment, &capture_buffers, &shader_irradiance, render_cube);
             PERF_COUNTER_END(art_counter_irafiance);
@@ -2316,8 +1245,8 @@ void run_func(void* context)
             lights[2].color = vec3(1, 1, 0.5f);
             lights[2].radius = light_radius;
 
-            lights[3].pos = vec3(2, 2, 4);
-            lights[3].color = vec3(0.5f, 1, 1);
+            lights[3].pos = vec3(20, 10, 20);
+            lights[3].color = vec3(1, 1, 0.8f);
             lights[3].radius = light_radius;
 
             //render blinn phong sphere
@@ -2334,7 +1263,7 @@ void run_func(void* context)
                 blinn_phong_params.gamma = 1.3f; //looks better on the wood texture
 
                 Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_sf() / 8), vec3(5, 0, -5));
-                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, app->camera.pos, light.pos, light.color, blinn_phong_params, texture_floor);
+                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, app->camera.pos, light.pos, light.color, blinn_phong_params, image_floor);
             
                 if(app->is_in_uv_debug_mode)
                     render_mesh_draw_using_uv_debug(render_cube_sphere, &shader_debug, projection, view, model);
@@ -2354,7 +1283,7 @@ void run_func(void* context)
                 f32 scale = 0.2f;
                 isize iters = 7;
                 Vec3 offset = {-2/scale, 0/scale, 2/scale};
-                for(isize metalic_i = 0; metalic_i <= iters; metalic_i++)
+                for(isize metallic_i = 0; metallic_i <= iters; metallic_i++)
                 {
                     for(isize rough_i = 0; rough_i <= iters; rough_i++)
                     {
@@ -2365,33 +1294,33 @@ void run_func(void* context)
                         }
 
                         f32 rough = (f32) rough_i / iters;
-                        f32 metallic = (f32) metalic_i / iters;
+                        f32 metallic = (f32) metallic_i / iters;
                     
-                        Render_PBR_Material material = {0};
-                        material.solid_metallic = metallic;
-                        material.solid_roughness = rough;
-                        material.solid_albedo = vec3(1, 1, 0.92f);
-                        material.solid_ao = default_ao;
+                        Render_Filled_Material material = {0};
+                        material.info.metallic = metallic;
+                        material.info.roughness = rough;
+                        material.info.albedo = vec3(1, 1, 0.92f);
+                        material.info.ambient_occlusion = default_ao;
 
-                        Vec3 pos = vec3(spacing * rough_i, spacing*metalic_i, 0);
+                        Vec3 pos = vec3(spacing * rough_i, spacing*metallic_i, 0);
                         Mat4 model = mat4_scale_affine(mat4_translation(vec3_add(offset, pos)), vec3_of(scale));
 
-                        if(use_mapping)
-                            render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material,
-                                &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &texture_brdf_lut);
-                        else
-                            render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material);
+                        //if(use_mapping)
+                        //    render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material,
+                        //        &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &image_brdf_lut);
+                        //else
+                            render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material, NULL);
                     }
                 }
 
-                Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.5f)), vec3(0, 2, 5));
+                //Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.5f)), vec3(0, 2, 5));
                 //render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material_metal);
                 
-                if(use_mapping)
-                    render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material_metal,
-                        &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &texture_brdf_lut);
-                else
-                    render_mesh_draw_using_pbr(render_uv_sphere, &shader_pbr, projection, view, model, &params, &material_metal);
+                //if(use_mapping)
+                //    render_mesh_draw_using_pbr_mapped(render_uv_sphere, &shader_pbr_mapped, projection, view, model, &params, &material_metal,
+                //        &cubemap_environment, &cubemap_irradiance, &cubemap_prefilter, &image_brdf_lut);
+                //else
+                    //render_mesh_draw_using_pbr(render_uv_sphere, &renderer, &shader_pbr, projection, view, model, &params, &material_metal);
             }
             
 
@@ -2405,9 +1334,22 @@ void run_func(void* context)
             }
 
             //render falcon
+            if(0)
             {
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.01f)), vec3(20, 0, 20));
-                render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
+                //render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
+
+                
+                PBR_Params params = {0};
+                for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
+                    params.lights[i] = lights[i];
+
+                params.view_pos = app->camera.pos;
+                params.gamma = settings->screen_gamma;
+                params.attentuation_strength = 0;
+                params.ambient_color = vec3_scale(lights[3].color, 0.00f);
+
+                render_object(&render_falcon, &renderer, &shader_pbr, projection, view, model, &params);
             }
 
             //render gismos
@@ -2462,17 +1404,20 @@ void run_func(void* context)
             || frame_num == 0)
         {
             
+            if(0)
+            {
             PERF_COUNTER_START(art_counter_prefileter);
-            render_cubemap_init_prefilter_from_environment(
+            render_cubeimage_init_prefilter_from_environment(
                 &cubemap_prefilter, res_prefilter, res_prefilter,
                 &cubemap_environment, &capture_buffers, &shader_prefilter, render_cube);
             PERF_COUNTER_END(art_counter_prefileter);
             
             PERF_COUNTER_START(art_counter_brdf_lut);
-            render_texture_init_BRDF_LUT(
-                &texture_brdf_lut, res_brdf_lut, res_brdf_lut,
+            render_image_init_BRDF_LUT(
+                &image_brdf_lut, res_brdf_lut, res_brdf_lut,
                 &capture_buffers, &shader_brdf_lut, render_quad);
             PERF_COUNTER_END(art_counter_brdf_lut);
+            }
             
             log_perf_counters(true);
 
@@ -2516,20 +1461,22 @@ void run_func(void* context)
     render_shader_deinit(&shader_prefilter);
     render_shader_deinit(&shader_brdf_lut);
     render_shader_deinit(&shader_pbr_mapped);
+    
+    resources_deinit(&resources);
+    renderer_deinit(&renderer);
 
-
-    render_pbr_material_deinit(&material_metal);
+    render_pbr_material_deinit(&material_metal, &renderer);
 
     array_deinit(&fps_display);
     
-    render_texture_deinit(&texture_floor);
-    render_texture_deinit(&texture_debug);
-    render_texture_deinit(&texture_environment);
-    render_texture_deinit(&texture_brdf_lut);
-    render_cubemap_deinit(&cubemap_skybox);
-    render_cubemap_deinit(&cubemap_environment);
-    render_cubemap_deinit(&cubemap_irradiance);
-    render_cubemap_deinit(&cubemap_prefilter);
+    render_image_deinit(&image_floor);
+    render_image_deinit(&image_debug);
+    render_image_deinit(&image_environment);
+    render_image_deinit(&image_brdf_lut);
+    render_cubeimage_deinit(&cubemap_skybox);
+    render_cubeimage_deinit(&cubemap_environment);
+    render_cubeimage_deinit(&cubemap_irradiance);
+    render_cubeimage_deinit(&cubemap_prefilter);
 
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
     

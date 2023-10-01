@@ -7,7 +7,6 @@
 #include "engine_types.h"
 #include "profile.h"
 
-
 typedef struct Shape
 {
     Vertex_Array vertices;
@@ -21,9 +20,6 @@ typedef struct Shape_Assembly
     Hash_Index vertices_hash;
 } Shape_Assembly;
 
-
-
-
 typedef enum Winding_Order
 {
     WINDING_ORDER_CLOCKWISE,
@@ -33,6 +29,7 @@ typedef enum Winding_Order
     //this heppesnt when the triangle is almost a line/point
 } Winding_Order;
 
+void shape_init(Shape* shape);
 void shape_deinit(Shape* shape);
 Shape shape_duplicate(Shape from);
 void shape_tranform(Shape* shape, Mat4 transform);
@@ -43,7 +40,8 @@ Shape shapes_make_unit_cube();
 Shape shapes_make_cube(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset);
 Shape shapes_make_quad(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset);
 
-void shape_assembly_deinit(Shape* shape);
+void shape_assembly_init(Shape_Assembly* shape, Allocator* allocator);
+void shape_assembly_deinit(Shape_Assembly* shape);
 void shape_assembly_init_from_shape(Shape_Assembly* assembly, Shape* shape);
 void shape_assembly_add_vertex(Shape_Assembly* assembly, Vertex vertex);
 u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex);
@@ -148,6 +146,20 @@ Shape shape_duplicate(Shape from)
     array_copy(&out.vertices, from.vertices);
     array_copy(&out.triangles, from.triangles);
     return out;
+}
+
+void shape_assembly_init(Shape_Assembly* shape, Allocator* allocator)
+{
+    array_init(&shape->vertices, allocator);
+    array_init(&shape->triangles, allocator);
+    hash_index_init(&shape->vertices_hash, allocator);
+}
+
+void shape_assembly_deinit(Shape_Assembly* shape)
+{
+    array_deinit(&shape->vertices);
+    array_deinit(&shape->triangles);
+    hash_index_deinit(&shape->vertices_hash);
 }
 
 void shape_tranform(Shape* shape, Mat4 transform)

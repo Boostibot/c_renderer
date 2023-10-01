@@ -219,7 +219,7 @@ EXPORT u32 error_system_register_module(Error_Translator translator, String modu
     _Error_Module created = {0};
     created.is_gravestone = false;
     created.registered.translator = translator;
-    created.registered.module_name = builder_from_string_alloc(module_name, global_error_system.allocator);
+    created.registered.module_name = builder_from_string(module_name, global_error_system.allocator);
     created.registered.context = context;
     array_push(&global_error_system.modules, created);
     return (u32) global_error_system.modules.size;

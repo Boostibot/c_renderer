@@ -101,12 +101,12 @@ float attentuate_no_singularity(float light_distance, float light_radius)
     return result;
 }
 
-vec3 fresnel_schlick_rougness(float cos_theta, vec3 F0, float roughness)
+vec3 fresnel_schlick_roughness(float cos_theta, vec3 F0, float roughness)
 {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 } 
 
-float fresnel_schlick_rougness2(float cos_theta, float F0, float roughness)
+float fresnel_schlick_roughness2(float cos_theta, float F0, float roughness)
 {
     return F0 + (max(1.0 - roughness, F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 } 
@@ -234,7 +234,7 @@ Light_Contribution contribution_sphere_light(vec3 P, vec3 N, vec3 V, vec3 R, vec
 
 Light_Contribution contribution_ambient_map(vec3 P, vec3 N, vec3 V, vec3 R, vec3 F0, float roughness)
 {
-    vec3 F = fresnel_schlick_rougness(max(dot(N, V), 0.0), F0, roughness);
+    vec3 F = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
     
     vec3 kS = F;
     vec3 kD = 1.0 - kS;
@@ -329,7 +329,7 @@ vec3 point_light_pbr(vec3 albedo, vec3 normal, float metallic, float roughness, 
         Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
     }
     
-    vec3 F = fresnel_schlick_rougness(max(dot(N, V), 0.0), F0, roughness);
+    vec3 F = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
     
     vec3 kS = F;
     vec3 kD = 1.0 - kS;

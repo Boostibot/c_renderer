@@ -119,7 +119,7 @@ INTERNAL void test_array_stress(f64 max_seconds)
 				if(arr->size > 0)
 				{
 					i64 value = *array_last(*arr);
-					TEST(is_power_of_two_zero(value));
+					TEST(is_power_of_two_or_zero(value));
 					array_pop(arr);
 				}
 				break;
@@ -183,7 +183,7 @@ INTERNAL void test_array_stress(f64 max_seconds)
 			max_capacity = arr->capacity;
 
 		for(isize k = 0; k < arr->size; k++)
-			TEST(arr->data != NULL && is_power_of_two_zero(arr->data[k]));
+			TEST(arr->data != NULL && is_power_of_two_or_zero(arr->data[k]));
 
 		TEST(_array_is_invariant(arr, sizeof *arr->data));
 	}

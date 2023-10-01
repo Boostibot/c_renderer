@@ -44,14 +44,14 @@ EXPORT isize  string_find_last_from(String in_str, String search_for, isize from
 EXPORT isize  string_find_last(String string, String search_for); 
 
 EXPORT isize  string_find_first_char(String string, char search_for, isize from); 
-EXPORT isize  string_find_last_from_char(String in_str, char search_for, isize from);
+EXPORT isize  string_find_last_char_from(String in_str, char search_for, isize from);
 EXPORT isize  string_find_last_char(String string, char search_for); 
 
 EXPORT void             builder_append(String_Builder* builder, String string); //Appends a string
 EXPORT void             builder_assign(String_Builder* builder, String string); //Sets the contents of the builder to be equal to string
-EXPORT String_Builder   builder_from_string(String string); //Allocates a String_Builder from String. The String_Builder needs to be deinit just line any other ???_Array type!
-EXPORT String_Builder   builder_from_cstring(const char* cstring); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
-EXPORT String_Builder   builder_from_string_alloc(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
+EXPORT String_Builder   builder_from_cstring(const char* cstring, Allocator* allocator); //Allocates a String_Builder from cstring. The String_Builder needs to be deinit just line any other ???_Array type!
+EXPORT String_Builder   builder_from_string(String string, Allocator* allocator);  //Allocates a String_Builder from String using an allocator. The String_Builder needs to be deinit just line any other ???_Array type!
+EXPORT void             builder_array_deinit(String_Builder_Array* array);
 
 EXPORT bool             builder_is_equal(String_Builder a, String_Builder b); //Returns true if the contents and sizes of the strings match
 EXPORT int              builder_compare(String_Builder a, String_Builder b); //Compares sizes and then lexographically the contents. Shorter strings are placed before longer ones.
@@ -282,22 +282,25 @@ EXPORT String_Array string_split(String to_split, String split_by);
     {
         array_assign(builder, string.data, string.size);
     }
+    
+    EXPORT void builder_array_deinit(String_Builder_Array* array)
+    {
+        for(isize i = 0; i < array->size; i++)
+            array_deinit(&array->data[i]);
 
-    EXPORT String_Builder builder_from_string_alloc(String string, Allocator* allocator)
+        array_deinit(array);
+    }
+
+    EXPORT String_Builder builder_from_string(String string, Allocator* allocator)
     {
         String_Builder builder = {allocator};
         array_append(&builder, string.data, string.size);
         return builder;
     }
 
-    EXPORT String_Builder builder_from_string(String string)
+    EXPORT String_Builder builder_from_cstring(const char* cstring, Allocator* allocator)
     {
-        return builder_from_string_alloc(string, allocator_get_default());
-    }
-
-    EXPORT String_Builder builder_from_cstring(const char* cstring)
-    {
-        return builder_from_string(string_make(cstring));
+        return builder_from_string(string_make(cstring), allocator);
     }
 
     EXPORT bool builder_is_equal(String_Builder a, String_Builder b)

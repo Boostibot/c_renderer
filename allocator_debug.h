@@ -449,27 +449,6 @@ INTERNAL int _debug_allocation_alloc_time_compare(const void* a, const void* b)
         return 1;
 }
 
-//@TODO: remove
-INTERNAL Stack_Trace_Entry _debug_allocator_source_to_trace(Source_Info source)
-{
-    Stack_Trace_Entry entry = {0};
-    isize function_length = strlen(source.function);
-    isize file_length = strlen(source.file);
-
-    if(function_length >= sizeof entry.function)
-        function_length = sizeof entry.function - 1;
-
-    if(file_length >= sizeof entry.file)
-        file_length = sizeof entry.file - 1;
-
-    memcpy(entry.function, source.function, function_length);
-    memcpy(entry.file, source.file, file_length);
-    entry.line = source.line;
-
-    return entry;
-}
-
-
 INTERNAL isize _debug_allocator_find_allocation(const Debug_Allocator* self, void* ptr)
 {
     u64 hashed = hash64((u64) ptr);

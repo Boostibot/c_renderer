@@ -6,6 +6,20 @@
 #include "profile.h"
 #include <string.h>
 
+//@TODO(Chris): Make Alloc_Operation enum;
+//@TODO: Add stats pointer to the alloc operation thus reducing the functions to 1;
+//@TODO: Make Allocator struct contain pointer to state instead of the implicit first member we have now.
+//       The rationale was that having it like this makes it possible to return Allocators from functions
+//       without invalidating that pointer. I dont know how valuable that is because we neever do that anyways.
+//       Also in the typical usage is to set the struct as an allocator by setting a pointer to it. As such it
+//       get invalidated when returning from a function anyway.
+// 
+//       EDIT
+//       The reason for this change is to make it easier to combine the platform allocator concept with the current concept
+//       however i just now think thats not really a problem. These two aproaches can both emulate one another and thus are 
+//       substitutable. This one has the advantage of local data and possibility of returning and thus is prefered.
+
+
 // This module introduces a framework for dealing with memory and allocation used by every other system.
 // It makes very little assumptions about the use case making it very portable to other projects.
 //
@@ -124,7 +138,7 @@ EXPORT Allocator_Set allocator_set(Allocator_Set backup);
 
 
 EXPORT bool  is_power_of_two(isize num);
-EXPORT bool  is_power_of_two_zero(isize num);
+EXPORT bool  is_power_of_two_or_zero(isize num);
 EXPORT void* align_forward(void* ptr, isize align_to);
 EXPORT void* align_backward(void* ptr, isize align_to);
 EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void) bytes; return NULL;}
@@ -273,7 +287,7 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
     }
     #endif // !
     
-    EXPORT bool is_power_of_two_zero(isize num) 
+    EXPORT bool is_power_of_two_or_zero(isize num) 
     {
         usize n = (usize) num;
         return ((n & (n-1)) == 0);
@@ -281,7 +295,7 @@ EXPORT void* stack_allocate(isize bytes, isize align_to) {(void) align_to; (void
 
     EXPORT bool is_power_of_two(isize num) 
     {
-        return (num>0 && is_power_of_two_zero(num));
+        return (num>0 && is_power_of_two_or_zero(num));
     }
 
     EXPORT void* align_forward(void* ptr, isize align_to)

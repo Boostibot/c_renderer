@@ -56,7 +56,6 @@ typedef uint32_t    c32;
 
 #define STATIC_ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
-//@TODO
 #ifndef EXPORT
     #define EXPORT
 #endif
