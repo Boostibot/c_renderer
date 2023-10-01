@@ -808,7 +808,9 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
         old_block_ptr = _debug_allocator_get_placed_block(self, old_ptr);
     }
 
-    new_block_ptr = (u8*) self->parent->allocate(self->parent, total_new_size, old_block_ptr, total_old_size, DEF_ALIGN, called_from);
+    
+    new_block_ptr = (u8*) allocator_try_reallocate(self->parent, total_new_size, old_block_ptr, total_old_size, DEF_ALIGN, called_from);
+    //new_block_ptr = (u8*) self->parent->allocate(self->parent, total_new_size, old_block_ptr, total_old_size, DEF_ALIGN, called_from);
     
     //if failed return failiure and do nothing
     if(new_block_ptr == NULL && new_size != 0)

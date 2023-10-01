@@ -158,8 +158,8 @@ EXPORT void _array_clear(void* array, isize item_size);
 
 //Appends a single item to the end of the array
 #define array_push(array_ptr, item_value)            \
-    _array_prepare_push(array_ptr, sizeof *(array_ptr)->data, SOURCE_INFO()), \
-    (array_ptr)->data[(array_ptr)->size - 1] = item_value \
+    _array_reserve(array_ptr, sizeof *(array_ptr)->data, (array_ptr)->size + 1, true, SOURCE_INFO()), \
+    (array_ptr)->data[(array_ptr)->size++] = item_value \
 
 //Removes a single item from the end of the array
 #define array_pop(array_ptr) \
@@ -352,15 +352,6 @@ EXPORT void _array_reserve(void* array, isize item_size, isize to_fit, bool do_g
         _array_grow_capacity(array, item_size, to_fit + 1, from);
     else
         _array_set_capacity(array, item_size, to_fit + 1, from);
-}
-
-EXPORT void _array_prepare_push(void* array, isize item_size, Source_Info from)
-{
-    u8_Array* base = (u8_Array*) array;
-    _array_reserve(array, item_size, base->size + 1, true, from);
-    base->size += 1;
-    memset(base->data + base->size*item_size, 0, item_size);
-    ASSERT(_array_is_invariant(array, item_size));
 }
 
 EXPORT void _array_append(void* array, isize item_size, const void* data, isize data_count, Source_Info from)

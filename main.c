@@ -26,7 +26,7 @@ void main()
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-
+#include "allocator.h"
 #include "platform.h"
 #include "string.h"
 #include "hash_index.h"
@@ -34,6 +34,7 @@ void main()
 #include "file.h"
 #include "allocator_debug.h"
 #include "allocator_malloc.h"
+#include "allocator_stack.h"
 #include "random.h"
 #include "math.h"
 
@@ -584,13 +585,12 @@ int main()
     Malloc_Allocator static_allocator = {0};
     malloc_allocator_init(&static_allocator);
     allocator_set_static(&static_allocator.allocator);
-
+    
     Malloc_Allocator malloc_allocator = {0};
     malloc_allocator_init_use(&malloc_allocator, 0);
     
     error_system_init(&static_allocator.allocator);
     log_system_init(&malloc_allocator.allocator, &malloc_allocator.allocator);
-
 
     GLFWallocator allocator = {0};
     allocator.allocate = glfw_malloc_func;
@@ -796,9 +796,6 @@ void log_todos(const char* marker)
 }
 
 
-#define ERROR_FMT STRING_FMT " from " STRING_FMT
-#define ERROR_PRINT(error) STRING_PRINT(error_code(error)), STRING_PRINT(error_module(error))
-
 void run_func(void* context)
 {
     log_todos("@TODO");
@@ -811,6 +808,16 @@ void run_func(void* context)
     
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+
+    u8_Array stack_buffer = {0};
+    array_resize(&stack_buffer, MEBI_BYTE * 100);
+
+    Stack_Allocator stack = {0};
+    stack_allocator_init(&stack, stack_buffer.data, stack_buffer.size, &debug_alloc.allocator);
+    
+    Allocator_Set scratch_set = {0};
+    //if(0)
+        scratch_set = allocator_set_both(&stack.allocator, &stack.allocator);
 
     GLFWwindow* window = (GLFWwindow*) context;
     App_State* app = (App_State*) glfwGetWindowUserPointer(window);
@@ -1481,6 +1488,13 @@ void run_func(void* context)
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
     
     log_perf_counters(true);
+    
+    //if(0)
+    allocator_set(scratch_set);
+
+    stack_allocator_deinit(&stack);
+    array_deinit(&stack_buffer);
+
     debug_allocator_deinit(&debug_alloc);
     
 

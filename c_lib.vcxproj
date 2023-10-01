@@ -221,6 +221,7 @@
     <ClInclude Include="allocator_debug.h" />
     <ClInclude Include="allocator_failing.h" />
     <ClInclude Include="allocator_malloc.h" />
+    <ClInclude Include="allocator_stack.h" />
     <ClInclude Include="allocator_wrapper.h" />
     <ClInclude Include="array.h" />
     <ClInclude Include="assert.h" />

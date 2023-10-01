@@ -518,6 +518,10 @@ void render_cubeimage_unuse(const Render_Cubeimage* render)
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
+
+#define ERROR_FMT STRING_FMT " from " STRING_FMT
+#define ERROR_PRINT(error) STRING_PRINT(error_code(error)), STRING_PRINT(error_module(error))
+
 Error render_image_init_from_disk(Render_Image* tetxure, String path, String name)
 {
     Image_Builder image_builder = {0};
@@ -526,7 +530,7 @@ Error render_image_init_from_disk(Render_Image* tetxure, String path, String nam
     Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
     allocator_set(prev_allocs);
     
-    ASSERT(error_is_ok(error));
+    ASSERT_MSG(error_is_ok(error), ERROR_FMT, ERROR_PRINT(error));
     if(error_is_ok(error))
         render_image_init(tetxure, image_from_builder(image_builder), name, 0);
 
@@ -543,7 +547,7 @@ Error render_image_init_hdr_from_disk(Render_Image* tetxure, String path, String
     Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_F32, IMAGE_LOAD_FLAG_FLIP_Y);
     allocator_set(prev_allocs);
     
-    ASSERT(error_is_ok(error));
+    ASSERT_MSG(error_is_ok(error), ERROR_FMT, ERROR_PRINT(error));
     if(error_is_ok(error))
         render_image_init(tetxure, image_from_builder(image_builder), name, GL_RGB16F);
 

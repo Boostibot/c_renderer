@@ -114,7 +114,9 @@ INTERNAL void* wrapper_allocator_allocate_custom(Allocator* using_allocator, isi
         actual_old_size = old_size + actual_align;
 
     void* out_ptr = NULL;
-    void* actual_new_ptr = using_allocator->allocate(using_allocator, actual_new_size, actual_old_ptr, actual_old_size, actual_align, called_from);
+    void* actual_new_ptr = allocator_try_reallocate(using_allocator, actual_new_size, actual_old_ptr, actual_old_size, actual_align, called_from);
+
+    //void* actual_new_ptr = using_allocator->allocate(using_allocator, actual_new_size, actual_old_ptr, actual_old_size, actual_align, called_from);
     if(actual_new_size != 0 && actual_new_ptr != NULL)
     {
         out_ptr = (u8*) actual_new_ptr + actual_align;
