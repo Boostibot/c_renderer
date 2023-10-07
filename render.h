@@ -1110,7 +1110,7 @@ void render_pbr_material_deinit(Render_Material* material, Renderer* renderer)
 
     for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
         renderer_cubeimage_remove(renderer, material->cubemaps[i].image);  
-
+    
     memset(material, 0, sizeof *material);
 }
 
@@ -1133,7 +1133,7 @@ Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources
 
         //Scan if we have this image already
         HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Image*, image_ptr)
-            if(builder_is_equal(image_ptr->path, map.path))
+            if(builder_is_equal(image_ptr->path, image->path))
             {
                 handle.h = h;
                 break;
@@ -1144,12 +1144,12 @@ Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources
         {
             Render_Image render_image = {0};
             render_image_init(&render_image, image_from_builder(image->image), string_from_builder(image->name), 0);
+            array_copy(&render_image.path, image->path);
             handle = renderer_image_add(renderer, &render_image);
         }
 
         out.image = handle;
     }
-
 
     return out;
 }
@@ -1204,7 +1204,6 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer, 
     return out;
 }
 
-
 void render_map_unuse(Render_Map map)
 {
     (void) map;
@@ -1222,7 +1221,7 @@ void render_pbr_material_init_from_material(Render_Material* render_material, Re
         array_copy(&render_material->path, material->path);
 
         render_material->info = material->info;
-    
+
         for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
             render_material->maps[i] = render_map_from_map(material->maps[i], renderer, resources);  
 
@@ -1286,6 +1285,8 @@ void render_object_init_from_object(Render_Object* render_object, Renderer* rend
     for(isize i = 0; i < object.groups.size; i++)
     {
         Object_Group* group = &object.groups.data[i];
+        LOG_INFO("ASSET", "Group index %lld %s", (lld) i, group->name.data);
+
         ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
         Material* material = resources_material_get(resources, group->material);
         if(material)

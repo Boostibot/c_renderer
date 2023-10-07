@@ -644,6 +644,7 @@ int main()
 
     log_system_deinit();
     error_system_deinit();
+    //@TODO: fix
     ASSERT(malloc_allocator.bytes_allocated == 0);
     malloc_allocator_deinit(&malloc_allocator);
     platform_deinit();
@@ -1016,7 +1017,7 @@ void run_func(void* context)
             PERF_COUNTER_END(art_counter_shapes);
 
 
-            if(0)
+            if(1)
             {
                 object_read_entire(&resources, &falcon_handle, STRING("resources/sponza/sponza.obj"), NULL, 0);
             
@@ -1341,7 +1342,7 @@ void run_func(void* context)
             }
 
             //render falcon
-            if(0)
+            if(1)
             {
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.01f)), vec3(20, 0, 20));
                 //render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
