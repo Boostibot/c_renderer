@@ -231,7 +231,11 @@
     <ClInclude Include="error.h" />
     <ClInclude Include="file.h" />
     <ClInclude Include="format.h" />
+    <ClInclude Include="format_lpf.h" />
     <ClInclude Include="format_netbpm.h" />
+    <ClInclude Include="logger_file.h" />
+    <ClInclude Include="logger_memory.h" />
+    <ClInclude Include="callstack.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="resource_loading.h" />
     <ClInclude Include="gl.h" />

@@ -429,6 +429,7 @@ void object_description_deinit(Object_Description* description)
     for(isize i = 0; i < description->groups.size; i++)
         object_group_description_deinit(&description->groups.data[i]);
 
+    array_deinit(&description->groups);
     builder_array_deinit(&description->material_files);
 
     memset(description, 0, sizeof *description);
@@ -625,9 +626,7 @@ void object_init(Object* item, Resources* resources)
 
     array_init(&item->path, resources->alloc);
     array_init(&item->name, resources->alloc);
-
-    for(isize i = 0; i < item->groups.size; i++)
-        object_group_init(&item->groups.data[i], resources);
+    array_init(&item->groups, resources->alloc);
 }
 
 void object_deinit(Object* item, Resources* resources)
@@ -639,7 +638,8 @@ void object_deinit(Object* item, Resources* resources)
 
     for(isize i = 0; i < item->groups.size; i++)
         object_group_deinit(&item->groups.data[i], resources);
-
+        
+    array_init(&item->groups, resources->alloc);
     memset(item, 0, sizeof *item);
 }
 

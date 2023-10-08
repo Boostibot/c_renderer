@@ -3,6 +3,7 @@
 
 #include "allocator.h"
 #include "string.h"
+#include "parse.h"
 
 // This file presents an unified error handling startegy in 
 // the engines major systems (small functions that fail for 
@@ -52,9 +53,7 @@ STATIC_ASSERT(sizeof(errno_t) == sizeof(u32)); //"error size must be compatible!
 #define ERROR_SYSTEM_STRING_INVALID_TRANSLATOR STRING("error.h: missing translator for module")
 #define ERROR_SYSTEM_STRING_UNEXPECTED_ERROR   STRING("Unexpected error code for this module. This is likely a result of a bug.")
 
-EXPORT Error error_ok(); //returns the okay error code. 
 EXPORT Error error_make(u32 module, u32 code);
-EXPORT Error error_or(Error first, Error second); //If first has error return it. Else returns second. Effectively returns first || second.
 EXPORT Error error_from_platform(Platform_Error error);
 EXPORT Error error_from_stdlib(errno_t error);
 
@@ -65,13 +64,19 @@ EXPORT String error_module(Error error); //returns the name of the module the er
 EXPORT void error_code_into(String_Builder* into, Error error);
 EXPORT void error_module_into(String_Builder* into, Error error);
 
-#define ERROR_OK        BRACE_INIT(Error){0, 0}
+#define ERROR_OK       BRACE_INIT(Error){0, 0}
 #define ERROR_OR(err)  ((err).code != 0) ? (err) : 
 //use like:
 // Error my_error = {0};
 // my_error = ERROR_OR(my_error) function_returning_error(1);
 // my_error = ERROR_OR(my_error) function_returning_error(2);
 // my_error = ERROR_OR(my_error) function_returning_error(3);
+
+#define _STRING_FMT "%.*s"
+#define _STRING_PRINT(string) (string).size, (string).data
+
+#define ERROR_FMT          _STRING_FMT " from module " _STRING_FMT
+#define ERROR_PRINT(error) _STRING_PRINT(error_code(error)), _STRING_PRINT(error_module(error))
 
 EXPORT void error_system_init(Allocator* allocator);
 EXPORT void error_system_deinit();
@@ -131,8 +136,11 @@ EXPORT String error_code(Error error)
 
     if(registered->translator == NULL)
         return ERROR_SYSTEM_STRING_INVALID_TRANSLATOR;
-    else    
-        return registered->translator(error.code, registered->context);
+
+    String error_code = registered->translator(error.code, registered->context);
+    error_code = string_trim_whitespace(error_code);
+
+    return error_code;
 }
 
 EXPORT String error_module(Error error)
@@ -144,7 +152,10 @@ EXPORT String error_module(Error error)
     if(registered == NULL)
         return ERROR_SYSTEM_STRING_INVALID_MODULE;
 
-    return string_from_builder(registered->module_name);
+    String error_module = string_from_builder(registered->module_name);
+    error_module = string_trim_whitespace(error_module);
+
+    return error_module;
 }
 
 EXPORT void error_code_into(String_Builder* into, Error error)
@@ -250,14 +261,6 @@ EXPORT Error error_make(u32 module, u32 code)
 {
     Error result = {module, (u32) code};
     return result;
-}
-
-EXPORT Error error_or(Error first, Error second)
-{
-    if(!error_is_ok(first))
-        return first;
-    else
-        return second;
 }
 
 EXPORT Error error_from_platform(Platform_Error error)

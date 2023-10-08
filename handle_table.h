@@ -121,6 +121,18 @@ EXPORT void* handle_table_get(Handle_Table table, Handle handle);
 #if (defined(LIB_ALL_IMPL) || defined(LIB_HANDLE_TABLE_IMPL)) && !defined(LIB_HANDLE_TABLE_HAS_IMPL)
 #define LIB_HANDLE_TABLE_HAS_IMPL
 
+
+INTERNAL Allocator* _handle_table_get_allocator(Handle_Table* table)
+{
+    Allocator* alloc = array_get_allocator(table->slots);
+    //if(alloc == NULL)
+    //{
+    //    table->slots.allocator = allocator_get_default();
+    //    alloc = table->slots.allocator;
+    //}
+    return alloc;
+}
+
 EXPORT void handle_table_init(Handle_Table* table, Allocator* alloc, i32 type_size, i32 type_align)
 {
     ASSERT(type_size > 0 && is_power_of_two(type_align));
@@ -132,20 +144,13 @@ EXPORT void handle_table_init(Handle_Table* table, Allocator* alloc, i32 type_si
 }
 EXPORT void handle_table_deinit(Handle_Table* table)
 {
+    Allocator* alloc = _handle_table_get_allocator(table);
+    for(isize i = 0; i < table->slots.size; i++)
+        allocator_deallocate(alloc, table->slots.data[i].ptr, table->type_size, table->type_align, SOURCE_INFO());
+
     array_deinit(&table->slots);
     table->type_align = 0;
     table->type_size = 0;
-}
-
-INTERNAL Allocator* _handle_table_get_allocator(Handle_Table* table)
-{
-    Allocator* alloc = array_get_allocator(table->slots);
-    if(alloc == NULL)
-    {
-        table->slots.allocator = allocator_get_default();
-        alloc = table->slots.allocator;
-    }
-    return alloc;
 }
 
 INTERNAL Handle_Table_Slot* _handle_table_slot_by_handle(const Handle_Table* table, Handle handle)

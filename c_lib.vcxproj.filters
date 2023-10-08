@@ -179,6 +179,18 @@
     <ClInclude Include="allocator_stack.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="format_lpf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="logger_file.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="logger_memory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="callstack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\screen.frag">

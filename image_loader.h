@@ -172,10 +172,7 @@ EXPORT Error image_read_from_file(Image_Builder* image, String path, isize desir
     Error parse_error = ERROR_OR(file_error) image_read_from_memory(image, string_from_builder(file_content), desired_channels, format, flags);
     
     if(!error_is_ok(parse_error))
-    {
-        LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\"\n"
-            "error: " STRING_FMT, STRING_PRINT(path), STRING_PRINT(error_code(parse_error)));
-    }
+        LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
 
     array_deinit(&file_content);
     return parse_error;

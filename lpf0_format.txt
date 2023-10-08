@@ -56,11 +56,35 @@ LPF0
 :First line of entry
 ,and the second line
 
-#When whitespace is significant we can use the ; end marker to denote end of an entry
-#All characters after the LAST ; end marker are discarded and can be used as comments 
+#When whitespace is significant we can use the # end marker to denote end of an entry
+#All characters after the LAST # end marker are discarded and can be used as comments 
 #(After this example are 3 spaces which are skipped)
-:First entry;    
-:This is an entry containing the end marker ; character without any problem;
+:First entry#    
+:This is an entry containing the end marker # character without any problem#
+
+:Long line entry thats\
+, broken into several lines\
+, except is just one\
+
+
+[
+    :hey bro
+    {
+        :hows 
+        :it 
+    }
+]
+:hanging?
+
+#  |
+#  |
+#  v
+
+:hey bro
+:hows 
+:it 
+:hanging?
+
 
 #We can optionally specify the type of entries to be used while parsing. 
 #This is useful for easily extracting and validationg structures inside the format.
@@ -69,14 +93,20 @@ LPF0
 #Entry has only one type meaning that placing type before the , continuation marker is an (non fatal) error.
 #See common types at the end of this document for a complete list of supported types.
 
+#Any type. This is the default type.
+a:Any entry
+
 #String entry
-s:String entry 
+s:String entry  
+
+#Word entry
+w:   Word entry
 
 #Integer entry
-i:-1024;      
+i:-1024#     
 
 #Unsigned integer entry
-u:512;    
+u:512#    
 
 #Floating point number entry
 f:13.2
@@ -181,7 +211,7 @@ n:
 #A final example of typical usage of LPF to define a simple material description
 {
     :name
-        s:Wood;
+        s:Wood#
     :reosultion
         i:1024
     :albedo
@@ -196,8 +226,8 @@ n:
         f:0
 
     :albedo_map
-    TEX {   :path
-            :images/wood_albedo.bmp;
+    TEX {:path
+            :images/wood_albedo.bmp#
         :gamma
             f:2.2
         :tile
@@ -205,7 +235,7 @@ n:
     
     :roughness_map
     TEX {:path
-            :images/wood_roughness.bmp;
+            :images/wood_roughness.bmp#
         :gamma
             f:1
         :tile
@@ -213,7 +243,7 @@ n:
     
     :metallic_map
     TEX {:path
-            :images/wood_metallic.bmp;
+            :images/wood_metallic.bmp#
         :gamma
             f:1
         :tile
@@ -221,7 +251,7 @@ n:
     
     :ao_map
     TEX {:path
-            :images/wood_ao.bmp;
+            :images/wood_ao.bmp#
         :gamma
             f:1
         :tile
@@ -229,7 +259,7 @@ n:
     
     :emissive_map
     TEX {:path
-            :images/wood_emissive.bmp;
+            :images/wood_emissive.bmp#
         :gamma
             f:1
         :tile
@@ -245,8 +275,14 @@ n:
 #All types however must not contain any of the following:
 #'[', ']', '{', '}', ',', ':', '#', 'LPF0'
 
-#String entry
-s:String entry 
+#Any type. This is the default type. Data contains the full range. All entries are valid. 
+a:Any entry
+
+#String entry. Data contains the full range. All strings are valid.
+s:String entry  
+
+#Word entry. words are strings except leading and trailing whitespace is stripped. Newlines are however never stripped.
+w: Leading whitespace string entry
 
 #Integer entry.
 #The format is: (-)(leading zeroes)digits
@@ -274,35 +310,9 @@ b:0
 #Utf8 character entry
 c:g
 
-#NIL/NULL entry. Its value should be ignored. 
+#NIL/NULL entry. Its value is ignored. 
 #Useful inside maps when the map should act like a hash set instead.
 n:
-
-#Sized types.
-#Same syntax as for unsigned but followed by a number representing the 
-#number of bits to use for representation
-i8:-31
-i16:-23000
-i32:-1024
-i64:-1024
-
-u8:31
-u16:23000
-u32:1024
-u64:1024
-
-b8:true
-b16:true
-b32:true
-b64:true
-
-f16:1.023
-f32:1.023
-f64:1.023
-
-c8:g
-c16:g
-c32:g
 
 #Vector types.
 #Same syntax as for sized/unsized types but prefixed with the count of items inside

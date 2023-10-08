@@ -11,6 +11,20 @@ in VS_OUT
 
 #define PBR_MAX_LIGHTS 4
 
+struct Map 
+{
+    vec2 scale;
+    vec2 offset;
+    float gamma;
+    float base;
+    float gain;
+};
+
+layout (std140) uniform Maps
+{
+    Map map1;
+};
+
 uniform sampler2D map_albedo;
 uniform sampler2D map_normal;
 uniform sampler2D map_metallic;
@@ -39,6 +53,11 @@ uniform vec3  lights_color[PBR_MAX_LIGHTS];
 uniform float lights_radius[PBR_MAX_LIGHTS];
 
 const float PI = 3.14159265359;
+
+//vec4 sample_map(sampler2D sampler, Map map)
+//{
+//    
+//}
 
 vec3 gamma_correct(vec3 color, float gamma)
 {
