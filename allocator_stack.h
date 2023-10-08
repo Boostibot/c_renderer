@@ -19,6 +19,7 @@
 // Stack_Allocator is a lot better.
 
 //@TODO: wrap parent in tracking allocator.
+//@TODO: substacking
 
 typedef struct Stack_Allocator {
     Allocator allocator;
@@ -32,8 +33,7 @@ typedef struct Stack_Allocator {
     isize max_alloced;
     isize current_alloced;
 } Stack_Allocator;
-        
-        
+
 EXPORT void stack_allocator_init(Stack_Allocator* allocator, void* buffer, isize buffer_size, Allocator* parent);
 EXPORT void stack_allocator_deinit(Stack_Allocator* allocator);
 

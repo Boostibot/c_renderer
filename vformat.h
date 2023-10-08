@@ -25,9 +25,6 @@ EXPORT void format_into_sized(String_Builder* into, String format, ...);
 #define SOURCE_INFO_FMT "( %s : %lld )"
 #define SOURCE_INFO_PRINT(source_info) cstring_escape((source_info).file), (source_info).line
 
-#define STACK_TRACE_FMT "%-30s " SOURCE_INFO_FMT
-#define STACK_TRACE_PRINT(trace) cstring_escape((trace).function), SOURCE_INFO_PRINT(trace)
-
 typedef long long int lld;
 #endif // !LIB_VFORMAT
 
@@ -40,7 +37,7 @@ typedef long long int lld;
         PERF_COUNTER_START(c);
         //an attempt to estimate the needed size so we dont need to call vsnprintf twice
         isize format_size = strlen(format);
-        isize estimated_size = format_size + 10 + format_size/4;
+        isize estimated_size = format_size + 64 + format_size/4;
         isize base_size = append_to->size; 
         array_resize(append_to, base_size + estimated_size);
 
@@ -50,17 +47,17 @@ typedef long long int lld;
         
         if(count > estimated_size)
         {
+            PERF_COUNTER_START(format_twice);
             array_resize(append_to, base_size + count + 3);
             count = vsnprintf(append_to->data + base_size, (size_t) (append_to->size - base_size), format, args);
+            PERF_COUNTER_END(format_twice);
         }
     
-        //if(count != 0)
-            //ASSERT(append_to->data[base_size + count - 1] != '\0');
-
         //Sometimes apparently the standard linrary screws up and returns negative...
         if(count < 0)
             count = 0;
         array_resize(append_to, base_size + count);
+        ASSERT(append_to->data[base_size + count] == '\0');
         
         PERF_COUNTER_END(c);
         return;

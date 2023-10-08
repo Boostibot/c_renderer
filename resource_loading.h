@@ -35,6 +35,9 @@ INTERNAL Error _format_obj_mtl_error_on_to_error(Format_Obj_Mtl_Error_Statement 
     return error_make(error_module, splatted);
 }
 
+#define OBJ_MTL_ERROR_FMT           "%s at line %d" 
+#define OBJ_MTL_ERROR_PRINT(error)  format_obj_mtl_error_statement_to_string((error).statement), (error).line
+
 typedef enum Resource_Loading_Error {
     RESOURCE_LOADING_ERROR_NONE,
     RESOURCE_LOADING_ERROR_UV_INDEX,
@@ -78,7 +81,7 @@ typedef struct Load_Error
 
 DEFINE_ARRAY_TYPE(Error, Error_Array);
 
-EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Description* description, Format_Obj_Model model, Error_Array* errors_or_null, isize max_errors)
+EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Description* description, Format_Obj_Model model)
 {
     hash_index_reserve(&shape_assembly->vertices_hash, model.indeces.size);
     
@@ -145,7 +148,7 @@ EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Descriptio
 
             isize i_min = (child_group->trinagles_from)*3;
             isize i_max = (child_group->trinagles_from + child_group->trinagles_count)*3;
-        
+
             //Iterate all indeces using a hash map to deduplicate vertex data
             //and shape it into the vertex structure. 
             //Discards all triangles that dont have a valid position
@@ -153,35 +156,56 @@ EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Descriptio
             Triangle_Index triangle = {0};
             for(isize i = i_min; i < i_max; i++)
             {
-                Format_Obj_Mtl_Error error = {0};
+                enum {
+                    NONE = 0,
+                    INVALID_NORM_INDEX,
+                    INVALID_POS_INDEX,
+                    INVALID_UV_INDEX,
+                } error = NONE;
+                isize error_index = 0;
+
                 Vertex composed_vertex = {0};
                 Format_Obj_Vertex_Index index = model.indeces.data[i];
                 if(index.norm_i1 < 0 || index.norm_i1 > model.normals.size)
                 {
-                    error.statement = FORMAT_OBJ_ERROR_INVALID_NORM_INDEX;
-                    error.line = index.norm_i1;
+                    error = INVALID_NORM_INDEX;
+                    error_index = index.norm_i1;
                 }
                 else
                     composed_vertex.norm = model.normals.data[index.norm_i1 - 1];
 
                 if(index.pos_i1 < 0 || index.pos_i1 > model.positions.size)
                 {
-                    error.statement = FORMAT_OBJ_ERROR_INVALID_POS_INDEX;
-                    error.line = index.pos_i1;
+                    error = INVALID_POS_INDEX;
+                    error_index = index.pos_i1;
                 }
                 else
                     composed_vertex.pos = model.positions.data[index.pos_i1 - 1];
 
                 if(index.uv_i1 < 0 || index.uv_i1 > model.uvs.size)
                 {
-                    error.statement = FORMAT_OBJ_ERROR_INVALID_UV_INDEX;
-                    error.line = index.uv_i1;
+                    error = INVALID_UV_INDEX;
+                    error_index = index.uv_i1;
                 }
                 else
                     composed_vertex.uv = model.uvs.data[index.uv_i1 - 1];
         
-                if(error.statement != FORMAT_OBJ_ERROR_NONE && errors_or_null && errors_or_null->size < max_errors)
-                    array_push(errors_or_null, _format_obj_mtl_error_on_to_error(error.statement, error.index));
+                
+                if(error != NONE)
+                {
+                    const char* error_string = "";
+                    switch(error)
+                    {
+                        default:
+                        case NONE: error_string = "none"; break;
+
+                        case INVALID_NORM_INDEX: error_string = "invalid normal index"; break;
+                        case INVALID_POS_INDEX: error_string = "invalid position index"; break;
+                        case INVALID_UV_INDEX: error_string = "invalid uv-coordinate index"; break;
+                    }
+
+                    LOG_ERROR("ASSET", "Error processing obj file: %s with index %lld on index number %lld ", error_string, (lld) error_index, (lld) i);
+                }
 
                 u32 final_index = shape_assembly_add_vertex_custom(&shape_assembly->vertices_hash, &shape_assembly->vertices, composed_vertex);
                 u32 mod = i%3;
@@ -337,7 +361,7 @@ EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_
     process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
 }
 
-EXPORT Error material_load_images(Resources* resources, Material* material, Material_Description description, Error_Array* errors_or_null, isize max_errors)
+EXPORT Error material_load_images(Resources* resources, Material* material, Material_Description description)
 {
     Error out_error = {0};
 
@@ -367,6 +391,8 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
         }
     }
 
+    Allocator_Set prev = allocator_set_default(resources->alloc);
+
     for(isize i = 0; i < STATIC_ARRAY_SIZE(to_all); i++)
     {
         Map* to = to_all[i];
@@ -376,6 +402,7 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
         if(desc->info.is_enabled == false || desc->path.size <= 0)
             continue;
         
+        //@TODO: full path here
         String item_path = string_from_builder(desc->path);
         String dir_path = path_get_file_directory(string_from_builder(description.path));
             
@@ -409,10 +436,7 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
                 found_handle = resources_loaded_image_add(resources, &loaded);
             }
             else
-            {
-                if(errors_or_null && errors_or_null->size < max_errors)
-                    array_push(errors_or_null, load_error);
-            }
+                LOG_ERROR("ASSET", "Error rading image %s: " ERROR_FMT, composed_path.data, ERROR_PRINT(load_error));
             
             loaded_image_deinit(&loaded);
         }
@@ -425,10 +449,12 @@ EXPORT Error material_load_images(Resources* resources, Material* material, Mate
          array_deinit(&composed_path);
     }
 
+    allocator_set(prev);
+
     return out_error;
 }
 
-EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly* assembly, Object_Description description, Material_Handle_Array materials, Error_Array* errors_or_null, isize max_errors)
+EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly* assembly, Object_Description description, Material_Handle_Array materials)
 {
     Shape_Assembly_Handle assembly_handle = resources_shape_add(resources, assembly);
     object_init(object, resources);
@@ -482,109 +508,104 @@ EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly
             }
         }
 
-        if(unable_to_find_group && errors_or_null && errors_or_null->size < max_errors)
-        {
-            Error error = _resource_loading_error_to_error(RESOURCE_LOADING_ERROR_MATERIAL_NOT_FOUND);
-            array_push(errors_or_null, error);
+        if(unable_to_find_group)
             LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
-        }
     }
 }
 
 #define FLAT_ERRORS_COUNT 100
 
-EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* materials, String path, Error_Array* errors_or_null, isize max_errors)
+EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* materials, String path)
 {
+    Malloc_Allocator arena = {0};
+    malloc_allocator_init_use(&arena, 0);
+
     String_Builder full_path = {0};
-    Allocator* scratch = allocator_get_scratch();
-    array_init_backed(&full_path, scratch, 512);
+    String_Builder file_content = {0};
+    Format_Mtl_Material_Array mtl_materials = {0};
+    Material_Description material_desription = {0};
+
+    array_init_backed(&full_path, NULL, 512);
     Error error = file_get_full_path(&full_path, path);
     
     //@TODO: add dirty flag or something similar so this handles reloading.
     //       For now we can only reload if we eject all resources
     bool was_found = false;
 
-    //@TODO: handle phong materials
-    //search for an object. If found return its duplicated handle.
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials, h, Object*, found_object)
-        if(builder_is_equal(full_path, found_object->path))
-        {
-            was_found = true;
-            Material_Handle local_handle = {h};
-            Material_Handle duplicate_handle = resources_material_share(resources, local_handle);
-
-            array_push(materials, duplicate_handle);
-        }
-    HANDLE_TABLE_FOR_EACH_END
-    
-    if(was_found == false)
+    if(error_is_ok(error))
     {
-        String_Builder file_content = {scratch};
-        Allocator_Set allocs_before = allocator_set_default(scratch);
+        //search for the material. If found return its duplicated handle.
+        HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials, h, Object*, found_object)
+            if(builder_is_equal(full_path, found_object->path))
+            {
+                was_found = true;
+                Material_Handle local_handle = {h};
+                Material_Handle duplicate_handle = resources_material_share(resources, local_handle);
+
+                array_push(materials, duplicate_handle);
+            }
+        HANDLE_TABLE_FOR_EACH_END
+    }
+
+    if(error_is_ok(error) && was_found == false)
+    {
         error = file_read_entire(string_from_builder(full_path), &file_content);
-        
         if(error_is_ok(error))
         {
-            //@TODO: this a good place for local arena. Managing all this state is a headache.
-            Format_Mtl_Material_Array mtl_materials = {0};
             Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
             isize had_mtl_errors = 0;
             format_mtl_read(&mtl_materials, string_from_builder(file_content), mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
 
-            if(errors_or_null)
-            {
-                for(isize i = 0; i < MIN(FLAT_ERRORS_COUNT, had_mtl_errors); i++)
-                    array_push(errors_or_null, _format_obj_mtl_error_on_to_error(mtl_errors[i].statement, mtl_errors[i].line));
-            }
+            for(isize i = 0; i < had_mtl_errors; i++)
+                LOG_ERROR("ASSET", "Error parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
             
             for(isize i = 0; i < mtl_materials.size; i++)
             {
                 Material material = {0};
-
                 material_init(&material, resources);
-            
-                //@TODO: handle phong materials
-                Material_Description material_desription = {0};
+
                 process_mtl_material(&material_desription, mtl_materials.data[i]);
                 array_copy(&material_desription.path, full_path);
 
-                material_load_images(resources, &material, material_desription, errors_or_null, max_errors);
+                material_load_images(resources, &material, material_desription);
                 Material_Handle local_handle = resources_material_add(resources, &material);
                     
                 array_push(materials, local_handle);
-                material_description_deinit(&material_desription);
+
             }
-
-            for(isize i = 0; i < mtl_materials.size; i++)
-                format_obj_material_info_deinit(&mtl_materials.data[i]);
-
-            array_deinit(&mtl_materials);
         }
-
-        
-        if(error_is_ok(error) == false)
-        {
-            if(errors_or_null && errors_or_null->size < max_errors)
-                array_push(errors_or_null, error);
-        }
-
-        array_deinit(&file_content);
-        allocator_set(allocs_before);
     }
     
+    if(error_is_ok(error) == false)
+        LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
+
+    #ifdef DO_WORTHLESS_DEINITS
+    material_description_deinit(&material_desription);
+    for(isize i = 0; i < mtl_materials.size; i++)
+        format_obj_material_info_deinit(&mtl_materials.data[i]);
+
+    array_deinit(&mtl_materials);
+    array_deinit(&file_content);
     array_deinit(&full_path);
+    allocator_set(allocs_before);
+    #endif
+
+    malloc_allocator_deinit(&arena);
 
     return error;
 }
 
-EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, String path, Error_Array* errors_or_null, isize max_errors)
+EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, String path)
 {
+    Debug_Allocator debug_allocator = {0};
+    debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_CAPTURE_CALLSTACK | DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
+
     Object_Handle out_handle = {0};
     String_Builder full_path = {0};
     Allocator* scratch = allocator_get_scratch();
     array_init_backed(&full_path, scratch, 512);
     Error error = file_get_full_path(&full_path, path);
-
+    
     if(error_is_ok(error))
     {
         //search for an object. If found return its duplicated handle.
@@ -600,9 +621,13 @@ EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, Str
         //@TODO factor
         if(out_handle.h.index == 0)
         {
-            Allocator_Set allocs_before = allocator_set_default(resources->alloc);
-            String_Builder file_content = {scratch};
+            Malloc_Allocator arena = {0};
+            malloc_allocator_init_use(&arena, 0);
 
+            Allocator_Set allocs_before = allocator_set_default(resources->alloc);
+
+            String_Builder file_content = {scratch};
+            String_Builder mtl_path = {scratch};
             error = file_read_entire(string_from_builder(full_path), &file_content);
 
             if(error_is_ok(error))
@@ -614,11 +639,8 @@ EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, Str
                 isize had_obj_errors = 0;
                 format_obj_read(&model, string_from_builder(file_content), obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
 
-                if(errors_or_null)
-                {
-                    for(isize i = 0; i < MIN(FLAT_ERRORS_COUNT, had_obj_errors); i++)
-                        array_push(errors_or_null, _format_obj_mtl_error_on_to_error(obj_errors[i].statement, obj_errors[i].line));
-                }
+                for(isize i = 0; i < had_obj_errors; i++)
+                    LOG_ERROR("ASSET", "Error parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
 
                 Shape_Assembly out_assembly = {0};
                 shape_assembly_init(&out_assembly, resources->alloc);
@@ -626,28 +648,30 @@ EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, Str
                 String dir_path = path_get_file_directory(string_from_builder(full_path));
 
                 Object_Description description = {0};
-                process_obj_object(&out_assembly, &description, model, errors_or_null, max_errors);
+                process_obj_object(&out_assembly, &description, model);
                 array_copy(&description.path, full_path);
 
                 Object out_object = {0};
                 object_init(&out_object, resources);
 
-                Material_Handle_Array materials = {0};
+                Material_Handle_Array materials = {resources->alloc};
                 for(isize i = 0; i < description.material_files.size; i++)
                 {
-                    //@TODO: remove builder_from_string and make builder_from_string_alloc the default
-                    String_Builder mtl_path = builder_from_string(dir_path, scratch);
                     String file = string_from_builder(description.material_files.data[i]);
+
+                    array_clear(&mtl_path);
+                    builder_append(&mtl_path, dir_path);
                     builder_append(&mtl_path, file);
-                    Error major_material_error = material_read_entire(resources, &materials, string_from_builder(mtl_path), errors_or_null, max_errors);
+
+                    Error major_material_error = material_read_entire(resources, &materials, string_from_builder(mtl_path));
 
                     if(error_is_ok(major_material_error) == false)
                         LOG_ERROR("ASSET", "Failed to load material file %s while loading %s", mtl_path.data, full_path.data);
 
-                    array_deinit(&mtl_path);
                 }
             
-                object_finalize(resources, &out_object, &out_assembly, description, materials, errors_or_null, max_errors);
+                object_finalize(resources, &out_object, &out_assembly, description, materials);
+                object_description_deinit(&description);
 
                 out_handle = resources_object_add(resources, &out_object);
                 array_deinit(&materials);
@@ -658,19 +682,21 @@ EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, Str
             {
                 LOG_ERROR("ASSET", "Failed to load object file %s", full_path.data);
             }
-
+            
+            array_deinit(&mtl_path);
             array_deinit(&file_content);
+            
             allocator_set(allocs_before);
+            malloc_allocator_deinit(&arena);
         }
     }
+    
     if(error_is_ok(error) == false)
-    {
-        if(errors_or_null && errors_or_null->size < max_errors)
-            array_push(errors_or_null, error);
-    }
+        LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
 
     array_deinit(&full_path);
-
+    
+    debug_allocator_deinit(&debug_allocator);
     *object = out_handle;
     return error;
 }

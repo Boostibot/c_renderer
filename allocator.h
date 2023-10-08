@@ -41,14 +41,12 @@ typedef struct Source_Info      Source_Info;
 typedef void* (*Allocator_Allocate_Func)(Allocator* self, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);
 typedef Allocator_Stats (*Allocator_Get_Stats_Func)(Allocator* self);
 
-typedef struct Allocator
-{
+typedef struct Allocator {
     Allocator_Allocate_Func allocate;
     Allocator_Get_Stats_Func get_stats;
 } Allocator;
 
-typedef struct Allocator_Stats
-{
+typedef struct Allocator_Stats {
     //The allocator used to obtain memory reisributed by this allocator.
     //If is_top_level is set this should probably be NULL
     Allocator* parent;
@@ -74,22 +72,13 @@ typedef struct Allocator_Stats
     isize reallocation_count;   //The number of reallocation requests (*else*).
 } Allocator_Stats;
 
-typedef struct Source_Info
-{
-    int64_t line;
-    const char* file;
-    const char* function;
-} Source_Info;
-
-typedef struct Allocator_Set
-{
+typedef struct Allocator_Set {
     Allocator* allocator_default;
     Allocator* allocator_scratch;
     Allocator* allocator_static;
 } Allocator_Set;
 
 #define DEF_ALIGN 8
-#define SOURCE_INFO() BRACE_INIT(Source_Info){__LINE__, __FILE__, __FUNCTION__}
 
 //Attempts to call the realloc funtion of the from_allocator. Can return nullptr indicating failiure
 EXPORT void* allocator_try_reallocate(Allocator* from_allocator, isize new_size, void* old_ptr, isize old_size, isize align, Source_Info called_from);

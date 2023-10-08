@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #endif
 
-#ifndef ASSERT
+#if !defined(ASSERT) && !defined(LIB_ASSERT)
 #define ASSERT(x) assert(x)
 #endif // !ASSERT
 

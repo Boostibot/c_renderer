@@ -54,6 +54,8 @@
 #include "time.h"
 #include "log.h"
 #include "profile.h"
+#include "callstack.h"
+#include "vformat.h"
 
 typedef struct Debug_Allocator          Debug_Allocator;
 typedef struct Debug_Allocation         Debug_Allocation;
@@ -115,7 +117,8 @@ typedef struct Debug_Allocator
 
 //Initalizes the debug allocator using a parent and options. 
 //Many options cannot be changed during the life of the debug allocator.
-EXPORT void debug_allocator_init(Debug_Allocator* allocator, Allocator* parent, Debug_Allocator_Options options);
+EXPORT void debug_allocator_init_custom(Debug_Allocator* allocator, Allocator* parent, Debug_Allocator_Options options);
+EXPORT void debug_allocator_init(Debug_Allocator* allocator, Allocator* parent, u64 flags);
 //Initalizes the debug allocator and makes it the dafault and scratch global allocator.
 //Additional flags defined above can be passed to quickly tweak the allocator.
 //Restores the old allocators on deinit. 
@@ -218,7 +221,7 @@ typedef struct Debug_Allocation_Header
     f64 allocation_time_s;
 } Debug_Allocation_Header;
 
-EXPORT void debug_allocator_init(Debug_Allocator* debug, Allocator* parent, Debug_Allocator_Options options)
+EXPORT void debug_allocator_init_custom(Debug_Allocator* debug, Allocator* parent, Debug_Allocator_Options options)
 {
     ASSERT(debug->is_init == false && "must not be init!");
 
@@ -257,7 +260,7 @@ EXPORT void debug_allocator_init(Debug_Allocator* debug, Allocator* parent, Debu
     array_resize(&debug->dead_allocations, options.max_dead_allocations);
 }
 
-EXPORT void debug_allocator_init_use(Debug_Allocator* debug, u64 flags)
+EXPORT void debug_allocator_init(Debug_Allocator* allocator, Allocator* parent, u64 flags)
 {
     Debug_Allocator_Options options = {0};
     if(flags & DEBUG_ALLOCATOR_CONTINUOUS)
@@ -275,25 +278,16 @@ EXPORT void debug_allocator_init_use(Debug_Allocator* debug, u64 flags)
     if(flags & DEBUG_ALLOCATOR_KEEP_HISTORY)
         options.max_dead_allocations = 1000;
 
-    debug_allocator_init(debug, allocator_get_default(), options);
-
+    debug_allocator_init_custom(allocator, parent, options);
+}
+EXPORT void debug_allocator_init_use(Debug_Allocator* debug, u64 flags)
+{
+    debug_allocator_init(debug, allocator_get_default(), flags);
     debug->allocator_backup = allocator_set_both(&debug->allocator, &debug->allocator);
 }
 
 INTERNAL void* _debug_allocator_panic(Debug_Allocator* self, Debug_Allocator_Panic_Reason reason, void* ptr, Source_Info called_from);
 
-EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
-{
-    if(allocator->bytes_allocated != 0 && allocator->do_deinit_leak_check)
-        _debug_allocator_panic(allocator, DEBUG_ALLOC_PANIC_DEINIT_MEMORY_LEAKED, NULL, SOURCE_INFO());
-
-    allocator_set(allocator->allocator_backup);
-    debug_allocator_deinit_allocation_array(&allocator->dead_allocations);
-    hash_index_deinit(&allocator->alive_allocations_hash);
-    
-    Debug_Allocator null = {0};
-    *allocator = null;
-}
 
 EXPORT const char* debug_allocator_panic_reason_to_string(Debug_Allocator_Panic_Reason reason)
 {
@@ -320,6 +314,8 @@ EXPORT void debug_allocator_panic_func(Debug_Allocator* allocator, Debug_Allocat
     (void) penetration;
     const char* reason_str = debug_allocator_panic_reason_to_string(reason);
 
+
+    //log("MEMORY", LOG_TYPE_FATAL, SOURCE_INFO(), "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
     LOG_FATAL("MEMORY", "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
     debug_allocator_print_alive_allocations(*allocator, 0);
     
@@ -550,6 +546,32 @@ INTERNAL bool _debug_allocator_is_invariant(const Debug_Allocator* allocator)
     return true;
 }
 
+
+EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
+{
+    if(allocator->bytes_allocated != 0 && allocator->do_deinit_leak_check)
+        _debug_allocator_panic(allocator, DEBUG_ALLOC_PANIC_DEINIT_MEMORY_LEAKED, NULL, SOURCE_INFO());
+
+    for(isize i = 0; i < allocator->alive_allocations_hash.entries_count; i++)
+    {
+        Hash_Index_Entry entry = allocator->alive_allocations_hash.entries[i];
+        if(hash_index_is_entry_used(entry))
+        {
+            void* ptr = (void*) entry.value;
+            
+            Debug_Allocation_Pre_Block pre = _debug_allocator_get_pre_block(allocator, ptr);
+            debug_allocator_allocate(&allocator->allocator, 0, ptr, pre.header->size, pre.header->align, SOURCE_INFO());
+        }
+    }
+
+    allocator_set(allocator->allocator_backup);
+    debug_allocator_deinit_allocation_array(&allocator->dead_allocations);
+    hash_index_deinit(&allocator->alive_allocations_hash);
+    
+    Debug_Allocator null = {0};
+    *allocator = null;
+}
+
 EXPORT Debug_Allocation_Array debug_allocator_get_alive_allocations(const Debug_Allocator allocator, isize print_max)
 {
     isize count = print_max;
@@ -621,6 +643,8 @@ EXPORT void debug_allocator_deinit_allocation_array(Debug_Allocation_Array* allo
     array_deinit(allocations);
 }
 
+EXPORT void log_captured_callstack(const char* log_module, Log_Type log_type, const void** callstack, isize callstack_size);
+
 EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator allocator, isize print_max)
 {
     _debug_allocator_is_invariant(&allocator);
@@ -641,7 +665,7 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
         if(allocator.captured_callstack_size > 0)
         {
             log_group_push();
-            log_captured_callstack(STRING("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
+            log_captured_callstack("MEMORY", LOG_TYPE_INFO, curr.allocation_trace.data, curr.allocation_trace.size);
             log_group_pop();
         }
     }
@@ -650,12 +674,10 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
     debug_allocator_deinit_allocation_array(&alive);
 }
 
+
+
 EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocator, isize print_max)
 {
-    Stack_Trace trace = {0};
-    array_init_backed(&trace, allocator.parent, 16);
-    array_resize(&trace, allocator.captured_callstack_size);
-
     Debug_Allocation_Array dead = debug_allocator_get_dead_allocations(allocator, print_max);
     if(print_max > 0)
         ASSERT(dead.size <= print_max);
@@ -690,18 +712,17 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
             log_group_push();
                 LOG_TRACE("MEMORY", "allocation callstack (%lld):", (lld) curr.allocation_trace.size);
                 log_group_push();
-                log_captured_callstack(STRING("MEMORY"), curr.allocation_trace.data, curr.allocation_trace.size);
+                log_captured_callstack("MEMORY", LOG_TYPE_TRACE, curr.allocation_trace.data, curr.allocation_trace.size);
                 log_group_pop();
 
                 LOG_TRACE("MEMORY", "deallocation callstack (%lld):", (lld) curr.deallocation_trace.size);
                 log_group_push();
-                log_captured_callstack(STRING("MEMORY"), curr.deallocation_trace.data, curr.deallocation_trace.size);
+                log_captured_callstack("MEMORY", LOG_TYPE_TRACE, curr.deallocation_trace.data, curr.deallocation_trace.size);
                 log_group_pop();
             log_group_pop();
         }
     }
     
-    array_deinit(&trace);
     debug_allocator_deinit_allocation_array(&dead);
 }
 
@@ -837,7 +858,6 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
             self->dead_allocations.data[index] = old_allocation;
             self->dead_allocation_index += 1;
         }
-        self->bytes_allocated -= old_size;
     }
 
     //if allocated/reallocated (new block exists)
@@ -862,9 +882,11 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
         hash_index_insert(&self->alive_allocations_hash, hashed, (u64) new_ptr);
         _debug_allocator_assert_block(self, new_ptr);
     
-        self->bytes_allocated += new_size;
-        self->max_bytes_allocated = MAX(self->max_bytes_allocated, self->bytes_allocated);
     }
+
+    self->bytes_allocated -= old_size;
+    self->bytes_allocated += new_size;
+    self->max_bytes_allocated = MAX(self->max_bytes_allocated, self->bytes_allocated);
     
     if(self->do_printing)
     {

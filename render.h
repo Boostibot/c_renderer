@@ -407,6 +407,8 @@ void render_image_init(Render_Image* render, Image image, String name, GLenum in
     render->pixel_format = pixel_format;
     render->channel_count = (u32) image_channel_count(image);
     render->name = builder_from_string(name, NULL);
+    //array_init(render->name, )
+
     glGenTextures(1, &render->map);
     glBindTexture(GL_TEXTURE_2D, render->map);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
@@ -517,10 +519,6 @@ void render_cubeimage_unuse(const Render_Cubeimage* render)
     (void) render;
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
-
-
-#define ERROR_FMT STRING_FMT " from " STRING_FMT
-#define ERROR_PRINT(error) STRING_PRINT(error_code(error)), STRING_PRINT(error_module(error))
 
 Error render_image_init_from_disk(Render_Image* tetxure, String path, String name)
 {
@@ -1009,6 +1007,7 @@ void renderer_deinit(Renderer* renderer)
         render_mesh_deinit(render_mesh);
     HANDLE_TABLE_FOR_EACH_END
     
+    handle_table_deinit(&renderer->materials);
     handle_table_deinit(&renderer->images);
     handle_table_deinit(&renderer->cubeimages);
     handle_table_deinit(&renderer->shaders);
@@ -1132,8 +1131,8 @@ Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources
         Render_Image_Handle handle = {0};
 
         //Scan if we have this image already
-        HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Image*, image_ptr)
-            if(builder_is_equal(image_ptr->path, image->path))
+        HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Image*, found_image)
+            if(builder_is_equal(found_image->path, image->path))
             {
                 handle.h = h;
                 break;
@@ -1142,6 +1141,7 @@ Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources
 
         if(handle.h.index == 0)
         {
+            LOG_INFO("RENDER", "Created map %s (%lld channels)", image->path.data, image_builder_channel_count(image->image));
             Render_Image render_image = {0};
             render_image_init(&render_image, image_from_builder(image->image), string_from_builder(image->name), 0);
             array_copy(&render_image.path, image->path);
@@ -1282,10 +1282,13 @@ void render_object_init_from_object(Render_Object* render_object, Renderer* rend
         render_object->mesh = renderer_mesh_add(renderer, &out_mesh);
     }
 
+    LOG_INFO("RENDER", "Creating render object from obect at %s. (%lld groups)", object.path.data, (lld) object.groups.size);
+    log_group_push();
     for(isize i = 0; i < object.groups.size; i++)
     {
         Object_Group* group = &object.groups.data[i];
-        LOG_INFO("ASSET", "Group index %lld %s", (lld) i, group->name.data);
+        LOG_INFO("RENDER", "Group %lld : %s", (lld) i, group->name.data);
+        log_group_push();
 
         ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
         Material* material = resources_material_get(resources, group->material);
@@ -1298,7 +1301,10 @@ void render_object_init_from_object(Render_Object* render_object, Renderer* rend
 
             array_push(&render_object->leaf_groups, out_group);
         }
+
+        log_group_pop();
     }
+    log_group_pop();
 }
 
 typedef struct Triangle_Sub_Range
