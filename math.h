@@ -31,37 +31,32 @@
     #define JMAPI static inline
 #endif
 
-typedef struct Vec2
-{
+typedef struct Vec2 {
     float x;
     float y;
 } Vec2;
 
-typedef struct Vec3
-{
+typedef struct Vec3 {
     float x;
     float y;
     float z;
 } Vec3;
 
-typedef struct Vec4
-{
+typedef struct Vec4 {
     float x;
     float y;
     float z;
     float w;
 } Vec4;
 
-typedef struct Quat
-{
+typedef struct Quat {
     float x;
     float y;
     float z;
     float w;
 } Quat;
 
-typedef union Mat2
-{
+typedef union Mat2 {
     Vec2 col[2];
     
     float m[2][2];
@@ -72,8 +67,7 @@ typedef union Mat2
     };
 } Mat2;
 
-typedef union Mat3
-{
+typedef union Mat {
     Vec3 col[3];
 
     float m[3][3];
@@ -85,8 +79,7 @@ typedef union Mat3
     };
 } Mat3;
 
-typedef union Mat4
-{
+typedef union Mat4 {
     Vec4 col[4];
 
     float m[4][4];
@@ -99,8 +92,7 @@ typedef union Mat4
     };
 } Mat4;
 
-
-#define AS_FLOATS(vector)       ((float*) (void*) &(vector))
+#define AS_FLOATS(vector_or_other_math_struct) ((float*) (void*) &(vector_or_other_math_struct))
 
 JMAPI float to_radiansf(float degrees)
 {
@@ -233,7 +225,7 @@ JMAPI Vec3 vec3_from_vec4_homo(Vec4 a)  { return vec3(a.x/a.w, a.y/a.w, a.z/a.w)
 
 //Pairwise
 #define m(a, b) a < b ? a : b
-#define M(a, b) a < b ? a : b
+#define M(a, b) a > b ? a : b
 
 JMAPI Vec2 vec2_pairwise_mul(Vec2 a, Vec2 b) { return vec2(a.x * b.x, a.y * b.y);                                }
 JMAPI Vec3 vec3_pairwise_mul(Vec3 a, Vec3 b) { return vec3(a.x * b.x, a.y * b.y, a.z * b.z);                     }
@@ -333,14 +325,14 @@ JMAPI float vec3_angle_between(Vec3 a, Vec3 b)
 }
 #endif
 
-float slerpf_coeficient(float t, float arc_angle)
+JMAPI float slerpf_coeficient(float t, float arc_angle)
 {
     float coef = sinf(t*arc_angle)/sinf(arc_angle);
     return coef;
 }
 
 //Spherical lerp. Arc angle needs to be the angle between from and to with respect to some position.
-Vec3 vec3_slerp(Vec3 from, Vec3 to, float arc_angle, float t)
+JMAPI Vec3 vec3_slerp(Vec3 from, Vec3 to, float arc_angle, float t)
 {
     Vec3 from_portion = vec3_scale(from, slerpf_coeficient(1.0f - t, arc_angle));
     Vec3 to_portion = vec3_scale(to, slerpf_coeficient(t, arc_angle));
@@ -348,7 +340,7 @@ Vec3 vec3_slerp(Vec3 from, Vec3 to, float arc_angle, float t)
     return result;
 }
 
-Vec3 vec3_slerp_around(Vec3 from, Vec3 to, Vec3 center, float t)
+JMAPI Vec3 vec3_slerp_around(Vec3 from, Vec3 to, Vec3 center, float t)
 {
     Vec3 from_center = vec3_sub(from, center);
     Vec3 to_center = vec3_sub(to, center);
@@ -359,16 +351,16 @@ Vec3 vec3_slerp_around(Vec3 from, Vec3 to, Vec3 center, float t)
 
 //Returns the maximum compoment of a vector.
 //This is also the maximum norm
-INTERNAL f32 vec3_max_len(Vec3 vec)
+JMAPI float vec3_max_len(Vec3 vec)
 {
-    f32 max1 = MAX(vec.x, vec.y);
-    f32 max = MAX(max1, vec.z);
+    float max1 = vec.x > vec.y ? vec.x : vec.y;
+    float max = max1 > vec.z ? max1 : vec.z;
 
     return max;
 }
 
 //Normalize vector using the maximum norm.
-INTERNAL Vec3 vec3_max_norm(Vec3 vec)
+JMAPI Vec3 vec3_max_norm(Vec3 vec)
 {
     return vec3_scale(vec, 1.0f / vec3_max_len(vec));
 }
@@ -856,7 +848,7 @@ JMAPI Mat4 mat4_ortographic_projection(float bottom, float top, float left, floa
     return result;
 }
 
-Mat4 mat4_local_matrix(Vec3 x_dir, Vec3 y_dir, Vec3 position)
+JMAPI Mat4 mat4_local_matrix(Vec3 x_dir, Vec3 y_dir, Vec3 position)
 {
     Vec3 X = vec3_norm(x_dir);
     Vec3 Z = vec3_norm(vec3_cross(x_dir, y_dir));
@@ -892,12 +884,12 @@ JMAPI Mat4 mat4_look_at(Vec3 camera_pos, Vec3 camera_target, Vec3 camera_up_dir)
 // and theta is rotation from the Y axis (up) to the hypot
 typedef struct Spherical_Vec
 {
-    f32 r;
-    f32 phi;
-    f32 theta;
+    float r;
+    float phi;
+    float theta;
 } Spherical_Vec;
 
-Spherical_Vec vec3_to_spherical(Vec3 vec)
+JMAPI Spherical_Vec vec3_to_spherical(Vec3 vec)
 {
     Spherical_Vec result = {0};
     result.r = vec3_len(vec);
@@ -906,7 +898,7 @@ Spherical_Vec vec3_to_spherical(Vec3 vec)
     return result;
 }
 
-Vec3 vec3_from_spherical(Spherical_Vec spherical)
+JMAPI Vec3 vec3_from_spherical(Spherical_Vec spherical)
 {
     Vec3 result = {0};
     result.z = cosf(spherical.phi) * cosf(spherical.theta) * spherical.r;

@@ -15,7 +15,7 @@
 //      same one we initially referenced. We solve this by generation counters. 
 //      This means this container supports weak handles.
 // 
-//   3: Shared lifetime
+//   3*: Shared lifetime
 //      One item might be comprised of multiple other child items (and those items are integral part of it). 
 //      As such when we deinit all members of the item we need to deinit these child items as well.
 //      Because other items might be comprised (in an integral part) of the same child items we cannot simply 
@@ -47,6 +47,10 @@
 // array of pointers to separately allocated structures. This matches requirements 2 and 3 
 // but not 1. However we can change this behind the scenes later.
 // 
+// 3* Not anymore. Shared lifetimes can be implemented on top of the current structure without any problems. 
+// If stored data contains custom deinit we will need custom procedure to remove it from the array anyway so this really
+// does not change much.
+// 
 
 //@TODO: make type generic interface for this similar to array to remove the needed boilerplate and increase safety!
 
@@ -71,43 +75,34 @@ typedef struct Handle_Table {
     i32 type_align;
 } Handle_Table;
 
-#define NULL_HANDLE(T) BRACE_INIT(T){0}
-#define HANDLE_IS_NULL(handle) ((handle).h.index == 0)
+#define NULL_HANDLE_T(T) BRACE_INIT(T){0}
+#define HANDLE_SPREAD(handle) (handle).index, (handle).generation
+#define HANDLE_T_FROM_HANDLE(T, handle) BRACE_INIT(T){(handle).index, (handle).generation}
+#define HANDLE_IS_NULL(handle) ((handle).index == 0)
+#define HANDLE_IS_VALID(handle) ((handle).index != 0)
+#define HANDLE_FROM_HANDLE(handle) BRACE_INIT(Handle){(handle).index, (handle).generation}
 
 EXPORT void handle_table_init(Handle_Table* table, Allocator* alloc, i32 type_size, i32 type_align);
 EXPORT void handle_table_deinit(Handle_Table* table);
 
 //Adds an item to the table an returns a handle to it.
-EXPORT Handle handle_table_add(Handle_Table* table);
+EXPORT void* handle_table_add(Handle_Table* table, Handle* out_handle);
 
-//Shares the item referenced by handle increasing its reference count. If handle is invalid returns NULL_HANDLE.
-EXPORT Handle handle_table_share(Handle_Table* table, Handle handle); 
+EXPORT bool handle_table_remove(Handle_Table* table, const Handle* handle);
 
-//@TODO: figure out a simple interface like handle_table_remove to enable this. Duplicating the data itself might not be a good idea.
-//If the item referenced by handle is unique returns back adress of the item and saves to out_handle the original handle. 
-//Otherwise adds a new copy of the item and saves a handle to it.
-EXPORT void* handle_table_get_unique(Handle_Table* table, Handle handle, Handle* out_handle); 
-
-//@TODO: add size to the removed so this is at least a bit safer.
-//
-//Removes the item referenced by handle decreasing its reference count. 
-//If the items reference count reaches zero saves it to the removed pointer,
-//deallocate its data and returns true. Else returns false.
-//If handle is invalid does nothing and returns false.
-EXPORT bool handle_table_remove(Handle_Table* table, Handle handle, void* removed);
 
 //Retrives an adress of the item referenced by handle. If the handle is invalid returns NULL.
-EXPORT void* handle_table_get(Handle_Table table, Handle handle);
+EXPORT void* handle_table_get(Handle_Table table, const Handle* handle);
 
 //A macro used to iterate all entries of a handle table.
 //This is better than iterating using handles because we can skip all the checks.
-#define HANDLE_TABLE_FOR_EACH_BEGIN(handle_table, handle_name, Ptr_Type, ptr_name)      \
+#define HANDLE_TABLE_FOR_EACH_BEGIN(handle_table, Handle_Type, handle_name, Ptr_Type, ptr_name)      \
     for(isize _i = 0; _i < (handle_table).slots.size; _i++)                             \
     {                                                                                   \
         ASSERT_MSG((handle_table).type_size == sizeof(*(Ptr_Type) NULL),                \
             "incorectly sized type submitted to HANDLE_TABLE_FOR_EACH_BEGIN");          \
         Handle_Table_Slot* _slot = &(handle_table).slots.data[_i];                      \
-        Handle handle_name = {(i32) _i + 1, _slot->generation};                         \
+        Handle_Type handle_name = {(i32) _i + 1, _slot->generation};                    \
         (void) handle_name; /* use it so the compiler doesnt shout if we dont need it */\
         Ptr_Type ptr_name = (Ptr_Type) _slot->ptr;                                      \
         if(ptr_name)                                                                    \
@@ -162,7 +157,7 @@ INTERNAL Handle_Table_Slot* _handle_table_slot_by_handle(const Handle_Table* tab
     return found_slot;
 }
 
-EXPORT Handle handle_table_add(Handle_Table* table)
+EXPORT void* handle_table_add(Handle_Table* table, Handle* _out_handle)
 {
     Handle out_handle = {0};
     Allocator* alloc = _handle_table_get_allocator(table);
@@ -191,54 +186,32 @@ EXPORT Handle handle_table_add(Handle_Table* table)
 
     out_handle.generation = empty_slot->generation;
 
-    return out_handle;
+    *_out_handle = out_handle;
+    return empty_slot->ptr;
 }
-
-EXPORT Handle handle_table_share(Handle_Table* table, Handle handle)
+EXPORT void* handle_table_get(Handle_Table table, const Handle* handle)
 {
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, handle);
-    if(found_slot != NULL && found_slot->generation == handle.generation)
-    {
-        ASSERT(found_slot->references > 0);
-        found_slot->references += 1;
-        return handle;
-    }
-    
-    Handle null = {0};
-    return null;
-}
-
-EXPORT bool handle_table_remove(Handle_Table* table, Handle handle, void* removed)
-{
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, handle);
-
-    bool state = found_slot != NULL && found_slot->generation == handle.generation;
-    if(state)
-    {
-        ASSERT(found_slot->references > 0);
-        found_slot->references -= 1;
-        if(found_slot->references == 0)
-        {
-            memmove(removed, found_slot->ptr, table->type_size);
-
-            Allocator* alloc = _handle_table_get_allocator(table);
-            allocator_deallocate(alloc, found_slot->ptr, table->type_size, table->type_align, SOURCE_INFO());
-            found_slot->ptr = NULL;
-            found_slot->generation += 1;
-        }
-    }
-
-    return state;
-}
-
-EXPORT void* handle_table_get(Handle_Table table, Handle handle)
-{
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(&table, handle);
-    if(found_slot != NULL && found_slot->generation == handle.generation)
+    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(&table, *handle);
+    if(found_slot != NULL && found_slot->generation == handle->generation)
         return found_slot->ptr;
     else
         return NULL;
 }
 
+
+EXPORT bool handle_table_remove(Handle_Table* table, const Handle* handle)
+{
+    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, *handle);
+    if(found_slot != NULL && found_slot->generation == handle->generation)
+    {
+        Allocator* alloc = _handle_table_get_allocator(table);
+        allocator_deallocate(alloc, found_slot->ptr, table->type_size, table->type_align, SOURCE_INFO());
+        found_slot->ptr = NULL;
+        found_slot->generation += 1;
+        return true;
+    }
+
+    return false;
+}
 
 #endif

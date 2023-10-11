@@ -71,14 +71,6 @@ typedef union Cubemap_Description {
     Map_Description faces[6];
 } Cubemap_Description;
 
-//@TODO: fuse the two material descriptions and materials in general to one uber material.
-//       Try to keep the rendering stuff independent from the storage.
-//       Add more functions to make it easier to manage objects automatically
-//       Do the allocator stuff
-//       Get the stack allocator here
-//       Add perf counters everywhere
-//       Do instanced rendering! THIS IS IMPORTANT FOR ACHITECTURE!
-//       DO CONSTANT BUFFERS AND SINGLE PIXEL IMAGES
 
 typedef enum Map_Type{
     MAP_TYPE_ALBEDO,
@@ -104,6 +96,7 @@ typedef enum Map_Type{
 
 typedef enum Cubemap_Type{
     CUBEMAP_TYPE_SKYBOX,
+    CUBEMAP_TYPE_ENVIRONMENT,
     CUBEMAP_TYPE_IRRADIANCE,
     CUBEMAP_TYPE_PREFILTER,
     CUBEMAP_TYPE_REFLECTION,
@@ -186,20 +179,67 @@ void object_description_deinit(Object_Description* description);
 // These represent things the engine recognizes. 
 // It uses handles to more complex things instead of the things iteself to enable sharing.
 
+#define NAME_SIZE 256
+#define RESOURCE_CALLSTACK_SIZE 8
 
+typedef struct Resource_Callstack {
+    void* stack_frames[RESOURCE_CALLSTACK_SIZE];
+} Resource_Callstack;
 
-typedef struct Loaded_Image {
-    Image_Builder image;
-    String_Builder path;
-    String_Builder name;
-} Loaded_Image;
+typedef struct Uid {
+    i64 epoch_time;
+    i64 microsecond_index;
+} Uid;
+
+typedef struct Name {
+    char data[NAME_SIZE];
+    isize size;
+} Name;
+
+typedef enum Resource_Duration {
+    RESOURCE_DURATION_REFERENCED = 0,   //use and clean when reference count reaches 0
+    RESOURCE_DURATION_TIME,             //use and clean when time is up
+    RESOURCE_DURATION_SINGLE_FRAME,     //use and clean automatically when this frame ends
+    RESOURCE_DURATION_PERSISTANT,       //use and clean when explicitly demanded
+} Resource_Duration;
+
+typedef enum Resource_Reload {
+    RESOURCE_RELOAD_ON_FILE_CHANGE = 0,
+    RESOURCE_RELOAD_ON_MEMORY_CHANGE = 1,
+    RESOURCE_RELOAD_NEVER = 2,
+} Resource_Reload;
+
+typedef struct Resource_Params {
+    String path;
+    f64 duration_time_s;
+    Resource_Duration duration_type;
+    Resource_Reload reload_policy;
+} Resource_Params;
+
+typedef struct Resource_Info {
+    Resource_Callstack callstack;
+
+    i64 reference_count;
+
+    i64 creation_epoch_time;
+    i64 memory_change_epoch_time;
+    i64 file_change_epoch_time;
+    i64 last_load_epoch_time;
+
+    f64 duration_time_s;
+    Resource_Duration duration_type;
+    Resource_Reload reload_policy;
+
+    bool is_directory;
+    bool is_file_present;
+} Resource_Info;
 
 // Handle means strong owning reference
 // Ref    means weak non-owning reference
 
 #define DEFINE_HANDLE_TYPES(Type)                           \
-    typedef struct { Handle h; } Type##_Handle;             \
-    typedef struct { Handle h; } Type##_Ref;                \
+    typedef struct { i32 index; u32 generation; } Type##_Handle;             \
+    typedef struct { i32 index; u32 generation; } Type##_Ref;                \
     DEFINE_ARRAY_TYPE(Type##_Handle, Type##_Handle_Array);  \
     DEFINE_ARRAY_TYPE(Type##_Ref, Type##_Ref_Array)         \
 
@@ -209,6 +249,11 @@ DEFINE_HANDLE_TYPES(Cubemap);
 DEFINE_HANDLE_TYPES(Shape_Assembly);
 DEFINE_HANDLE_TYPES(Material);
 DEFINE_HANDLE_TYPES(Object);
+
+//@TODO: Add perf counters everywhere
+
+//@TODO make proper clocks!
+
 
 typedef struct Resources
 {
@@ -221,40 +266,41 @@ typedef struct Resources
 } Resources;
 
 typedef struct Map {
-    String_Builder path;
-    String_Builder name;
+    Name name;
     Loaded_Image_Handle image;
     Map_Info info;
 } Map;
 
-typedef union Cubemap {
-    struct {
-        Map top;   
-        Map bottom;
-        Map front; 
-        Map back;  
-        Map left;  
-        Map right;
-    };
+typedef struct Cubemap 
+{    
+    Name name;
+    union {
+        struct {
+            Loaded_Image_Handle top;   
+            Loaded_Image_Handle bottom;
+            Loaded_Image_Handle front; 
+            Loaded_Image_Handle back;  
+            Loaded_Image_Handle left;  
+            Loaded_Image_Handle right;
+        };
 
-    Map faces[6];
+        Loaded_Image_Handle faces[6];
+    } images;
 } Cubemap;
 
 typedef struct Material {
-    String_Builder name;
-    String_Builder path;
-    
+    Name name;
     Material_Info info;
 
-    Map maps[MAP_TYPE_ENUM_COUNT];
-    Cubemap cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
+    Map_Handle maps[MAP_TYPE_ENUM_COUNT];
+    Cubemap_Handle cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
 } Material;
 
 DEFINE_ARRAY_TYPE(Material, Material_Array);
 
 typedef struct Object_Leaf_Group
 {
-    String_Builder name;
+    Name name;
     Material_Handle material;
 
     i32 triangles_from;
@@ -263,7 +309,7 @@ typedef struct Object_Leaf_Group
 
 typedef struct Object_Group
 {
-    String_Builder name;
+    Name name;
     Material_Handle material;
 
     i32 next_i1;
@@ -278,22 +324,28 @@ DEFINE_ARRAY_TYPE(Object_Group, Object_Group_Array);
 
 typedef struct Object
 {
-    String_Builder name;
-    String_Builder path;
-
     Material_Handle fallback_material;
     Shape_Assembly_Handle shape;
 
     Object_Group_Array groups;
 } Object;
     
+typedef struct Loaded_Image {
+    Name name;
+    Image_Builder image;
+} Loaded_Image;
+
 #define DEFINE_RESOURCES_RESOURCE_DECL(Type, name, member_name)                         \
-    Type##_Handle resources_##name##_add(Resources* resources, Type* item);             \
+    Type##_Handle resources_##name##_add(Resources* resources, Type* item, Resource_Params info);\
     void resources_##name##_remove(Resources* resources, Type##_Handle handle);         \
+    void resources_##name##_force_remove(Resources* resources, Type##_Handle handle);   \
     Type##_Handle resources_##name##_share(Resources* resources, Type##_Handle handle); \
+    Type##_Handle resources_##name##_make_unique(Resources* resources, Type##_Ref handle); \
     Type* resources_##name##_get(Resources* resources, Type##_Handle handle);           \
-    Type* resources_##name##_get_ref(Resources* resources, Type##_Ref handle);          \
-    
+    Resource_Info resources_##name##_get_info(Type##_Ref handle);                       \
+    String resources_##name##_get_path(Type##_Ref handle);                              \
+    Type##_Ref resources_##name##_find_by_path(String path);                            \
+    Type##_Ref resources_##name##_find_by_name(String name);                            \
     
 DEFINE_RESOURCES_RESOURCE_DECL(Loaded_Image, loaded_image, images)
 DEFINE_RESOURCES_RESOURCE_DECL(Shape_Assembly, shape, shapes)
@@ -301,23 +353,11 @@ DEFINE_RESOURCES_RESOURCE_DECL(Material, material, materials)
 DEFINE_RESOURCES_RESOURCE_DECL(Material, material_phong, materials_phong)
 DEFINE_RESOURCES_RESOURCE_DECL(Object, object, objects)
 
-void loaded_image_init(Loaded_Image* loaded_image, Allocator* alloc);
-void loaded_image_deinit(Loaded_Image* loaded_image);
-
 void resources_init(Resources* resources, Allocator* alloc);
 void resources_deinit(Resources* resources);
-
-void map_init(Map* item, Resources* resources);
-void map_deinit(Map* item, Resources* resources);
-
-void cubemap_init(Cubemap* item, Resources* resources);
-void cubemap_deinit(Cubemap* item, Resources* resources);
-
-void material_init(Material* item, Resources* resources);
-void material_deinit(Material* item, Resources* resources);
-
-void object_group_init(Object_Group* item, Resources* resources);
-void object_group_deinit(Object_Group* item, Resources* resources);
+void resources_end_frame(Resources* resources);
+void resources_check_reloads(Resources* resources);
+void resources_update(Resources* resources);
 
 void object_init(Object* item, Resources* resources);
 void object_deinit(Object* item, Resources* resources);
@@ -436,81 +476,200 @@ void object_description_deinit(Object_Description* description)
 }
 
 
-#define DEFINE_RESOURCES_RESOURCE(Type, name, member_name)                              \
-    Type##_Handle resources_##name##_add(Resources* resources, Type* item)              \
-    {                                                                                   \
-        Handle h = handle_table_add(&resources->member_name);                           \
-        Type* added_ptr = (Type*) handle_table_get(resources->member_name, h);          \
-        SWAP(added_ptr, item, Type);                                                    \
-                                                                                        \
-        Type##_Handle out = {h};                                                        \
-        return out;                                                                     \
-    }                                                                                   \
-                                                                                        \
-    Type##_Handle resources_##name##_share(Resources* resources, Type##_Handle handle)  \
-    {                                                                                   \
-        Handle h = handle_table_share(&resources->member_name, handle.h);               \
-        Type##_Handle out = {h};                                                        \
-        return out;                                                                     \
-    }                                                                                   \
-                                                                                        \
-    Type* resources_##name##_get(Resources* resources, Type##_Handle handle)            \
-    {                                                                                   \
-        Type* out = (Type*) handle_table_get(resources->member_name, handle.h);         \
-        return out;                                                                     \
-    }                                                                                   \
-                                                                                        \
-    Type* resources_##name##_get_ref(Resources* resources, Type##_Ref handle)           \
-    {                                                                                   \
-        return (Type*) handle_table_get(resources->member_name, handle.h);              \
-    }                                                                                   \
+#if 0
+    Type##_Handle resources_##name##_add(Resources* resources, Type* item, Resource_Params info);\
+    void resources_##name##_remove(Resources* resources, Type##_Handle handle);         \
+    void resources_##name##_force_remove(Resources* resources, Type##_Handle handle);   \
+    Type##_Handle resources_##name##_share(Resources* resources, Type##_Handle handle); \
+    Type##_Handle resources_##name##_make_unique(Resources* resources, Type##_Ref handle); \
+    Type* resources_##name##_get(Resources* resources, Type##_Handle handle);           \
+    Resource_Info resources_##name##_get_info(Type##_Ref handle);                       \
+    String resources_##name##_get_path(Type##_Ref handle);                              \
+    Type##_Ref resources_##name##_find_by_path(String path);                            
+#endif
+    typedef struct {                                                                    \
+        Loaded_Image data;                                                                      \
+        Resource_Info info;                                                             \
+        String_Builder full_path;                                                       \
+    } _Resources_Internal_Loaded_Image;                                                 \
 
-DEFINE_RESOURCES_RESOURCE(Loaded_Image, loaded_image, images)
-DEFINE_RESOURCES_RESOURCE(Shape_Assembly, shape, shapes)
-DEFINE_RESOURCES_RESOURCE(Material, material, materials)
-DEFINE_RESOURCES_RESOURCE(Object, object, objects)
+    String file_get_ephemeral_full_path(String path)
+    {
+        enum {SLOT_COUNT = 4};
+        static isize used_count = 0;
+        static String_Builder full_paths[SLOT_COUNT] = {0};
 
-//Remove functions have to be done by hand since each type requires its own deinit.
+        if(used_count == 0)
+        {
+            for(isize i = 0; i < SLOT_COUNT; i++)
+                array_init(&full_paths[i], allocator_get_static());
+        }
 
-void resources_loaded_image_remove(Resources* resources, Loaded_Image_Handle handle)      
-{                                                                               
-    Loaded_Image removed = {0};
-    if(handle_table_remove(&resources->images, handle.h, &removed))
-        loaded_image_deinit(&removed);
-}    
+        isize curr_index = used_count % SLOT_COUNT;
+        Error error = file_get_full_path(&full_paths[curr_index], path);
+        String out_string = string_from_builder(full_paths[curr_index]);
+        used_count += 1;
 
-void resources_shape_remove(Resources* resources, Shape_Assembly_Handle handle)      
-{                                                                               
-    Shape_Assembly removed = {0};
-    if(handle_table_remove(&resources->shapes, handle.h, &removed))
-        shape_assembly_deinit(&removed);
-}  
-void resources_material_remove(Resources* resources, Material_Handle handle)      
-{                                                                               
-    Material removed = {0};
-    if(handle_table_remove(&resources->materials, handle.h, &removed))
-        material_deinit(&removed, resources);
-}  
-void resources_object_remove(Resources* resources, Object_Handle handle)      
-{                                                                               
-    Object removed = {0};
-    if(handle_table_remove(&resources->objects, handle.h, &removed))
-        object_deinit(&removed, resources);
-}  
+        if(error_is_ok(error) == false)
+            LOG_ERROR("RESOURCES", "Failed to get full path of file " STRING_FMT " with error: " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(error));
 
-void loaded_image_init(Loaded_Image* loaded_image, Allocator* alloc)
-{
-    image_builder_init(&loaded_image->image, alloc, 1, PIXEL_FORMAT_U8);
-    array_init(&loaded_image->path, alloc);
-    array_init(&loaded_image->name, alloc);
-}
+        return out_string;
+    }
 
-void loaded_image_deinit(Loaded_Image* loaded_image)
-{
-    image_builder_deinit(&loaded_image->image);
-    array_deinit(&loaded_image->path);
-    array_deinit(&loaded_image->name);
-}
+    Resource_Info resource_info_make(Resource_Params params)
+    {   
+        Resource_Info info = {0};
+        info.creation_epoch_time = platform_universal_epoch_time();
+        info.duration_time_s = params.duration_time_s;
+        info.duration_type = params.duration_type;
+        info.reload_policy = params.reload_policy;
+        info.reference_count = 1;
+
+        return info;
+    }                          
+    
+    Loaded_Image_Ref resources_image_find_by_path(Resources* resources, String full_path)
+    {   
+        Loaded_Image_Ref ref = {0};
+
+        HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, Loaded_Image_Ref, found_ref, _Resources_Internal_Loaded_Image*, _loaded_image)
+            if(string_is_equal(string_from_builder(_loaded_image->full_path), full_path))
+            {
+                ref = found_ref;
+                break;
+            }
+        HANDLE_TABLE_FOR_EACH_END
+
+        return ref;
+    }
+    
+    Loaded_Image* resources_image_get(Resources* resources, Loaded_Image_Handle handle)
+    {   
+        _Resources_Internal_Loaded_Image* item = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(item)
+            return &item->data;
+        else
+            return NULL;
+    }
+    
+    Resource_Info resources_image_get_info(Resources* resources, Loaded_Image_Ref handle)
+    {
+        Resource_Info info = {0};
+        _Resources_Internal_Loaded_Image* item = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(item)
+            info = item->info;
+
+        return info;
+    }
+    
+    String resources_image_get_path(Resources* resources, Loaded_Image_Ref handle)
+    {
+        String path = {0};
+        _Resources_Internal_Loaded_Image* item = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(item)
+            path = string_from_builder(item->full_path);
+
+        return path;
+    }
+
+    Loaded_Image_Handle _resources_image_add(Resources* resources, Loaded_Image* item, String path, Resource_Info info)
+    {
+        String emphemeral_full_path = file_get_ephemeral_full_path(path);
+        Loaded_Image_Ref ref = resources_image_find_by_path(resources, emphemeral_full_path);
+        
+        if(HANDLE_IS_NULL(ref) == false)
+        {
+            _Resources_Internal_Loaded_Image* prev = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &ref);
+            LOG_ERROR("RESOURCES", "added duplicit resource named %s on path " STRING_FMT " previous named %s", item->name, STRING_PRINT(emphemeral_full_path), prev->data.name);
+        }
+
+        Loaded_Image_Handle obtained = {0};
+        _Resources_Internal_Loaded_Image* created = (_Resources_Internal_Loaded_Image*) handle_table_add(&resources->images, (Handle*) &obtained);
+
+        created->info = info;
+        created->full_path = builder_from_string(emphemeral_full_path, resources->alloc);
+
+        //if uses the internal allocator -> steal
+        //else -> copy
+        if(item->image.allocator == resources->alloc)
+            SWAP(&created->data, item, Loaded_Image);
+        else
+        {
+            image_builder_init_from_image(&created->data.image, resources->alloc, image_from_builder(item->image));
+            memcpy(&created->data.name, &item->name, sizeof item->name);
+        }
+
+        return obtained;
+    }
+
+    bool resources_image_remove(Resources* resources, Loaded_Image_Handle handle)
+    {
+        _Resources_Internal_Loaded_Image* prev = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(prev && prev->info.reference_count-- <= 0)
+        {
+            prev->info.reference_count = 0;
+            if(prev->info.duration_type != RESOURCE_DURATION_PERSISTANT)
+                resources_image_force_remove(resources, handle);
+        }
+
+        return prev != NULL;
+    }
+
+    bool resources_image_force_remove(Resources* resources, Loaded_Image_Handle handle)
+    {
+        _Resources_Internal_Loaded_Image* prev = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(prev)
+        {
+            loaded_image_deinit(&prev->data);
+            handle_table_remove(&resources->images, (Handle*) &handle);
+        }
+
+        return prev != NULL;
+    }
+
+    Loaded_Image_Handle resources_image_make_shared(Resources* resources, Loaded_Image_Handle handle)
+    {
+        Loaded_Image_Handle out = {0};
+        _Resources_Internal_Loaded_Image* item = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(item)
+        {
+            item->info.reference_count += 1;
+            out = handle;
+        }
+
+        return out;
+    }
+
+    Loaded_Image_Handle resources_image_make_unique(Resources* resources, Loaded_Image_Ref handle)
+    {
+        Loaded_Image_Handle out = {0};
+        _Resources_Internal_Loaded_Image* item = (_Resources_Internal_Loaded_Image*) handle_table_get(resources->images, (Handle*) &handle);
+        if(item)
+        {
+            //if its the only one it is already unique.
+            if(item->info.reference_count == 1)
+                out = *(Loaded_Image_Handle*) &handle;
+            //Else duplicate it
+            else
+            {   
+                Loaded_Image copy = {0};
+                image_builder_init_from_image(&copy.image, resources->alloc, image_from_builder(item->data.image));
+                memcpy(&copy.name, &item->data.name, sizeof item->data.name);
+
+                Resource_Info new_info = item->info;
+                new_info.reference_count = 1;
+                new_info.creation_epoch_time = platform_universal_epoch_time();
+                platform_capture_call_stack(new_info.callstack.stack_frames, RESOURCE_CALLSTACK_SIZE, 1);
+
+                out = _resources_image_add(resources, &copy, string_from_builder(item->full_path), new_info);
+
+                loaded_image_deinit(&copy);
+            }
+        }
+
+        return out;
+    }
+
 
 void resources_init(Resources* resources, Allocator* alloc)
 {
@@ -524,7 +683,8 @@ void resources_init(Resources* resources, Allocator* alloc)
     handle_table_init(&resources->objects, alloc,           sizeof(Object), DEF_ALIGN);
 }
 
-void resources_deinit(Resources* resources)
+//@TODO
+void _resources_cleanup(Resources* resources, bool is_complete_deinit)
 {
     
     HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, loaded_image)
