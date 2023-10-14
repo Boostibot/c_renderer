@@ -23,6 +23,7 @@ void main()
 
 #define LIB_ALL_IMPL
 //#define LIB_MEM_DEBUG
+#define DEBUG
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 

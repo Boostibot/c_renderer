@@ -105,10 +105,11 @@ EXPORT void* handle_table_get(Handle_Table table, const Handle* handle);
         Handle_Type handle_name = {(i32) _i + 1, _slot->generation};                    \
         (void) handle_name; /* use it so the compiler doesnt shout if we dont need it */\
         Ptr_Type ptr_name = (Ptr_Type) _slot->ptr;                                      \
-        if(ptr_name)                                                                    \
-        {                                                                               \
+        if(!ptr_name)                                                                   \
+            continue;                                                                   \
+                                                                                        \
 
-#define HANDLE_TABLE_FOR_EACH_END }}
+#define HANDLE_TABLE_FOR_EACH_END }
 
 #endif
 #define LIB_ALL_IMPL

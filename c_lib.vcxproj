@@ -238,6 +238,7 @@
     <ClInclude Include="logger_memory.h" />
     <ClInclude Include="callstack.h" />
     <ClInclude Include="render.h" />
+    <ClInclude Include="resources_template_file.h" />
     <ClInclude Include="resource_loading.h" />
     <ClInclude Include="gl.h" />
     <ClInclude Include="gl_debug_output.h" />
