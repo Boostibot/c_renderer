@@ -107,7 +107,6 @@ int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_tim
 int64_t platform_perf_counter();            //returns the current value of performance counter
 int64_t platform_perf_counter_startup();    //returns the value of performence conuter at the first time this function was called which is taken as the startup time
 int64_t platform_perf_counter_frequency();  //returns the frequency of the performance counter
-double  platform_perf_counter_frequency_d(); //returns the frequency of the performance counter as double (saves expensive integer to float cast)
 
 
 //=========================================

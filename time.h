@@ -2,6 +2,7 @@
 #define LIB_TIME
 
 #include "platform.h"
+#include "defines.h"
 
 #define SECOND_MILISECONDS  ((int64_t) 1000)
 #define SECOND_MIRCOSECONDS ((int64_t) 1000000)
@@ -15,11 +16,53 @@
 #define WEEK_SECONDS ((int64_t) 7 * DAY_SECONDS)
 #define YEAR_SECONDS (int64_t) 31556952
 
-//@TODO: implement platform_perf_counter_frequency_d ourselves!
-//       dont use static inline!
+EXPORT f64 platform_perf_counter_frequency_f64();
+EXPORT f32 platform_perf_counter_frequency_f32();
+
+EXPORT f64 epoch_time_to_clock_time(i64 epoch_time);
+EXPORT i64 clock_time_to_epoch_time(f64 time);
+
+EXPORT int64_t clock_ns();
+EXPORT f64 clock_s();
+EXPORT f32 clock_s32();
+
+#endif
+
+#if (defined(LIB_ALL_IMPL) || defined(LIB_TIME_IMPL)) && !defined(LIB_TIME_HAS_IMPL)
+#define LIB_TIME_HAS_IMPL
+
+EXPORT f64 platform_perf_counter_frequency_f64()
+{
+    static f64 freq = 0;
+    if(freq == 0)
+        freq = (f64) platform_perf_counter_frequency(); 
+    return freq;
+}
+
+EXPORT f32 platform_perf_counter_frequency_f32()
+{
+    static f32 freq = 0;
+    if(freq == 0)
+        freq = (f64) platform_perf_counter_frequency(); 
+    return freq;
+}
+
+EXPORT f64 epoch_time_to_clock_time(i64 epoch_time)
+{
+    i64 startup = platform_startup_epoch_time();
+    i64 delta = epoch_time - startup;
+    return (f64) delta / (f64) SECOND_MIRCOSECONDS;
+}
+
+EXPORT i64 clock_time_to_epoch_time(f64 time)
+{
+    i64 startup = platform_startup_epoch_time();
+    i64 delta = (i64) (time * SECOND_MIRCOSECONDS);
+    return startup + delta;
+}
 
 //Returns the time from the startup time in nanoseconds
-static inline int64_t clock_ns()
+EXPORT int64_t clock_ns()
 {
     int64_t freq = platform_perf_counter_frequency();
     int64_t counter = platform_perf_counter() - platform_perf_counter_startup();
@@ -31,17 +74,17 @@ static inline int64_t clock_ns()
 }
 
 //Returns the time from the startup time in seconds
-static inline double clock_s()
+EXPORT f64 clock_s()
 {
-    double freq = platform_perf_counter_frequency_d();
-    double counter = (double) (platform_perf_counter() - platform_perf_counter_startup());
+    f64 freq = platform_perf_counter_frequency_f64();
+    f64 counter = (f64) (platform_perf_counter() - platform_perf_counter_startup());
     return counter / freq;
 }
 
-static inline float clock_sf()
+EXPORT f32 clock_s32()
 {
-    float freq = (float) platform_perf_counter_frequency_d();
-    float counter = (float) (platform_perf_counter() - platform_perf_counter_startup());
+    f32 freq = platform_perf_counter_frequency_f32();
+    f32 counter = (f32) (platform_perf_counter() - platform_perf_counter_startup());
     return counter / freq;
 }
 

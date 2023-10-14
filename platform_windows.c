@@ -164,14 +164,6 @@ int64_t platform_perf_counter_frequency()
     }
     return freq;
 }
-    
-double platform_perf_counter_frequency_d()
-{
-    static double freq = 0;
-    if(freq == 0)
-        freq = (double) platform_perf_counter_frequency(); 
-    return freq;
-}
 
 //time -> filetime
 //(ts * 10000000LL) + 116444736000000000LL = t
