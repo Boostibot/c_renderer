@@ -97,9 +97,12 @@ INTERNAL Error _image_loader_to_error(const char* error_string)
 
 EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize desired_channels, Image_Pixel_Format format, i32 flags)
 {
-
     Error error = {0};
     
+    Allocator_Set prev_allocs = {0};
+    if(image->allocator)
+        prev_allocs = allocator_set_default(image->allocator);
+
     Netbpm_Format netbpm_format = netbpm_format_classify(data);
     if(netbpm_format != NETBPM_FORMAT_NONE)
     {
@@ -161,7 +164,7 @@ EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize des
         }
     }
 
-
+    allocator_set(prev_allocs);
     return error;
 }
 

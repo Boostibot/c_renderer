@@ -31,7 +31,6 @@ typedef enum Winding_Order
 
 void shape_init(Shape* shape);
 void shape_deinit(Shape* shape);
-Shape shape_duplicate(Shape from);
 void shape_tranform(Shape* shape, Mat4 transform);
 
 u64 vertex_hash64(Vertex vertex, u64 seed);
@@ -43,6 +42,7 @@ Shape shapes_make_quad(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset);
 void shape_assembly_init(Shape_Assembly* shape, Allocator* allocator);
 void shape_assembly_deinit(Shape_Assembly* shape);
 void shape_assembly_init_from_shape(Shape_Assembly* assembly, Shape* shape);
+void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in);
 void shape_assembly_add_vertex(Shape_Assembly* assembly, Vertex vertex);
 u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex);
 
@@ -140,14 +140,6 @@ void shape_deinit(Shape* shape)
     array_deinit(&shape->triangles);
 }
 
-Shape shape_duplicate(Shape from)
-{
-    Shape out = {0};
-    array_copy(&out.vertices, from.vertices);
-    array_copy(&out.triangles, from.triangles);
-    return out;
-}
-
 void shape_assembly_init(Shape_Assembly* shape, Allocator* allocator)
 {
     array_init(&shape->vertices, allocator);
@@ -160,6 +152,12 @@ void shape_assembly_deinit(Shape_Assembly* shape)
     array_deinit(&shape->vertices);
     array_deinit(&shape->triangles);
     hash_index_deinit(&shape->vertices_hash);
+}
+void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in)
+{
+    array_copy(&out->triangles, in->triangles);
+    array_copy(&out->vertices, in->vertices);
+    hash_index_copy(&out->vertices_hash, in->vertices_hash);
 }
 
 void shape_tranform(Shape* shape, Mat4 transform)

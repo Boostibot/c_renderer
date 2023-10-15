@@ -10,7 +10,6 @@
 
 #include "_test_unicode.h"
 
-#define LIB_ALL_IMPL
 #include "unicode.h"
 
 void main()
@@ -18,6 +17,7 @@ void main()
 
     test_unicode(3.0);
 }
+
 
 #else
 
@@ -812,13 +812,66 @@ void log_todos(const char* log_module, Log_Type log_type, const char* marker)
     array_deinit(&todos);
 }
 
+const char* get_memory_unit(isize bytes, isize *unit_or_null)
+{
+    isize GB = (isize) 1000*1000*1000;
+    isize MB = (isize) 1000*1000;
+    isize KB = (isize) 1000;
+    isize B = (isize) 1;
+
+    const char* out = "";
+    isize unit = 1;
+
+    if(bytes > GB)
+    {
+        out = "GB";
+        unit = GB;
+    }
+    else if(bytes > MB)
+    {
+        out = "MB";
+        unit = MB;
+    }
+    if(bytes > KB)
+    {
+        out = "MB";
+        unit = MB;
+    }
+    else
+    {
+        out = "B";
+        unit = B;
+    }
+
+    if(unit_or_null)
+        *unit_or_null = unit;
+
+    return out;
+}
+
+
+void format_memory_unit_ephemeral(String_Builder* formatted, isize bytes)
+{
+    isize unit = 1;
+    const char* unit_text = get_memory_unit(bytes, &unit);
+    f64 ratio = (f64) bytes / (f64) unit;
+    format_into(formatted, "%.1lf %s", ratio, unit_text);
+}
+
 void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_Stats stats)
 {
-    LOG(log_module, log_type, "bytes_allocated: (%lld)", (lld) stats.bytes_allocated);
-    LOG(log_module, log_type, "max_bytes_allocated: (%lld)", (lld) stats.max_bytes_allocated);
-    LOG(log_module, log_type, "allocation_count: (%lld)", (lld) stats.allocation_count);
-    LOG(log_module, log_type, "deallocation_count: (%lld)", (lld) stats.deallocation_count);
-    LOG(log_module, log_type, "reallocation_count: (%lld)", (lld) stats.reallocation_count);
+    String_Builder formatted = {0};
+    array_init_backed(&formatted, NULL, 512);
+
+    format_memory_unit_ephemeral(&formatted, stats.bytes_allocated);
+    LOG(log_module, log_type, "bytes_allocated: "STRING_FMT, STRING_PRINT(formatted));
+    format_memory_unit_ephemeral(&formatted, stats.max_bytes_allocated);
+    LOG(log_module, log_type, "max_bytes_allocated: "STRING_FMT, STRING_PRINT(formatted));
+    LOG(log_module, log_type, "allocation_count: %lld", (lld) stats.allocation_count);
+    LOG(log_module, log_type, "deallocation_count: %lld", (lld) stats.deallocation_count);
+    LOG(log_module, log_type, "reallocation_count: %lld", (lld) stats.reallocation_count);
+
+    array_deinit(&formatted);
 }
 
 EXPORT void assertion_report(const char* expression, Source_Info info, const char* message, ...)
@@ -944,11 +997,12 @@ void run_func(void* context)
     Renderer renderer = {0};
 
     resources_init(&resources, &resources_alloc.allocator);
+    resources_set(&resources);
+
     renderer_init(&renderer, &renderer_alloc.allocator);
     
-    Object_Handle falcon_handle = {0};
+    Triangle_Mesh_Handle falcon_handle = {0};
     Render_Object render_falcon = {0};
-    Object* falcon_object = NULL;
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
     Render_Capture_Buffers capture_buffers = {0};
@@ -1115,11 +1169,11 @@ void run_func(void* context)
 
             if(1)
             {
-                object_read_entire(&resources, &falcon_handle, STRING("resources/sponza/sponza.obj"));
+                triangle_mesh_read_entire(&falcon_handle, STRING("resources/sponza/sponza.obj"));
             
-                falcon_object = resources_object_get(&resources, falcon_handle);
+                //falcon_object = resources_object_get(&resources, falcon_handle);
                 //@TODO: add error returns here!
-                render_object_init_from_object(&render_falcon, &renderer, *falcon_object, &resources);
+                render_object_init_from_object(&render_falcon, &renderer, (Triangle_Mesh_Ref*) &falcon_handle);
             }
 
             //@TODO: make Handle_Table type polymorphic!
@@ -1342,7 +1396,7 @@ void run_func(void* context)
                 //blinn_phong_params.gamma = settings->screen_gamma;
                 blinn_phong_params.gamma = 1.3f; //looks better on the wood texture
 
-                Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_sf() / 8), vec3(5, 0, -5));
+                Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_s32() / 8), vec3(5, 0, -5));
                 render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, app->camera.pos, light.pos, light.color, blinn_phong_params, image_floor);
             
                 if(app->is_in_uv_debug_mode)

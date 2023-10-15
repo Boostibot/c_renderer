@@ -130,9 +130,11 @@ EXPORT bool unicode_codepoint_is_surrogate(codepoint_t codepoint);
 
 
 // =========================== EXAMPLE ===========================
+#endif
 
 //Feel free to runt this example!
-#ifdef _UNICODE_EXAMPLE
+#if defined(_UNICODE_EXAMPLE) && !defined(_UNICODE_EXAMPLE_INCLUDED)
+#define _UNICODE_EXAMPLE_INCLUDED
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -197,7 +199,6 @@ static void unicode_example_checks()
 
 #endif
 
-#endif
 
 // ========================= IMPLEMENTATION ===========================
 #if (defined(LIB_ALL_IMPL) || defined(LIB_UNICODE_IMPL)) && !defined(LIB_UNICODE_HAS_IMPL)

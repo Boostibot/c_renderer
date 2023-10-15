@@ -119,7 +119,8 @@ JMAPI float remapf(float value, float input_from, float input_to, float output_f
 
 JMAPI bool is_nearf(float a, float b, float epsilon)
 {
-    return fabsf(a - b) <= epsilon;
+    //this form guarantees that is_nearf(NAN, NAN, 1) == true
+    return !(fabsf(a - b) > epsilon);
 }
 
 //Returns true if x and y are within epsilon distance of each other.
@@ -127,8 +128,10 @@ JMAPI bool is_nearf(float a, float b, float epsilon)
 //else scales epsilon to account for growing floating point inaccuracy
 JMAPI bool is_near_scaledf(float x, float y, float epsilon)
 {
-    float factor = fmaxf(1.0f, fmaxf(fabsf(x), fabsf(y)));
-    return is_nearf(x, y, factor*epsilon);
+    //This is the form that produces the best assembly
+    float calced_factor = fabsf(x) + fabsf(y);
+    float factor = 2 > calced_factor ? 2 : calced_factor;
+    return is_nearf(x, y, factor * epsilon / 2);
 }
 
 JMAPI Vec2 vec2(float x, float y)                   { Vec2 out = {x, y}; return out; }

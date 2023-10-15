@@ -1038,6 +1038,8 @@ void platform_directory_list_contents_free(Platform_Directory_Entry* entries)
     platform_heap_reallocate(0, entries, 0, IO_ALIGN);
 }
 
+int64_t _directory_current_working_generation = 0;
+
 Platform_Error platform_directory_set_current_working(const char* new_working_dir)
 {
     bool state = true;
@@ -1045,19 +1047,57 @@ Platform_Error platform_directory_set_current_working(const char* new_working_di
          state = _wchdir(_wstring(normalized_path)) == 0;
     }
 
+    _directory_current_working_generation += 1;
     return _error_code(state);
 }
-    
-char* platform_directory_get_current_working_alloc()
+
+const char* platform_directory_get_current_working()
 {
-    wchar_t* current_working = _wgetcwd(NULL, 0);
-    if(current_working == NULL)
-        abort();
+    static char* cached = NULL;
+    static int64_t cached_generation = -1;
+    if(cached_generation != _directory_current_working_generation)
+    {
+        wchar_t* current_working = _wgetcwd(NULL, 0);
+        if(current_working == NULL)
+        {
+            _Buffer output = _buffer_make(sizeof(char));
+            _convert_to_utf8_normalize_cpath(&output, current_working);
+            free(current_working);
+            cached = _string(output);
+        }
+
+        cached_generation = _directory_current_working_generation;
+    }
+
+    return cached;
+}
+
+
+const char* platform_get_executable_path()
+{
+    static char* cached = NULL;
+    if(cached == NULL)
+    {
+        _Buffer wide = _buffer_make(sizeof(wchar_t));
+        _BUFFER_INIT_BACKED(&wide, wchar_t, MAX_PATH);
+
+        for(int64_t i = 0; i < 50; i++)
+        {
+            int64_t len = GetModuleFileNameW(NULL, _wstring(wide), (DWORD) wide.size);
+
+            if(len < wide.size)
+                break;
+
+            _buffer_resize(&wide, wide.size * 2);
+        }
+
+        _Buffer out_buffer = _buffer_make(sizeof(char));
+        _utf16_to_utf8(_wstring(wide), wide.size, &out_buffer);
+
+        cached = _string(out_buffer);
+    }
     
-    _Buffer output = _buffer_make(sizeof(char));
-    _convert_to_utf8_normalize_cpath(&output, current_working);
-    free(current_working);
-    return _string(output);
+    return cached;
 }
 
 //=========================================

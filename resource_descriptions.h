@@ -8,13 +8,13 @@
 #include "clock.h"
 
 typedef enum Map_Scale_Filter {
-    MAP_SCALE_FILTER_NEAREST,
+    MAP_SCALE_FILTER_TRILINEAR = 0,
     MAP_SCALE_FILTER_BILINEAR,
-    MAP_SCALE_FILTER_TRILINEAR,
+    MAP_SCALE_FILTER_NEAREST,
 } Map_Scale_Filter;
 
 typedef enum Map_Repeat {
-    MAP_REPEAT_REPEAT,
+    MAP_REPEAT_REPEAT = 0,
     MAP_REPEAT_MIRRORED_REPEAT,
     MAP_REPEAT_CLAMP_TO_EDGE,
     MAP_REPEAT_CLAMP_TO_BORDER
@@ -22,9 +22,9 @@ typedef enum Map_Repeat {
 
 #define MAX_CHANNELS 4
 typedef struct Map_Info {
-    Vec2 offset;                
-    Vec2 scale;
-    Vec2 resolution;
+    Vec3 offset;                
+    Vec3 scale;
+    Vec3 resolution;
 
     i32 channels_count; //the number of channels this texture should have. Is in range [0, MAX_CHANNELS] 
     i32 channels_idices1[MAX_CHANNELS]; //One based indeces into the image channels. 
@@ -182,13 +182,29 @@ EXPORT void triangle_mesh_description_deinit(Triangle_Mesh_Description* descript
 EXPORT void map_info_init(Map_Info* description, Allocator* alloc)
 {
     //Nothing so far but we might add dynamic behaviour later
-    (void) description;
     (void) alloc;
+    memset(description, 0, sizeof *description);
+
+    description->offset = vec3_of(0);                
+    description->scale = vec3_of(1);
+    description->resolution = vec3_of(0);
+
+    description->channels_count = 0;
+
+    description->filter_minify = MAP_SCALE_FILTER_BILINEAR;
+    description->filter_magnify = MAP_SCALE_FILTER_BILINEAR;
+    description->repeat_u = MAP_REPEAT_REPEAT;
+    description->repeat_v = MAP_REPEAT_REPEAT;
+    description->repeat_w = MAP_REPEAT_REPEAT;
+
+    description->gamma = 1;          
+    description->brigthness = 0;     
+    description->contrast = 1;       
 }
 EXPORT void map_info_deinit(Map_Info* description)
 {
     //Nothing so far but we might add dynamic behaviour later
-    (void) description;
+    memset(description, 0, sizeof *description);
 }
 
 EXPORT void map_description_init(Map_Description* description, Allocator* alloc)

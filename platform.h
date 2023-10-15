@@ -180,10 +180,12 @@ Platform_Error platform_file_resize(const char* file_path, int64_t size);
 Platform_Error platform_directory_create(const char* dir_path);
 //Removes an empty directory
 Platform_Error platform_directory_remove(const char* dir_path);
+
 //changes the current working directory to the new_working_dir.  
 Platform_Error platform_directory_set_current_working(const char* new_working_dir);    
-//Retrieves the current working directory as allocated string. Needs to be freed using io_free()
-char* platform_directory_get_current_working_alloc();    
+//Retrieves the current working directory
+const char* platform_directory_get_current_working();    
+const char* platform_get_executable_path();    
 
 //Gathers and allocates list of files in the specified directory. Saves a pointer to array of entries to entries and its size to entries_count. 
 //Needs to be freed using directory_list_contents_free()

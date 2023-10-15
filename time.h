@@ -43,7 +43,7 @@ EXPORT f32 platform_perf_counter_frequency_f32()
 {
     static f32 freq = 0;
     if(freq == 0)
-        freq = (f64) platform_perf_counter_frequency(); 
+        freq = (f32) platform_perf_counter_frequency(); 
     return freq;
 }
 

@@ -197,6 +197,9 @@
     <ClInclude Include="resources_template_file.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="resource_descriptions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\screen.frag">

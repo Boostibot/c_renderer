@@ -78,6 +78,8 @@ typedef struct Handle_Table {
 #define NULL_HANDLE_T(T) BRACE_INIT(T){0}
 #define HANDLE_SPREAD(handle) (handle).index, (handle).generation
 #define HANDLE_T_FROM_HANDLE(T, handle) BRACE_INIT(T){(handle).index, (handle).generation}
+#define HANDLE_CAST(T, handle) *(T*) &handle
+
 #define HANDLE_IS_NULL(handle) ((handle).index == 0)
 #define HANDLE_IS_VALID(handle) ((handle).index != 0)
 #define HANDLE_FROM_HANDLE(handle) BRACE_INIT(Handle){(handle).index, (handle).generation}
@@ -87,6 +89,10 @@ EXPORT void handle_table_deinit(Handle_Table* table);
 
 //Adds an item to the table an returns a handle to it.
 EXPORT void* handle_table_add(Handle_Table* table, Handle* out_handle);
+
+//@TEMP: just for renderer!
+EXPORT void* handle_table_share(Handle_Table* table, const Handle* handle, Handle* out_handle);
+EXPORT void* handle_table_get_unique(Handle_Table table, const Handle* handle);
 
 EXPORT bool handle_table_remove(Handle_Table* table, const Handle* handle);
 
@@ -155,6 +161,9 @@ INTERNAL Handle_Table_Slot* _handle_table_slot_by_handle(const Handle_Table* tab
         return NULL;
 
     Handle_Table_Slot* found_slot = &table->slots.data[handle.index - 1];
+    if(found_slot->generation != handle.generation)
+        return NULL;
+
     return found_slot;
 }
 
@@ -193,22 +202,49 @@ EXPORT void* handle_table_add(Handle_Table* table, Handle* _out_handle)
 EXPORT void* handle_table_get(Handle_Table table, const Handle* handle)
 {
     Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(&table, *handle);
-    if(found_slot != NULL && found_slot->generation == handle->generation)
+    if(found_slot)
         return found_slot->ptr;
     else
         return NULL;
 }
 
+EXPORT void* handle_table_share(Handle_Table* table, const Handle* handle, Handle* out_handle)
+{
+    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, *handle);
+    if(found_slot)
+    {
+        found_slot->references += 1;
+        *out_handle = *handle;
+        return found_slot->ptr;
+    }
+
+    Handle null = {0};
+    *out_handle = null;
+    return NULL;
+}
+
+//@TEMP
+EXPORT void* handle_table_get_unique(Handle_Table table, const Handle* handle)
+{
+    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(&table, *handle);
+    if(found_slot && found_slot->references == 1)
+        return found_slot->ptr;
+    return NULL;
+}
 
 EXPORT bool handle_table_remove(Handle_Table* table, const Handle* handle)
 {
     Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, *handle);
-    if(found_slot != NULL && found_slot->generation == handle->generation)
+    if(found_slot)
     {
-        Allocator* alloc = _handle_table_get_allocator(table);
-        allocator_deallocate(alloc, found_slot->ptr, table->type_size, table->type_align, SOURCE_INFO());
-        found_slot->ptr = NULL;
-        found_slot->generation += 1;
+        if(--found_slot->references <= 0)
+        {
+            Allocator* alloc = _handle_table_get_allocator(table);
+            allocator_deallocate(alloc, found_slot->ptr, table->type_size, table->type_align, SOURCE_INFO());
+            found_slot->ptr = NULL;
+            found_slot->generation += 1;
+            found_slot->references = 0;
+        }
         return true;
     }
 
