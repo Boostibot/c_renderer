@@ -5,6 +5,7 @@
 #include "file.h"
 #include "profile.h"
 #include "image_loader.h"
+#include "allocator_malloc.h"
 
 INTERNAL String _format_obj_mtl_translate_error(u32 code, void* context)
 {
@@ -81,7 +82,7 @@ typedef struct Load_Error
 
 DEFINE_ARRAY_TYPE(Error, Error_Array);
 
-EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Description* description, Format_Obj_Model model)
+EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
     hash_index_reserve(&shape_assembly->vertices_hash, model.indeces.size);
     
@@ -219,8 +220,8 @@ EXPORT void process_obj_object(Shape_Assembly* shape_assembly, Object_Descriptio
             }
         }
     
-        Object_Group_Description group_desc = {0};
-        object_group_description_init(&group_desc, def_alloc);
+        Triangle_Mesh_Group_Description group_desc = {0};
+        triangle_mesh_group_description_init(&group_desc, def_alloc);
         
         i32 triangles_after = (i32) shape_assembly->triangles.size;
 
@@ -264,11 +265,11 @@ INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, 
     description->info.filter_magnify = MAP_SCALE_FILTER_BILINEAR;
     description->info.filter_minify = MAP_SCALE_FILTER_BILINEAR;
 
-    description->info.offset = vec2_from_vec3(map.offset);
-    description->info.scale = vec2_from_vec3(map.scale);
-    description->info.resolution = vec2_of((f32) map.texture_resolution);
-    if(is_nearf(vec2_len(description->info.scale), 0, EPSILON))
-        description->info.scale = vec2_of(1);
+    description->info.offset = map.offset;
+    description->info.scale = map.scale;
+    description->info.resolution = vec3_of((f32) map.texture_resolution);
+    if(is_nearf(vec3_len(description->info.scale), 0, EPSILON))
+        description->info.scale = vec3_of(1);
 
     builder_assign(&description->path, string_from_builder(map.path));
 }
@@ -361,342 +362,342 @@ EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_
     process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
 }
 
-EXPORT Error material_load_images(Resources* resources, Material* material, Material_Description description)
+EXPORT Error material_load_images(Material* material, Material_Description description)
 {
     Error out_error = {0};
-
-    array_copy(&material->name, description.name);
-    array_copy(&material->path, description.path);
-    
     material->info = description.info;
 
-    Map* to_all[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {NULL};
-    Map_Description* desc_all[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {NULL};
+    typedef struct Map_Or_Cubemap_Handles {
+        Map_Handle handle;
+        Map_Description* description;
+        bool is_cubemap;
+        i32 map_or_cubemap_i; 
+        i32 face_i;
+    } Map_Or_Cubemap_Handles;
+
+    Map_Or_Cubemap_Handles maps_or_cubemaps[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {0};
 
     //Add all images to be loaded
-    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+    for(i32 i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
     {
-        to_all[i] = &material->maps[i];
-        desc_all[i] = &description.maps[i];
+        maps_or_cubemaps[i].description = &description.maps[i];
+        maps_or_cubemaps[i].map_or_cubemap_i = i;
     }
     
     //Add all cubemaps to be loaded
-    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+    for(i32 i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
     {
-        for(isize j = 0; j < 6; j++)
+        for(i32 j = 0; j < 6; j++)
         {
-            isize index = MAP_TYPE_ENUM_COUNT + i*6 + j;
-            to_all[index] = &material->cubemaps[i].faces[j];;
-            desc_all[index] = &description.cubemaps[i].faces[j];
+            i32 index = MAP_TYPE_ENUM_COUNT + i*6 + j;
+            maps_or_cubemaps[index].description = &description.cubemaps[i].faces[j];
+            maps_or_cubemaps[index].map_or_cubemap_i = i;
+            maps_or_cubemaps[index].face_i = j;
+            maps_or_cubemaps[index].is_cubemap = true;
         }
     }
 
-    Allocator_Set prev = allocator_set_default(resources->alloc);
-
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(to_all); i++)
+    //Load everything
+    for(isize i = 0; i < STATIC_ARRAY_SIZE(maps_or_cubemaps); i++)
     {
-        Map* to = to_all[i];
-        Map_Description* desc = desc_all[i];
+        Map_Or_Cubemap_Handles map_or_cubemap = maps_or_cubemaps[i];
 
         //if this image is not enabled or does not have a path dont even try
-        if(desc->info.is_enabled == false || desc->path.size <= 0)
+        if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.size <= 0)
             continue;
         
-        //@TODO: full path here
-        String item_path = string_from_builder(desc->path);
+        String item_path = string_from_builder(map_or_cubemap.description->path);
         String dir_path = path_get_file_directory(string_from_builder(description.path));
-            
-        String_Builder composed_path = builder_from_string(dir_path, NULL);
-        builder_append(&composed_path, item_path);
+
+        //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
+        String full_item_path = path_get_full_ephemeral_from(item_path, dir_path);
 
         Error load_error = {0};
-        //look for loaded map inside resources.
-        //@SPEED: linear search here. This will only become problematic once we start loading A LOT of images.
-        //        I am guessing up to 1000 images this doenst make sense to optimize in any way.
-        Loaded_Image_Handle found_handle = {0};
-        HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, image_ptr)
-            if(builder_is_equal(image_ptr->path, composed_path))
-            {
-                found_handle.h = h;
-                break;
-            }
-        HANDLE_TABLE_FOR_EACH_END
+        Image_Ref found_image = image_find_by_path(full_item_path, NULL);
+        Image_Handle map_image = {0};
+        
+        Resource_Params params = {0};
+        params.path = full_item_path;
+        params.was_loaded = true;
 
-        //If not found load it from disk
-        //@TODO: make macro for checking null handles
-        if(found_handle.h.index == 0)
+        if(HANDLE_IS_VALID(found_image))
         {
-            Loaded_Image loaded = {0};
-            loaded_image_init(&loaded, resources->alloc);
+            map_image = image_make_shared(&found_image, NULL);
+        }
+        else
+        {   
+            Image_Builder* loaded_image = NULL; 
+            map_image = image_add(params, &loaded_image);
 
-            load_error = image_read_from_file(&loaded.image, string_from_builder(composed_path), 0, PIXEL_FORMAT_U8, 0);
-            if(error_is_ok(load_error))
-            {
-                array_copy(&loaded.path, composed_path);
-                found_handle = resources_loaded_image_add(resources, &loaded);
-            }
-            else
-                LOG_ERROR("ASSET", "Error rading image %s: " ERROR_FMT, composed_path.data, ERROR_PRINT(load_error));
-            
-            loaded_image_deinit(&loaded);
+            load_error = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_FORMAT_U8, 0);
+            if(error_is_ok(load_error) == false)
+                image_remove(&map_image);
         }
 
-         to->image = found_handle;
-         to->info = desc->info;
-         array_copy(&to->path, desc->path);
-         out_error = ERROR_OR(out_error) load_error;
+        if(HANDLE_IS_NULL(map_image))
+            LOG_ERROR("ASSET", "Error rading image " STRING_FMT ": " ERROR_FMT, STRING_PRINT(full_item_path), ERROR_PRINT(load_error));
+        else
+        {
+            Map* map = NULL;
+            map_or_cubemap.handle = map_add(params, &map);
+            map->image = map_image;
+            map->info = map_or_cubemap.description->info;
 
-         array_deinit(&composed_path);
+            if(map_or_cubemap.is_cubemap)
+            {
+                Cubemap* cubemap = NULL;
+                Cubemap_Handle* cubemap_handle = &material->cubemaps[map_or_cubemap.map_or_cubemap_i];
+
+                //@TODO: this is pain and should probably get removed.
+                //       read the other todo below. Cubemaps and maps SHOULDNT exist
+                //       as resource just as assets which are mappings between files and
+                //       resources or other more complex editor structures.
+                //       Since we use stable pointers we can add editor structures on top by having "fat" pointers
+                //       That is a reference to the underlying struct along with pointer to the appropiate member.
+                //       We use the handle to validate and the pointer to opate on the value. If we use relative pointers
+                //       then this approach also works if we ever decide to compact resources
+                // 
+                //if the cubemap doesnt yet exist create it else get it
+                if(HANDLE_IS_NULL(*cubemap_handle))
+                    *cubemap_handle = cubemap_add(params, &cubemap);
+                else
+                    cubemap = cubemap_get((Cubemap_Ref*) cubemap_handle);
+
+                cubemap->maps.faces[map_or_cubemap.face_i] = map_or_cubemap.handle;
+            }
+            else
+            {
+                material->maps[map_or_cubemap.map_or_cubemap_i] = map_or_cubemap.handle;
+            }
+        }
     }
-
-    allocator_set(prev);
 
     return out_error;
 }
 
-EXPORT void object_finalize(Resources* resources, Object* object, Shape_Assembly* assembly, Object_Description description, Material_Handle_Array materials)
-{
-    Shape_Assembly_Handle assembly_handle = resources_shape_add(resources, assembly);
-    object_init(object, resources);
-
-    object->shape = assembly_handle;
-    array_copy(&object->name, description.name);
-    array_copy(&object->path, description.path);
-
-    if(materials.size > 0)
-        object->fallback_material = materials.data[0];
-
-    //@TEMP
-    for(isize j = 0; j < materials.size; j++)
-    {
-        Material_Handle material_handle = materials.data[j];
-        Material* material = resources_material_get(resources, material_handle);
-        if(material == NULL)
-            continue;
-    }
-
-    for(isize i = 0; i < description.groups.size; i++)
-    {
-        Object_Group_Description* group_desc = &description.groups.data[i];
-        
-        bool unable_to_find_group = true;
-        for(isize j = 0; j < materials.size; j++)
-        {
-            Material_Handle material_handle = materials.data[j];
-            Material* material = resources_material_get(resources, material_handle);
-            if(material == NULL)
-                continue;
-
-            if(builder_is_equal(group_desc->material_name, material->name))
-            {
-                unable_to_find_group = false;
-
-                Object_Group group = {0};
-                object_group_init(&group, resources);
-
-                array_copy(&group.name, group_desc->name);
-                group.material = material_handle;
-
-                group.next_i1 = group_desc->next_i1;
-                group.child_i1 = group_desc->child_i1;
-                group.depth = group_desc->depth;
-
-                group.triangles_from = group_desc->triangles_from;
-                group.triangles_to = group_desc->triangles_to;
-
-                array_push(&object->groups, group);
-            }
-        }
-
-        if(unable_to_find_group)
-            LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
-    }
-}
-
 #define FLAT_ERRORS_COUNT 100
 
-EXPORT Error material_read_entire(Resources* resources, Material_Handle_Array* materials, String path)
+EXPORT Error material_read_entire(Material_Handle_Array* materials, String path)
 {
     Malloc_Allocator arena = {0};
     malloc_allocator_init_use(&arena, 0);
 
-    String_Builder full_path = {0};
+    String_Builder full_path =  {0};
     String_Builder file_content = {0};
     Format_Mtl_Material_Array mtl_materials = {0};
     Material_Description material_desription = {0};
 
     array_init_backed(&full_path, NULL, 512);
-    Error error = file_get_full_path(&full_path, path);
-    
-    //@TODO: add dirty flag or something similar so this handles reloading.
-    //       For now we can only reload if we eject all resources
-    bool was_found = false;
-
+    Error error = path_get_full(&full_path, path);
     if(error_is_ok(error))
     {
-        //search for the material. If found return its duplicated handle.
-        HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials, h, Object*, found_object)
-            if(builder_is_equal(full_path, found_object->path))
-            {
-                was_found = true;
-                Material_Handle local_handle = {h};
-                Material_Handle duplicate_handle = resources_material_share(resources, local_handle);
+        //@TODO: In the future we will want to separate the concept of resource from
+        //       path and name. Resource is simply the data and name and path are a means
+        //       of acessing that data. There sould be a bidirectional hash amp linakge between
+        //       name/path and handle. This repository could also contain when the file was loaded and other things.
+        //       In addition to being nicer to work with it will also be faster since we will not need to 
+        //       iterate all resources when looking for path.
 
-                array_push(materials, duplicate_handle);
-            }
-        HANDLE_TABLE_FOR_EACH_END
-    }
+        Platform_File_Info file_info = {0};
+        Error file_info_error = error_from_platform(platform_file_info(full_path.data, &file_info));
+        if(error_is_ok(file_info_error) == false)
+            LOG_ERROR("ASSET", "Error getting info of material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 
-    if(error_is_ok(error) && was_found == false)
-    {
-        error = file_read_entire(string_from_builder(full_path), &file_content);
-        if(error_is_ok(error))
+        bool was_found = false;
+        bool is_outdated = false;
+    
+        Material_Ref_Array found_materials = {0};
+        array_init_backed(&found_materials, NULL, 16);
+
+        Material_Ref found_material = {0};
+        while(true)
         {
-            Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
-            isize had_mtl_errors = 0;
-            format_mtl_read(&mtl_materials, string_from_builder(file_content), mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
+            found_material = material_find_by_path(string_from_builder(full_path), &found_material);
+            if(HANDLE_IS_NULL(found_material))
+                break;
 
-            for(isize i = 0; i < had_mtl_errors; i++)
-                LOG_ERROR("ASSET", "Error parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
-            
-            for(isize i = 0; i < mtl_materials.size; i++)
+            if(error_is_ok(file_info_error))
             {
-                Material material = {0};
-                material_init(&material, resources);
+                Resource_Info* material_info = material_get_info(&found_material);
+                if(material_info->last_load_epoch_time < file_info.last_write_epoch_time)
+                {
+                    is_outdated = true;
+                    break;
+                }
+            }
 
-                process_mtl_material(&material_desription, mtl_materials.data[i]);
-                array_copy(&material_desription.path, full_path);
+            array_push(&found_materials, found_material);
+        }
 
-                material_load_images(resources, &material, material_desription);
-                Material_Handle local_handle = resources_material_add(resources, &material);
+        if(is_outdated == false)
+        {
+            for(isize i = 0; i < found_materials.size; i++)
+                array_push(materials, material_make_shared(&found_material, NULL););
+            
+            was_found = found_materials.size > 0;
+        }
+
+        if((was_found == false || is_outdated))
+        {
+            error = file_read_entire(string_from_builder(full_path), &file_content);
+            if(error_is_ok(error))
+            {
+                Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
+                isize had_mtl_errors = 0;
+                format_mtl_read(&mtl_materials, string_from_builder(file_content), mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
+
+                for(isize i = 0; i < had_mtl_errors; i++)
+                    LOG_ERROR("ASSET", "Error parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
+            
+                for(isize i = 0; i < mtl_materials.size; i++)
+                {
+                    process_mtl_material(&material_desription, mtl_materials.data[i]);
+                    array_copy(&material_desription.path, full_path);
+                
+                    Resource_Params params = {0};
+                    params.name = string_from_builder(material_desription.name);
+                    params.path = string_from_builder(material_desription.path);
+                    params.was_loaded = true;
+
+                    Material* material = NULL;
+                    Material_Handle local_handle = material_add(params, &material);
+                    material_load_images(material, material_desription);
                     
-                array_push(materials, local_handle);
+                    array_push(materials, local_handle);
 
+                }
             }
         }
     }
     
     if(error_is_ok(error) == false)
         LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
-
-    #ifdef DO_WORTHLESS_DEINITS
-    material_description_deinit(&material_desription);
-    for(isize i = 0; i < mtl_materials.size; i++)
-        format_obj_material_info_deinit(&mtl_materials.data[i]);
-
-    array_deinit(&mtl_materials);
-    array_deinit(&file_content);
-    array_deinit(&full_path);
-    allocator_set(allocs_before);
-    #endif
 
     malloc_allocator_deinit(&arena);
 
     return error;
 }
 
-EXPORT Error object_read_entire(Resources* resources, Object_Handle* object, String path)
+EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handle, String path)
 {
-    Debug_Allocator debug_allocator = {0};
-    debug_allocator_init_use(&debug_allocator, DEBUG_ALLOCATOR_CAPTURE_CALLSTACK | DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK);
+    Malloc_Allocator arena = {0};
+    malloc_allocator_init_use(&arena, 0);
 
-    Object_Handle out_handle = {0};
+    Triangle_Mesh_Handle out_handle = {0};
     String_Builder full_path = {0};
-    Allocator* scratch = allocator_get_scratch();
-    array_init_backed(&full_path, scratch, 512);
-    Error error = file_get_full_path(&full_path, path);
+    array_init_backed(&full_path, 0, 512);
+    Error error = path_get_full(&full_path, path);
     
     if(error_is_ok(error))
     {
-        //search for an object. If found return its duplicated handle.
-        HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, found_object)
-            if(builder_is_equal(full_path, found_object->path))
-            {
-                Object_Handle local_handle = {h};
-                out_handle = resources_object_share(resources, local_handle);
-                break;
-            }
-        HANDLE_TABLE_FOR_EACH_END
+        Platform_File_Info file_info = {0};
+        Error file_info_error = error_from_platform(platform_file_info(full_path.data, &file_info));
+        if(error_is_ok(file_info_error) == false)
+            LOG_ERROR("ASSET", "Error getting info of object file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 
-        //@TODO factor
-        if(out_handle.h.index == 0)
+        Triangle_Mesh_Ref found_mesh = triangle_mesh_find_by_path(string_from_builder(full_path), NULL);
+        if(HANDLE_IS_VALID(found_mesh))
         {
-            Malloc_Allocator arena = {0};
-            malloc_allocator_init_use(&arena, 0);
+            Resource_Info* resource_info = triangle_mesh_get_info(&found_mesh);
+            if(resource_info->last_load_epoch_time >= file_info.last_write_epoch_time)
+                out_handle = triangle_mesh_make_shared(&found_mesh, NULL);
+        }
 
-            Allocator_Set allocs_before = allocator_set_default(resources->alloc);
-
-            String_Builder file_content = {scratch};
-            String_Builder mtl_path = {scratch};
+        if(HANDLE_IS_NULL(out_handle))
+        {
+            String_Builder file_content = {0};
             error = file_read_entire(string_from_builder(full_path), &file_content);
 
             if(error_is_ok(error))
             {
                 Format_Obj_Model model = {0};
-                format_obj_model_init(&model, scratch);
+                format_obj_model_init(&model, 0);
 
                 Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
                 isize had_obj_errors = 0;
                 format_obj_read(&model, string_from_builder(file_content), obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
 
+                //@NOTE: So that we dont waste too much memory while loading
+                array_deinit(&file_content); 
+
                 for(isize i = 0; i < had_obj_errors; i++)
                     LOG_ERROR("ASSET", "Error parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
 
-                Shape_Assembly out_assembly = {0};
-                shape_assembly_init(&out_assembly, resources->alloc);
+                Resource_Params params = {0};
+                params.path = string_from_builder(full_path);
+                params.was_loaded = true;
+
+                Triangle_Mesh* triangle_mesh = NULL;
+                Shape_Assembly* out_assembly = NULL;
+                out_handle = triangle_mesh_add(params, &triangle_mesh);
+                triangle_mesh->shape = shape_add(params, &out_assembly);
+
+                Triangle_Mesh_Description description = {0};
+                process_obj_triangle_mesh(out_assembly, &description, model);
 
                 String dir_path = path_get_file_directory(string_from_builder(full_path));
-
-                Object_Description description = {0};
-                process_obj_object(&out_assembly, &description, model);
-                array_copy(&description.path, full_path);
-
-                Object out_object = {0};
-                object_init(&out_object, resources);
-
-                Material_Handle_Array materials = {resources->alloc};
                 for(isize i = 0; i < description.material_files.size; i++)
                 {
                     String file = string_from_builder(description.material_files.data[i]);
+                    String mtl_path = path_get_full_ephemeral_from(file, dir_path);
 
-                    array_clear(&mtl_path);
-                    builder_append(&mtl_path, dir_path);
-                    builder_append(&mtl_path, file);
-
-                    Error major_material_error = material_read_entire(resources, &materials, string_from_builder(mtl_path));
+                    Error major_material_error = material_read_entire(&triangle_mesh->materials, mtl_path);
 
                     if(error_is_ok(major_material_error) == false)
                         LOG_ERROR("ASSET", "Failed to load material file %s while loading %s", mtl_path.data, full_path.data);
-
                 }
-            
-                object_finalize(resources, &out_object, &out_assembly, description, materials);
-                object_description_deinit(&description);
+                
+                //@TEMP - proper approach would be to find a material called default
+                if(triangle_mesh->materials.size > 0)
+                    triangle_mesh->fallback_material_i1 = 1;
 
-                out_handle = resources_object_add(resources, &out_object);
-                array_deinit(&materials);
+                for(isize i = 0; i < description.groups.size; i++)
+                {
+                    Triangle_Mesh_Group_Description* group_desc = &description.groups.data[i];
+        
+                    bool unable_to_find_group = true;
+                    for(isize j = 0; j < triangle_mesh->materials.size; j++)
+                    {
+                        Material_Handle material_handle = triangle_mesh->materials.data[j];
+                        String material_name = {0};
+                        if(material_get_name(&material_name, (Material_Ref*) &material_handle) == false)
+                            continue;
 
-                format_obj_model_deinit(&model);
+                        if(string_is_equal(material_name, string_from_builder(group_desc->material_name)))
+                        {
+                            unable_to_find_group = false;
+
+                            Triangle_Mesh_Group group = {0};
+
+                            name_from_string(&group.name, material_name);
+                            group.material_i1 = (i32) j + 1;
+
+                            group.next_i1 = group_desc->next_i1;
+                            group.child_i1 = group_desc->child_i1;
+                            group.depth = group_desc->depth;
+
+                            group.triangles_from = group_desc->triangles_from;
+                            group.triangles_to = group_desc->triangles_to;
+
+                            array_push(&triangle_mesh->groups, group);
+                        }
+                    }
+
+                    if(unable_to_find_group)
+                        LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
+                }
             }
             else
             {
-                LOG_ERROR("ASSET", "Failed to load object file %s", full_path.data);
+                LOG_ERROR("ASSET", "Failed to load triangle_mesh file %s", full_path.data);
             }
-            
-            array_deinit(&mtl_path);
-            array_deinit(&file_content);
-            
-            allocator_set(allocs_before);
-            malloc_allocator_deinit(&arena);
         }
     }
     
     if(error_is_ok(error) == false)
         LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
-
-    array_deinit(&full_path);
     
-    debug_allocator_deinit(&debug_allocator);
-    *object = out_handle;
+    malloc_allocator_deinit(&arena);
+    *triangle_mesh_handle = out_handle;
     return error;
 }

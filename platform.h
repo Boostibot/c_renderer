@@ -107,7 +107,6 @@ int64_t platform_calendar_time_to_epoch_time(Platform_Calendar_Time calendar_tim
 int64_t platform_perf_counter();            //returns the current value of performance counter
 int64_t platform_perf_counter_startup();    //returns the value of performence conuter at the first time this function was called which is taken as the startup time
 int64_t platform_perf_counter_frequency();  //returns the frequency of the performance counter
-double  platform_perf_counter_frequency_d(); //returns the frequency of the performance counter as double (saves expensive integer to float cast)
 
 
 //=========================================
@@ -181,10 +180,12 @@ Platform_Error platform_file_resize(const char* file_path, int64_t size);
 Platform_Error platform_directory_create(const char* dir_path);
 //Removes an empty directory
 Platform_Error platform_directory_remove(const char* dir_path);
+
 //changes the current working directory to the new_working_dir.  
 Platform_Error platform_directory_set_current_working(const char* new_working_dir);    
-//Retrieves the current working directory as allocated string. Needs to be freed using io_free()
-char* platform_directory_get_current_working_alloc();    
+//Retrieves the current working directory
+const char* platform_directory_get_current_working();    
+const char* platform_get_executable_path();    
 
 //Gathers and allocates list of files in the specified directory. Saves a pointer to array of entries to entries and its size to entries_count. 
 //Needs to be freed using directory_list_contents_free()

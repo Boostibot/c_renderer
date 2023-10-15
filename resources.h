@@ -1,326 +1,233 @@
 #ifndef LIB_RESOURCES
 #define LIB_RESOURCES
 
-#include "shapes.h"
-#include "string.h"
-#include "image.h"
-#include "handle_table.h"
+#include "resource_descriptions.h"
+#include "file.h"
 
-//@TODO: cubemap info!
+#define RESOURCE_NAME_SIZE 64
+#define RESOURCE_CALLSTACK_SIZE 8
+#define RESOURCE_EPHEMERAL_SIZE 4
 
-typedef enum Map_Scale_Filter {
-    MAP_SCALE_FILTER_NEAREST,
-    MAP_SCALE_FILTER_BILINEAR,
-    MAP_SCALE_FILTER_TRILINEAR,
-} Map_Scale_Filter;
+typedef struct Resource_Callstack {
+    void* stack_frames[RESOURCE_CALLSTACK_SIZE];
+} Resource_Callstack;
 
-typedef enum Map_Repeat {
-    MAP_REPEAT_REPEAT,
-    MAP_REPEAT_MIRRORED_REPEAT,
-    MAP_REPEAT_CLAMP_TO_EDGE,
-    MAP_REPEAT_CLAMP_TO_BORDER
-} Map_Repeat;
+typedef struct Uid {
+    i64 epoch_time;
+    i64 microsecond_index;
+} Uid;
 
-#define MAX_CHANNELS 4
-typedef struct Map_Info {
-    Vec2 offset;                
-    Vec2 scale;
-    Vec2 resolution;
+typedef struct Name {
+    char data[RESOURCE_NAME_SIZE];
+    isize size;
+} Name;
 
-    i32 channels_count; //the number of channels this texture should have. Is in range [0, MAX_CHANNELS] 
-    i32 channels_idices1[MAX_CHANNELS]; //One based indeces into the image channels. 
-    //If value is 0 then it is assumed to be equal to its index ie.:
-    // channels_idices1 = {0, 0, 0, 0} ~~assumed~~> channels_idices1 = {1, 2, 3, 4}
+//A list of concatenated filenames. Each filename is followed by a NULL character.
+//This makes it ideal for comunicating with io (NULL terminated strings) and reducing complexity
+// (vs String_Builder_Array)
+typedef struct Filename_List {
+    String_Builder string;
+} Filename_List;
 
-    Map_Scale_Filter filter_minify;
-    Map_Scale_Filter filter_magnify;
-    Map_Repeat repeat_u;
-    Map_Repeat repeat_v;
-    Map_Repeat repeat_w;
+typedef enum Resource_Duration {
+    RESOURCE_DURATION_REFERENCED = 0,   //cleaned up when reference count reaches 0
+    RESOURCE_DURATION_TIME,             //cleaned up when time is up
+    RESOURCE_DURATION_SINGLE_FRAME,     //cleaned up automatically when this frame ends
+    RESOURCE_DURATION_PERSISTANT,       //cleaned up when explicitly demanded
+    RESOURCE_DURATION_EPHEMERAL,        //cleaned up on some subsequent call to this function. Should be immediately used or coppied
+} Resource_Duration;
 
-    //linear_color = (contrast_minus_one + 1) * color^(1/gamma) + brigthness;
-    //output_color = linear_color^screen_gamma
-    f32 gamma;          //default 1
-    f32 brigthness;     //default 0
-    f32 contrast;       //default 0
+typedef enum Resource_Reload {
+    RESOURCE_RELOAD_ON_FILE_CHANGE = 0,
+    RESOURCE_RELOAD_ON_MEMORY_CHANGE = 1,
+    RESOURCE_RELOAD_NEVER = 2,
+} Resource_Reload;
 
-    bool is_enabled; //whether or not to use this texture. Maybe [0, 1] float?
-} Map_Info;
+typedef enum Resource_Type {
+    RESOURCE_TYPE_SHAPE,
+    RESOURCE_TYPE_IMAGE,
+    RESOURCE_TYPE_MAP,
+    RESOURCE_TYPE_CUBEMAP,
+    RESOURCE_TYPE_MATERIAL,
+    RESOURCE_TYPE_TRIANGLE_MESH,
+    RESOURCE_TYPE_SHADER,
 
-// ========================= Descriptions =========================
-// These should perfectly describe the thing they are substituting but have
-// a path to the data instead of the data itself.
-//
-// At the moment descriptions are not part of Resources. This will likely change in the future
-// once we have a proper concept of asset.
+    RESOURCE_TYPE_ENUM_COUNT
+} Resource_Type;
 
-typedef struct Map_Description {
-    String_Builder path;
-    Map_Info info;
-} Map_Description;
+typedef struct Resource_Params {
+    String path;
+    String name;
+    f64 duration_time_s;
+    Resource_Duration duration_type;
+    Resource_Reload reload_policy;
+    bool was_loaded;
+} Resource_Params;
 
-typedef union Cubemap_Description {
-    struct {
-        Map_Description top;   
-        Map_Description bottom;
-        Map_Description front; 
-        Map_Description back;  
-        Map_Description left;  
-        Map_Description right; 
-    };
-    Map_Description faces[6];
-} Cubemap_Description;
+typedef struct Resource_Info {
+    Resource_Callstack callstack;
+    i64 reference_count;
 
-//@TODO: fuse the two material descriptions and materials in general to one uber material.
-//       Try to keep the rendering stuff independent from the storage.
-//       Add more functions to make it easier to manage objects automatically
-//       Do the allocator stuff
-//       Get the stack allocator here
-//       Add perf counters everywhere
-//       Do instanced rendering! THIS IS IMPORTANT FOR ACHITECTURE!
-//       DO CONSTANT BUFFERS AND SINGLE PIXEL IMAGES
+    i64 creation_epoch_time;
+    i64 last_load_epoch_time;
 
-typedef enum Map_Type{
-    MAP_TYPE_ALBEDO,
-    MAP_TYPE_ROUGNESS,
-    MAP_TYPE_AMBIENT_OCCLUSION,
-    MAP_TYPE_METALLIC,
-    
-    MAP_TYPE_AMBIENT,
-    MAP_TYPE_DIFFUSE,
-    MAP_TYPE_SPECULAR_COLOR,
-    MAP_TYPE_SPECULAR_HIGHLIGHT,
-    
-    MAP_TYPE_ALPHA,
-    MAP_TYPE_BUMP,
-    MAP_TYPE_DISPLACEMENT,
-    MAP_TYPE_STENCIL,
-    MAP_TYPE_NORMAL,
-    MAP_TYPE_REFLECTION,
-    MAP_TYPE_EMMISIVE,
-
-    MAP_TYPE_ENUM_COUNT,
-} Map_Type;
-
-typedef enum Cubemap_Type{
-    CUBEMAP_TYPE_SKYBOX,
-    CUBEMAP_TYPE_IRRADIANCE,
-    CUBEMAP_TYPE_PREFILTER,
-    CUBEMAP_TYPE_REFLECTION,
-
-    CUBEMAP_TYPE_ENUM_COUNT,
-} Cubemap_Type;
-
-typedef struct Material_Info {
-    Vec3 ambient_color;                     
-    Vec3 diffuse_color;                     
-    Vec3 specular_color;                    
-    f32 specular_exponent;    
-    
-    Vec3 albedo;
-    Vec3 emissive;
-    f32 roughness;
-    f32 metallic;
-    f32 ambient_occlusion;
-    f32 opacity;
-
-    Vec3 reflection_at_zero_incidence;
-
-    f32 emissive_power;
-    f32 emissive_power_map;
-    f32 bump_multiplier;
-} Material_Info;
-
-typedef struct Material_Description {
-    String_Builder name;
-    String_Builder path;
-    
-    Material_Info info;
-
-    Map_Description maps[MAP_TYPE_ENUM_COUNT];
-    Cubemap_Description cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
-} Material_Description;
-
-typedef struct Object_Group_Description {
-    String_Builder name;
-    String_Builder material_name;
-    String_Builder material_path;
-
-    i32 next_i1;
-    i32 child_i1;
-    i32 depth;
-
-    i32 triangles_from;
-    i32 triangles_to;
-} Object_Group_Description;
-
-DEFINE_ARRAY_TYPE(Material_Description, Material_Description_Array);
-DEFINE_ARRAY_TYPE(Object_Group_Description, Object_Group_Description_Array);
-
-typedef struct Object_Description {
-    String_Builder name;
-    String_Builder path;
-    Object_Group_Description_Array groups;
-    String_Builder_Array material_files;
-} Object_Description;
-
-void map_info_init(Map_Info* description, Allocator* alloc);
-void map_info_deinit(Map_Info* description);
-
-void map_description_init(Map_Description* description, Allocator* alloc);
-void map_description_deinit(Map_Description* description);
-
-void cubemap_description_init(Cubemap_Description* description, Allocator* alloc);
-void cubemap_description_deinit(Cubemap_Description* description);
-
-void material_description_init(Material_Description* description, Allocator* alloc);
-void material_description_deinit(Material_Description* description);
-
-void object_group_description_init(Object_Group_Description* description, Allocator* alloc);
-void object_group_description_deinit(Object_Group_Description* description);
-
-void object_description_init(Object_Description* description, Allocator* alloc);
-void object_description_deinit(Object_Description* description);
-
-//========================= Engine types =========================
-// These represent things the engine recognizes. 
-// It uses handles to more complex things instead of the things iteself to enable sharing.
-
-
-
-typedef struct Loaded_Image {
-    Image_Builder image;
-    String_Builder path;
-    String_Builder name;
-} Loaded_Image;
+    f64 duration_time_s;
+    Resource_Duration duration_type;
+    Resource_Reload reload_policy;
+} Resource_Info;
 
 // Handle means strong owning reference
 // Ref    means weak non-owning reference
 
 #define DEFINE_HANDLE_TYPES(Type)                           \
-    typedef struct { Handle h; } Type##_Handle;             \
-    typedef struct { Handle h; } Type##_Ref;                \
+    typedef struct { i32 index; u32 generation; } Type##_Handle;             \
+    typedef struct { i32 index; u32 generation; } Type##_Ref;                \
     DEFINE_ARRAY_TYPE(Type##_Handle, Type##_Handle_Array);  \
     DEFINE_ARRAY_TYPE(Type##_Ref, Type##_Ref_Array)         \
 
-DEFINE_HANDLE_TYPES(Loaded_Image);
+DEFINE_HANDLE_TYPES(Shape);
+DEFINE_HANDLE_TYPES(Image);
 DEFINE_HANDLE_TYPES(Map);
 DEFINE_HANDLE_TYPES(Cubemap);
-DEFINE_HANDLE_TYPES(Shape_Assembly);
 DEFINE_HANDLE_TYPES(Material);
-DEFINE_HANDLE_TYPES(Object);
+DEFINE_HANDLE_TYPES(Triangle_Mesh);
+DEFINE_HANDLE_TYPES(Shader);
 
-typedef struct Resources
-{
+DEFINE_ARRAY_TYPE(Handle, Handle_Array);
+
+typedef struct Resources {
     Allocator* alloc;
+    Clock clock;
+    f64 check_time_every;
+    isize frame_i;
 
-    Handle_Table images;
-    Handle_Table shapes;
-    Handle_Table materials;
-    Handle_Table objects;
+    Handle_Table resources[RESOURCE_TYPE_ENUM_COUNT];
+    Handle_Array timed_resources[RESOURCE_TYPE_ENUM_COUNT];
+    Handle_Array frame_limited_resources[RESOURCE_TYPE_ENUM_COUNT];
 } Resources;
 
+typedef struct Shader {
+    String_Builder vertex_shader_source;
+    String_Builder fragment_shader_source;
+    String_Builder geometry_shader_source;
+} Shader;
+
 typedef struct Map {
-    String_Builder path;
-    String_Builder name;
-    Loaded_Image_Handle image;
+    Image_Handle image;
     Map_Info info;
 } Map;
 
-typedef union Cubemap {
-    struct {
-        Map top;   
-        Map bottom;
-        Map front; 
-        Map back;  
-        Map left;  
-        Map right;
-    };
+typedef struct Cubemap  {    
+    union {
+        struct {
+            Map_Handle top;   
+            Map_Handle bottom;
+            Map_Handle front; 
+            Map_Handle back;  
+            Map_Handle left;  
+            Map_Handle right;
+        };
 
-    Map faces[6];
+        Map_Handle faces[6];
+    } maps;
+
 } Cubemap;
 
 typedef struct Material {
-    String_Builder name;
-    String_Builder path;
-    
     Material_Info info;
 
-    Map maps[MAP_TYPE_ENUM_COUNT];
-    Cubemap cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
+    Map_Handle maps[MAP_TYPE_ENUM_COUNT];
+    Cubemap_Handle cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
 } Material;
 
-DEFINE_ARRAY_TYPE(Material, Material_Array);
-
-typedef struct Object_Leaf_Group
-{
-    String_Builder name;
-    Material_Handle material;
+typedef struct Triangle_Mesh_Leaf_Group {
+    i32 material_i1;
 
     i32 triangles_from;
     i32 triangles_to;
-} Object_Leaf_Group;
+} Triangle_Mesh_Leaf_Group;
 
-typedef struct Object_Group
-{
-    String_Builder name;
-    Material_Handle material;
+typedef struct Triangle_Mesh_Group {
+    Name name;
 
+    i32 material_i1;
     i32 next_i1;
     i32 child_i1;
     i32 depth;
 
     i32 triangles_from;
     i32 triangles_to;
-} Object_Group;
+} Triangle_Mesh_Group;
 
-DEFINE_ARRAY_TYPE(Object_Group, Object_Group_Array);
+DEFINE_ARRAY_TYPE(Material, Material_Array);
+DEFINE_ARRAY_TYPE(Triangle_Mesh_Group, Triangle_Mesh_Group_Array);
+DEFINE_ARRAY_TYPE(Triangle_Mesh_Leaf_Group, Triangle_Mesh_Leaf_Group_Array);
 
-typedef struct Object
+typedef struct Triangle_Mesh
 {
-    String_Builder name;
-    String_Builder path;
+    i32 fallback_material_i1;
+    Shape_Handle shape;
 
-    Material_Handle fallback_material;
-    Shape_Assembly_Handle shape;
+    Triangle_Mesh_Group_Array groups;
+    Material_Handle_Array materials;
+} Triangle_Mesh;
 
-    Object_Group_Array groups;
-} Object;
-    
-#define DEFINE_RESOURCES_RESOURCE_DECL(Type, name, member_name)                         \
-    Type##_Handle resources_##name##_add(Resources* resources, Type* item);             \
-    void resources_##name##_remove(Resources* resources, Type##_Handle handle);         \
-    Type##_Handle resources_##name##_share(Resources* resources, Type##_Handle handle); \
-    Type* resources_##name##_get(Resources* resources, Type##_Handle handle);           \
-    Type* resources_##name##_get_ref(Resources* resources, Type##_Ref handle);          \
-    
-    
-DEFINE_RESOURCES_RESOURCE_DECL(Loaded_Image, loaded_image, images)
-DEFINE_RESOURCES_RESOURCE_DECL(Shape_Assembly, shape, shapes)
-DEFINE_RESOURCES_RESOURCE_DECL(Material, material, materials)
-DEFINE_RESOURCES_RESOURCE_DECL(Material, material_phong, materials_phong)
-DEFINE_RESOURCES_RESOURCE_DECL(Object, object, objects)
-
-void loaded_image_init(Loaded_Image* loaded_image, Allocator* alloc);
-void loaded_image_deinit(Loaded_Image* loaded_image);
+Resources* resources_get();
+Resources* resources_set(Resources* new_resources_ptr);
+Allocator* resources_allocator();
 
 void resources_init(Resources* resources, Allocator* alloc);
 void resources_deinit(Resources* resources);
+void resources_cleanup_framed();
+void resources_cleanup_timed();
+void resources_end_frame();
+void resources_check_reloads();
 
-void map_init(Map* item, Resources* resources);
-void map_deinit(Map* item, Resources* resources);
+Resource_Params      make_resource_params(String name, String path);
+String               string_from_name(const Name* name);
+void                 name_from_string(Name* name, String string);
+    
+#define Storage_Type    Image_Builder
+#define Type            Image
+#define RESOURCE_TYPE   RESOURCE_TYPE_IMAGE
+#define type_name       image
+#include "resources_template_file.h"
 
-void cubemap_init(Cubemap* item, Resources* resources);
-void cubemap_deinit(Cubemap* item, Resources* resources);
-
-void material_init(Material* item, Resources* resources);
-void material_deinit(Material* item, Resources* resources);
-
-void object_group_init(Object_Group* item, Resources* resources);
-void object_group_deinit(Object_Group* item, Resources* resources);
-
-void object_init(Object* item, Resources* resources);
-void object_deinit(Object* item, Resources* resources);
+#define Storage_Type    Shape_Assembly
+#define Type            Shape
+#define RESOURCE_TYPE   RESOURCE_TYPE_SHAPE
+#define type_name       shape
+#include "resources_template_file.h"
+ 
+#define Storage_Type    Map
+#define Type            Map
+#define RESOURCE_TYPE   RESOURCE_TYPE_MAP
+#define type_name       map
+#include "resources_template_file.h"
+ 
+#define Storage_Type    Cubemap
+#define Type            Cubemap
+#define RESOURCE_TYPE   RESOURCE_TYPE_CUBEMAP
+#define type_name       cubemap
+#include "resources_template_file.h"
+     
+#define Storage_Type    Material
+#define Type            Material
+#define RESOURCE_TYPE   RESOURCE_TYPE_MATERIAL
+#define type_name       material
+#include "resources_template_file.h"
+     
+#define Storage_Type    Triangle_Mesh
+#define Type            Triangle_Mesh
+#define RESOURCE_TYPE   RESOURCE_TYPE_TRIANGLE_MESH
+#define type_name       triangle_mesh
+#include "resources_template_file.h"
+     
+#define Storage_Type    Shader
+#define Type            Shader
+#define RESOURCE_TYPE   RESOURCE_TYPE_SHADER
+#define type_name       shader
+#include "resources_template_file.h"       
 
 #endif
 
@@ -328,319 +235,404 @@ void object_deinit(Object* item, Resources* resources);
 #if (defined(LIB_ALL_IMPL) || defined(LIB_RESOURCES_IMPL)) && !defined(LIB_RESOURCES_HAS_IMPL)
 #define LIB_RESOURCES_HAS_IMPL
 
-void map_info_init(Map_Info* description, Allocator* alloc)
-{
-    //Nothing so far but we might add dynamic behaviour later
-    (void) description;
-    (void) alloc;
-}
-void map_info_deinit(Map_Info* description)
-{
-    //Nothing so far but we might add dynamic behaviour later
-    (void) description;
-}
-
-void map_description_init(Map_Description* description, Allocator* alloc)
-{
-    map_description_deinit(description);
-    map_info_init(&description->info, alloc);
-    array_init(&description->path, alloc);
-}
-void map_description_deinit(Map_Description* description)
-{
-    array_deinit(&description->path);
-    map_info_deinit(&description->info);
-    memset(description, 0, sizeof *description);
-}
-
-void cubemap_description_init(Cubemap_Description* description, Allocator* alloc)
-{
-    for(isize i = 0; i < 6; i++)
-        map_description_init(&description->faces[i], alloc);
-}
-void cubemap_description_deinit(Cubemap_Description* description)
-{
-    for(isize i = 0; i < 6; i++)
-        map_description_deinit(&description->faces[i]);
-}
-
-void material_description_init(Material_Description* description, Allocator* alloc)
-{
-    material_description_deinit(description);
-
-    array_init(&description->path, alloc);
-    array_init(&description->name, alloc);
-
-    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        map_description_init(&description->maps[i], alloc);  
-        
-    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        cubemap_description_init(&description->cubemaps[i], alloc);  
-
-    memset(description, 0, sizeof *description);
-}
-
-void material_description_deinit(Material_Description* description)
-{
-    array_deinit(&description->path);
-    array_deinit(&description->name);
     
-    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        map_description_deinit(&description->maps[i]);  
+    Resource_Info resource_info_make(Resource_Params params)
+    {   
+        Resource_Info info = {0};
+        info.creation_epoch_time = platform_universal_epoch_time();
+        info.duration_time_s = params.duration_time_s;
+        info.duration_type = params.duration_type;
+        info.reload_policy = params.reload_policy;
+        info.reference_count = 1;
+        if(params.was_loaded)
+            info.last_load_epoch_time = info.creation_epoch_time;
+        platform_capture_call_stack(info.callstack.stack_frames, RESOURCE_CALLSTACK_SIZE, 1);
+
+        return info;
+    }   
+    
+    //#define TESTING
+    #ifndef TESTING
+    #define RESOURCE_TEMPLATE_IMPL   
+    
+    #define Storage_Type    Image_Builder
+    #define Type            Image
+    #define RESOURCE_TYPE   RESOURCE_TYPE_IMAGE
+    #define type_name       image
+    #include "resources_template_file.h"
+
+    #define Storage_Type    Shape_Assembly
+    #define Type            Shape
+    #define RESOURCE_TYPE   RESOURCE_TYPE_SHAPE
+    #define type_name       shape
+    #include "resources_template_file.h"
+ 
+    #define Storage_Type    Map
+    #define Type            Map
+    #define RESOURCE_TYPE   RESOURCE_TYPE_MAP
+    #define type_name       map
+    #include "resources_template_file.h"
+ 
+    #define Storage_Type    Cubemap
+    #define Type            Cubemap
+    #define RESOURCE_TYPE   RESOURCE_TYPE_CUBEMAP
+    #define type_name       cubemap
+    #include "resources_template_file.h"
+     
+    #define Storage_Type    Material
+    #define Type            Material
+    #define RESOURCE_TYPE   RESOURCE_TYPE_MATERIAL
+    #define type_name       material
+    #include "resources_template_file.h"
+     
+    #define Storage_Type    Triangle_Mesh
+    #define Type            Triangle_Mesh
+    #define RESOURCE_TYPE   RESOURCE_TYPE_TRIANGLE_MESH
+    #define type_name       triangle_mesh
+    #include "resources_template_file.h"
+     
+    #define Storage_Type    Shader
+    #define Type            Shader
+    #define RESOURCE_TYPE   RESOURCE_TYPE_SHADER
+    #define type_name       shader
+    #include "resources_template_file.h"      
+    
+    #endif
+
+    #undef RESOURCE_TEMPLATE_IMPL
+
+    Resources* _global_resources = NULL;
+    Resources* resources_get()
+    {
+        return _global_resources;
+    }
+
+    Resources* resources_set(Resources* new_resources_ptr)
+    {
+        Resources* prev = _global_resources;
+        _global_resources = new_resources_ptr;
+        return prev;
+    }
+    
+    Allocator* resources_allocator()
+    {
+        ASSERT(_global_resources);
+        if(_global_resources)
+            return _global_resources->alloc;
+        else
+            return NULL;
+    }
+
+    //SHAPE
+    void _shape_init(Shape_Assembly* out)
+    {
+        shape_assembly_init(out, resources_allocator());
+    }
+
+    void _shape_copy(Shape_Assembly* out, const Shape_Assembly* in)
+    {
+        shape_assembly_copy(out, in);
+    }
+
+    void _shape_deinit(Shape_Assembly* out)
+    {
+        shape_assembly_deinit(out);
+    }
+
+    //IMAGE
+    void _image_init(Image_Builder* out)
+    {
+        image_builder_init(out, resources_allocator(), 1, PIXEL_FORMAT_U8);
+    }
+
+    void _image_copy(Image_Builder* out, const Image_Builder* in)
+    {
+        image_builder_init_from_image(out, resources_allocator(), image_from_builder(*in));
+    }
+
+    void _image_deinit(Image_Builder* out)
+    {
+        image_builder_deinit(out);
+    }
+    
+    //MAP
+    void _map_init(Map* out)
+    {
+        map_info_init(&out->info, resources_allocator());
+        Image_Handle null = {0};
+        out->image = null;
+    }
+
+    void _map_copy(Map* out, const Map* in)
+    {
+        out->info = in->info;
+        out->image = image_make_shared((Image_Ref*) &in->image, NULL);
+    }
+
+    void _map_deinit(Map* out)
+    {
+        image_remove(&out->image);
+    }
+
+    //CUBEMAP
+    void _cubemap_init(Cubemap* out)
+    {
+        memset(out, 0, sizeof *out);
+    }
+
+    void _cubemap_copy(Cubemap* out, const Cubemap* in)
+    {
+        for(isize i = 0; i < 6; i++)
+            out->maps.faces[i] = map_make_shared((Map_Ref*) &in->maps.faces[i], NULL);
+    }
+
+    void _cubemap_deinit(Cubemap* out)
+    {
+        for(isize i = 0; i < 6; i++)
+            map_remove(&out->maps.faces[i]);
+    }
+    
+    //MATERIAL
+    void _material_init(Material* out)
+    {
+        memset(out, 0, sizeof *out);
+    }
+
+    void _material_copy(Material* out, const Material* in)
+    {
+        for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(in->maps[i]))
+                out->maps[i] = map_make_shared((Map_Ref*) &in->maps[i], NULL);            
         
-    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        cubemap_description_deinit(&description->cubemaps[i]);  
+        for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(in->cubemaps[i]))
+                out->cubemaps[i] = cubemap_make_shared((Cubemap_Ref*) &in->cubemaps[i], NULL);        
+
+        memset(out, 0, sizeof *out);
+    }
+    
+    void _material_deinit(Material* out)
+    {
+        for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(out->maps[i]))
+                map_remove(&out->maps[i]);  
+        
+        for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(out->cubemaps[i]))
+                cubemap_remove(&out->cubemaps[i]);  
+
+        memset(out, 0, sizeof *out);
+    }
+
+    //TRIANGLE MESH
+   
+    void _triangle_mesh_deinit(Triangle_Mesh* item)
+    {
+        shape_remove(&item->shape);
+
+        for(isize i = 0; i < item->materials.size; i++)
+            material_remove(&item->materials.data[i]);
+        
+        array_deinit(&item->groups);
+        array_deinit(&item->materials);
+        memset(item, 0, sizeof *item);
+    }
+
+    void _triangle_mesh_init(Triangle_Mesh* item)
+    {
+        _triangle_mesh_deinit(item);
+        array_init(&item->groups, resources_allocator());
+        array_init(&item->materials, resources_allocator());
+    }
+    
+    void _triangle_mesh_copy(Triangle_Mesh* out, const Triangle_Mesh* in)
+    {
+        array_resize(&out->groups, in->groups.size);
+        array_resize(&out->materials, in->materials.size);
+        
+        for(isize i = 0; i < in->materials.size; i++)
+            out->materials.data[i] = material_make_shared((Material_Ref*) &in->materials.data[i], NULL);
+
+        out->shape = shape_make_shared((Shape_Ref*) &in->shape, NULL);
+    }
+
+    //SHADER
+    void _shader_init(Shader* out)
+    {
+        array_init(&out->fragment_shader_source, resources_allocator());
+        array_init(&out->geometry_shader_source, resources_allocator());
+        array_init(&out->vertex_shader_source, resources_allocator());
+    }
+
+    void _shader_copy(Shader* out, const Shader* in)
+    {
+        array_copy(&out->fragment_shader_source, in->fragment_shader_source);
+        array_copy(&out->geometry_shader_source, in->geometry_shader_source);
+        array_copy(&out->vertex_shader_source, in->vertex_shader_source);
+    }
+
+    void _shader_deinit(Shader* out)
+    {
+        array_deinit(&out->fragment_shader_source);
+        array_deinit(&out->geometry_shader_source);
+        array_deinit(&out->vertex_shader_source);
+    }
+    
+    String string_from_name(const Name* name)
+    {
+        String out = {name->data, name->size};
+        return out;
+    }
+
+    void name_from_string(Name* name, String string)
+    {
+        String trimmed = string_safe_head(string, RESOURCE_NAME_SIZE);
+        memcpy(name->data, trimmed.data, trimmed.size);
+        name->size = trimmed.size;
+    }
+                       
+    
 
 
-    memset(description, 0, sizeof *description);
-}
 
-void object_group_description_init(Object_Group_Description* description, Allocator* alloc)
+
+enum {
+    _RESOURCE_CLEANUP_TIME = 1,
+    _RESOURCE_CLEANUP_FRAME = 2,
+    _RESOURCE_CLEANUP_PERSISTANT = 4,
+    _RESOURCE_CLEANUP_TOTAL = 32,
+};
+
+void _resources_cleanup(Resources* resources, i64 cleanup_flags)
 {
-    object_group_description_deinit(description);
+    i64 global_epoch_time = platform_universal_epoch_time();
+    f64 global_time = epoch_time_to_clock_time(global_epoch_time);
+    f64 local_time = clock_get_local_time(resources->clock, global_time);
 
-    array_init(&description->name, alloc);
-    array_init(&description->material_name, alloc);
-    array_init(&description->material_path, alloc);
-}
-void object_group_description_deinit(Object_Group_Description* description)
-{
-    array_deinit(&description->name);
-    array_deinit(&description->material_name);
-    array_deinit(&description->material_path);
+    //@TODO: make proper
+    static f64 last_update_time = 0;
+    if(local_time - last_update_time < resources->check_time_every)
+        return;
 
-    memset(description, 0, sizeof *description);
-}
+    last_update_time = local_time;
 
-void object_description_init(Object_Description* description, Allocator* alloc)
-{
-    object_description_deinit(description);
+    //@HACK: function type casting but it should be okay.
+     
+    typedef Resource_Info*  (*Get_info)(Handle*);
+    typedef bool            (*Remove)(Handle*);
+    typedef bool            (*Force_remove)(Handle*);
 
-    array_init(&description->name, alloc);
-    array_init(&description->path, alloc);
-    array_init(&description->groups, alloc);
-    array_init(&description->material_files, alloc);
-}
-void object_description_deinit(Object_Description* description)
-{
-    array_deinit(&description->name);
-    array_deinit(&description->path);
+    typedef struct Resource_Functions {
+        void* get_info;
+        void* remove;
+        void* force_remove;
+    } Resource_Functions;
 
-    for(isize i = 0; i < description->groups.size; i++)
-        object_group_description_deinit(&description->groups.data[i]);
+    Resource_Functions resource_functions[RESOURCE_TYPE_ENUM_COUNT] = {0};
 
-    array_deinit(&description->groups);
-    builder_array_deinit(&description->material_files);
+    //@TODO rest
+    resource_functions[RESOURCE_TYPE_IMAGE] = BRACE_INIT(Resource_Functions){(void*) image_get_info, (void*) image_remove, (void*) image_force_remove};
 
-    memset(description, 0, sizeof *description);
-}
+    for(isize j = 0; j < RESOURCE_TYPE_ENUM_COUNT; j++)
+    {
+        Handle_Table* handle_table = &resources->resources[j];
+        Handle_Array* frame_limited = &resources->frame_limited_resources[j];
+        Handle_Array* time_limited = &resources->timed_resources[j];
+        Resource_Functions funcs = resource_functions[j];
 
+        Get_info get_info = (Get_info) funcs.get_info;
+        Remove remove = (Remove) funcs.remove;
+        Force_remove force_remove = (Force_remove) funcs.force_remove;
 
-#define DEFINE_RESOURCES_RESOURCE(Type, name, member_name)                              \
-    Type##_Handle resources_##name##_add(Resources* resources, Type* item)              \
-    {                                                                                   \
-        Handle h = handle_table_add(&resources->member_name);                           \
-        Type* added_ptr = (Type*) handle_table_get(resources->member_name, h);          \
-        SWAP(added_ptr, item, Type);                                                    \
-                                                                                        \
-        Type##_Handle out = {h};                                                        \
-        return out;                                                                     \
-    }                                                                                   \
-                                                                                        \
-    Type##_Handle resources_##name##_share(Resources* resources, Type##_Handle handle)  \
-    {                                                                                   \
-        Handle h = handle_table_share(&resources->member_name, handle.h);               \
-        Type##_Handle out = {h};                                                        \
-        return out;                                                                     \
-    }                                                                                   \
-                                                                                        \
-    Type* resources_##name##_get(Resources* resources, Type##_Handle handle)            \
-    {                                                                                   \
-        Type* out = (Type*) handle_table_get(resources->member_name, handle.h);         \
-        return out;                                                                     \
-    }                                                                                   \
-                                                                                        \
-    Type* resources_##name##_get_ref(Resources* resources, Type##_Ref handle)           \
-    {                                                                                   \
-        return (Type*) handle_table_get(resources->member_name, handle.h);              \
-    }                                                                                   \
+        if(cleanup_flags & _RESOURCE_CLEANUP_TIME)
+        {
+            for(isize i = 0; i < time_limited->size; i++)
+            {
+                Handle h = frame_limited->data[i];
+                Resource_Info* info = get_info(&h);
+                ASSERT(info->duration_type == RESOURCE_DURATION_TIME);
+                f64 resource_creation_time = epoch_time_to_clock_time(info->creation_epoch_time);
+         
+                if(resource_creation_time + info->duration_time_s > local_time)
+                    remove(&h);
+            }
+        }
+        
+        if(cleanup_flags & _RESOURCE_CLEANUP_FRAME)
+        {
+            for(isize i = 0; i < frame_limited->size; i++)
+            {
+                Handle h = frame_limited->data[i];
+                remove(&h);
+            }
+        }
+        
+        if(cleanup_flags & _RESOURCE_CLEANUP_TOTAL)
+        {
+            for(i32 i = 0; i < handle_table->slots.size; i++)
+            {
+                Handle_Table_Slot slot = handle_table->slots.data[i];
+                void* ptr = slot.ptr;
+                if(ptr == NULL)
+                    continue;
 
-DEFINE_RESOURCES_RESOURCE(Loaded_Image, loaded_image, images)
-DEFINE_RESOURCES_RESOURCE(Shape_Assembly, shape, shapes)
-DEFINE_RESOURCES_RESOURCE(Material, material, materials)
-DEFINE_RESOURCES_RESOURCE(Object, object, objects)
+                Handle h = {i, slot.generation};
+                force_remove(&h);
+            }
+        }
+    }
 
-//Remove functions have to be done by hand since each type requires its own deinit.
-
-void resources_loaded_image_remove(Resources* resources, Loaded_Image_Handle handle)      
-{                                                                               
-    Loaded_Image removed = {0};
-    if(handle_table_remove(&resources->images, handle.h, &removed))
-        loaded_image_deinit(&removed);
-}    
-
-void resources_shape_remove(Resources* resources, Shape_Assembly_Handle handle)      
-{                                                                               
-    Shape_Assembly removed = {0};
-    if(handle_table_remove(&resources->shapes, handle.h, &removed))
-        shape_assembly_deinit(&removed);
-}  
-void resources_material_remove(Resources* resources, Material_Handle handle)      
-{                                                                               
-    Material removed = {0};
-    if(handle_table_remove(&resources->materials, handle.h, &removed))
-        material_deinit(&removed, resources);
-}  
-void resources_object_remove(Resources* resources, Object_Handle handle)      
-{                                                                               
-    Object removed = {0};
-    if(handle_table_remove(&resources->objects, handle.h, &removed))
-        object_deinit(&removed, resources);
-}  
-
-void loaded_image_init(Loaded_Image* loaded_image, Allocator* alloc)
-{
-    image_builder_init(&loaded_image->image, alloc, 1, PIXEL_FORMAT_U8);
-    array_init(&loaded_image->path, alloc);
-    array_init(&loaded_image->name, alloc);
-}
-
-void loaded_image_deinit(Loaded_Image* loaded_image)
-{
-    image_builder_deinit(&loaded_image->image);
-    array_deinit(&loaded_image->path);
-    array_deinit(&loaded_image->name);
+    //@TODO the rest
 }
 
 void resources_init(Resources* resources, Allocator* alloc)
 {
     resources_deinit(resources);
-
     resources->alloc = alloc;
 
-    handle_table_init(&resources->images, alloc,            sizeof(Loaded_Image), DEF_ALIGN);
-    handle_table_init(&resources->shapes, alloc,            sizeof(Shape_Assembly), DEF_ALIGN);
-    handle_table_init(&resources->materials, alloc,         sizeof(Material), DEF_ALIGN);
-    handle_table_init(&resources->objects, alloc,           sizeof(Object), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_SHAPE], alloc, sizeof(_Shape_Resource), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_IMAGE], alloc, sizeof(_Image_Resource), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_MAP], alloc, sizeof(_Map_Resource), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_CUBEMAP], alloc, sizeof(_Cubemap_Resource), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_MATERIAL], alloc, sizeof(_Material_Resource), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_TRIANGLE_MESH], alloc, sizeof(_Triangle_Mesh_Resource), DEF_ALIGN);
+    handle_table_init(&resources->resources[RESOURCE_TYPE_SHADER], alloc, sizeof(_Shader_Resource), DEF_ALIGN);
+}
+
+void resources_cleanup_framed()
+{
+    _resources_cleanup(resources_get(), _RESOURCE_CLEANUP_FRAME);
+}
+
+void resources_cleanup_timed()
+{
+    _resources_cleanup(resources_get(), _RESOURCE_CLEANUP_TIME);
+}
+
+void resources_end_frame()
+{
+    _resources_cleanup(resources_get(), _RESOURCE_CLEANUP_TIME | _RESOURCE_CLEANUP_FRAME);
+    resources_get()->frame_i += 1;
+}
+
+void resources_check_reloads()
+{
+    ASSERT_MSG(false, "@TODO");
 }
 
 void resources_deinit(Resources* resources)
 {
+    _resources_cleanup(resources, _RESOURCE_CLEANUP_TOTAL);
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->images, h, Loaded_Image*, loaded_image)
-        loaded_image_deinit(loaded_image);
-    HANDLE_TABLE_FOR_EACH_END
-
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->objects, h, Object*, object)
-        object_deinit(object, resources);
-    HANDLE_TABLE_FOR_EACH_END
-    
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->materials, h, Material*, material)
-        material_deinit(material, resources);
-    HANDLE_TABLE_FOR_EACH_END
-    
-    HANDLE_TABLE_FOR_EACH_BEGIN(resources->shapes, h, Shape_Assembly*, shape_assembly)
-        shape_assembly_deinit(shape_assembly);
-    HANDLE_TABLE_FOR_EACH_END
-
-    handle_table_deinit(&resources->images);
-    handle_table_deinit(&resources->shapes);
-    handle_table_deinit(&resources->materials);
-    handle_table_deinit(&resources->objects);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_SHAPE]);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_IMAGE]);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_MAP]);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_CUBEMAP]);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_MATERIAL]);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_TRIANGLE_MESH]);
+    handle_table_deinit(&resources->resources[RESOURCE_TYPE_SHADER]);
 
     memset(resources, 0, sizeof *resources);
-}
-
-void map_init(Map* item, Resources* resources)
-{
-    map_deinit(item, resources);
-    array_init(&item->path, resources->alloc);
-    array_init(&item->name, resources->alloc);
-    map_info_init(&item->info, resources->alloc);
-}
-
-void map_deinit(Map* item, Resources* resources)
-{
-    array_deinit(&item->path);
-    array_deinit(&item->name);
-    map_info_deinit(&item->info);
-    resources_loaded_image_remove(resources, item->image);
-    memset(item, 0, sizeof *item);
-}
-
-void cubemap_init(Cubemap* item, Resources* resources)
-{
-    for(isize i = 0; i < 6; i++)
-        map_init(&item->faces[i], resources);
-}
-
-void cubemap_deinit(Cubemap* item, Resources* resources)
-{
-    for(isize i = 0; i < 6; i++)
-        map_deinit(&item->faces[i], resources);
-}
-
-void material_init(Material* item, Resources* resources)
-{
-    material_deinit(item, resources);
-    array_init(&item->path, resources->alloc);
-    array_init(&item->name, resources->alloc);
-    
-    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        map_init(&item->maps[i], resources);  
-        
-    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        cubemap_init(&item->cubemaps[i], resources);  
-}
-
-void material_deinit(Material* item, Resources* resources)
-{
-    array_deinit(&item->path);
-    array_deinit(&item->name);
-    
-    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        map_deinit(&item->maps[i], resources);  
-        
-    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        cubemap_deinit(&item->cubemaps[i], resources);  
-
-    memset(item, 0, sizeof *item);
-}
-
-void object_group_init(Object_Group* item, Resources* resources)
-{
-    object_group_deinit(item, resources);
-    array_init(&item->name, resources->alloc);
-}
-
-void object_group_deinit(Object_Group* item, Resources* resources)
-{
-    array_deinit(&item->name);
-    resources_material_remove(resources, item->material);
-    memset(item, 0, sizeof *item);
-}
-
-void object_init(Object* item, Resources* resources)
-{
-    object_deinit(item, resources);
-
-    array_init(&item->path, resources->alloc);
-    array_init(&item->name, resources->alloc);
-    array_init(&item->groups, resources->alloc);
-}
-
-void object_deinit(Object* item, Resources* resources)
-{
-    array_deinit(&item->path);
-    array_deinit(&item->name);
-    resources_material_remove(resources, item->fallback_material);
-    resources_shape_remove(resources, item->shape);
-
-    for(isize i = 0; i < item->groups.size; i++)
-        object_group_deinit(&item->groups.data[i], resources);
-        
-    array_init(&item->groups, resources->alloc);
-    memset(item, 0, sizeof *item);
 }
 
 #endif

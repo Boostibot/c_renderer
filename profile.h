@@ -182,7 +182,9 @@ EXPORT f64 profile_get_counter_normalized_standard_deviation_s(Perf_Counter coun
 	EXPORT f64 perf_counter_get_ellapsed(Perf_Counter_Running running)
 	{
 		i64 delta = platform_perf_counter() - running.start;
-		f64 freq = platform_perf_counter_frequency_d();
+		static f64 freq = 0;
+		if(freq == 0)
+			freq = (f64) platform_perf_counter_frequency();
 
 		return (f64) delta / freq;
 	}

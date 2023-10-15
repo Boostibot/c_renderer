@@ -2,6 +2,10 @@
 #define LIB_ASSERT
 
 #include "platform.h"
+#undef TEST
+#undef TEST_MSG
+#undef ASSERT
+#undef ASSERT_MSG
 
 #if !defined(ASSERT_CUSTOM_SETTINGS) && !defined(NDEBUG)
     //Locally enables/disables asserts. If we wish to disable for part of
@@ -15,7 +19,6 @@
 //x must be a valid compile time exception. 
 //Is useful for validating if compile time settings are correct
 #define STATIC_ASSERT(x) typedef char PP_CONCAT(__static_assertion_, __LINE__)[(x) ? 1 : -1]
-
 
 //If x evaluates to false executes assertion_report() without any message. 
 #define TEST(x)                 TEST_MSG(x, "")              /* executes always (even in release) */

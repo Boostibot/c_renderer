@@ -991,19 +991,19 @@ void render_pbr_material_init(Render_Material* material, Renderer* renderer);
 
 void renderer_deinit(Renderer* renderer)
 {
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->materials, h, Render_Material*, render_pbr_material)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->materials, Handle, h, Render_Material*, render_pbr_material)
         render_pbr_material_deinit(render_pbr_material, renderer);
     HANDLE_TABLE_FOR_EACH_END
 
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Image*, render_image)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, Handle, h, Render_Image*, render_image)
         render_image_deinit(render_image);
     HANDLE_TABLE_FOR_EACH_END
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->shaders, h, Render_Shader*, render_shader)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->shaders, Handle, h, Render_Shader*, render_shader)
         render_shader_deinit(render_shader);
     HANDLE_TABLE_FOR_EACH_END
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->meshes, h, Render_Mesh*, render_mesh)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->meshes, Handle, h, Render_Mesh*, render_mesh)
         render_mesh_deinit(render_mesh);
     HANDLE_TABLE_FOR_EACH_END
     
@@ -1028,35 +1028,32 @@ void renderer_init(Renderer* renderer, Allocator* alloc)
     handle_table_init(&renderer->materials, alloc, sizeof(Render_Material), DEF_ALIGN);
 }
 
-
-
 #define DEFINE_RENDERER_RESOURCE(Type, name, member_name)                              \
     Type##_Handle renderer_##name##_add(Renderer* renderer, Type* item)                \
     {                                                                                   \
-        Handle h = handle_table_add(&renderer->member_name);                            \
-        Type* added_ptr = (Type*) handle_table_get(renderer->member_name, h);           \
+        Type##_Handle out = {0};                                                        \
+        Type* added_ptr = (Type*) handle_table_add(&renderer->member_name, (Handle*) &out);     \
         SWAP(added_ptr, item, Type);                                                    \
                                                                                         \
-        Type##_Handle out = {h};                                                        \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
     Type##_Handle renderer_##name##_share(Renderer* renderer, Type##_Handle handle)     \
     {                                                                                   \
-        Handle h = handle_table_share(&renderer->member_name, handle.h);                \
-        Type##_Handle out = {h};                                                        \
+        Type##_Handle out = {0};                                                        \
+        handle_table_share(&renderer->member_name, (Handle*) &handle, (Handle*) &out); \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
     Type* renderer_##name##_get(Renderer* renderer, Type##_Handle handle)               \
     {                                                                                   \
-        Type* out = (Type*) handle_table_get(renderer->member_name, handle.h);          \
+        Type* out = (Type*) handle_table_get(renderer->member_name, (Handle*) &handle); \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
     Type* renderer_##name##_get_ref(Renderer* renderer, Type##_Ref handle)              \
     {                                                                                   \
-        return (Type*) handle_table_get(renderer->member_name, handle.h);               \
+        return (Type*) handle_table_get(renderer->member_name, (Handle*) &handle);      \
     }                                                                                   \
 
 DEFINE_RENDERER_RESOURCE(Render_Image, image, images)
@@ -1066,37 +1063,44 @@ DEFINE_RENDERER_RESOURCE(Render_Mesh, mesh, meshes)
 DEFINE_RENDERER_RESOURCE(Render_Material, material, materials)
 
 void renderer_image_remove(Renderer* renderer, Render_Image_Handle handle)      
-{                                                                               
-    Render_Image removed = {0};
-    if(handle_table_remove(&renderer->images, handle.h, &removed))
-        render_image_deinit(&removed);
+{                                                                           
+    Render_Image* removed = (Render_Image*) handle_table_get_unique(renderer->images, (Handle*) &handle);
+    if(removed)
+        render_image_deinit(removed);
+
+    handle_table_remove(&renderer->images, (Handle*) &handle);
 }    
 
 void renderer_cubeimage_remove(Renderer* renderer, Render_Cubeimage_Handle handle)      
 {                                                                               
-    Render_Cubeimage removed = {0};
-    if(handle_table_remove(&renderer->cubeimages, handle.h, &removed))
-        render_cubeimage_deinit(&removed);
+    Render_Cubeimage* removed = (Render_Cubeimage*) handle_table_get_unique(renderer->cubeimages, (Handle*) &handle);
+    if(removed)
+        render_cubeimage_deinit(removed);
+
+    handle_table_remove(&renderer->cubeimages, (Handle*) &handle);
 }    
 
 void renderer_shader_remove(Renderer* renderer, Render_Shader_Handle handle)      
 {                                                                               
-    Render_Shader removed = {0};
-    if(handle_table_remove(&renderer->shaders, handle.h, &removed))
-        render_shader_deinit(&removed);
+    Render_Shader* removed = (Render_Shader*) handle_table_get_unique(renderer->shaders, (Handle*) &handle);
+    if(removed)
+        render_shader_deinit(removed);
+    handle_table_remove(&renderer->shaders, (Handle*) &handle);
 }  
 void renderer_mesh_remove(Renderer* renderer, Render_Mesh_Handle handle)      
 {                                                                               
-    Render_Mesh removed = {0};
-    if(handle_table_remove(&renderer->meshes, handle.h, &removed))
-        render_mesh_deinit(&removed);
+    Render_Mesh* removed = (Render_Mesh*) handle_table_get_unique(renderer->meshes, (Handle*) &handle);
+    if(removed)
+        render_mesh_deinit(removed);
+    handle_table_remove(&renderer->meshes, (Handle*) &handle);
 }  
 
 void renderer_material_remove(Renderer* renderer, Render_Material_Handle handle)      
 {                                                                               
-    Render_Material removed = {0};
-    if(handle_table_remove(&renderer->materials, handle.h, &removed))
-        render_pbr_material_init(&removed, renderer);
+    Render_Material* removed = (Render_Material*) handle_table_get_unique(renderer->materials, (Handle*) &handle);
+    if(removed)
+        render_pbr_material_deinit(removed, renderer);
+    handle_table_remove(&renderer->materials, (Handle*) &handle);
 }  
 
 void render_pbr_material_deinit(Render_Material* material, Renderer* renderer)
@@ -1120,31 +1124,32 @@ void render_pbr_material_init(Render_Material* material, Renderer* renderer)
     array_init(&material->path, renderer->alloc);
 }
 
-Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources)
+Render_Map render_map_from_map(Map map, Renderer* renderer)
 {
     Render_Map out = {0};
-    Loaded_Image* image = resources_loaded_image_get(resources, map.image);
-    
+    String path = {0};
+
     out.info = map.info;
-    if(image)
+    if(image_get_path(&path, (Image_Ref*) &map.image))
     {
+        Image_Builder* image = image_get((Image_Ref*) &map.image);
         Render_Image_Handle handle = {0};
 
         //Scan if we have this image already
-        HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Image*, found_image)
-            if(builder_is_equal(found_image->path, image->path))
+        HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, Render_Image_Handle, h, Render_Image*, found_image)
+            if(string_is_equal(string_from_builder(found_image->path), path))
             {
-                handle.h = h;
+                handle = h;
                 break;
             }
         HANDLE_TABLE_FOR_EACH_END
 
-        if(handle.h.index == 0)
+        if(HANDLE_IS_NULL(handle))
         {
-            LOG_INFO("RENDER", "Created map %s (%lld channels)", image->path.data, image_builder_channel_count(image->image));
+            LOG_INFO("RENDER", "Created map "STRING_FMT" (%lld channels)", STRING_PRINT(path), image_builder_channel_count(*image));
             Render_Image render_image = {0};
-            render_image_init(&render_image, image_from_builder(image->image), string_from_builder(image->name), 0);
-            array_copy(&render_image.path, image->path);
+            render_image_init(&render_image, image_from_builder(*image), STRING("@TEMP"), 0);
+            builder_assign(&render_image.path, path);
             handle = renderer_image_add(renderer, &render_image);
         }
 
@@ -1154,20 +1159,26 @@ Render_Map render_map_from_map(Map map, Renderer* renderer, Resources* resources
     return out;
 }
 
-Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer, Resources* resources)
+Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer)
 {
     String_Builder concatenated_paths = {renderer->alloc};
 
-    bool had_at_least_one_size = false;
+    bool had_at_least_one_side = false;
     Image images[6] = {0};
     for(isize i = 0; i < 6; i++)
     {
-        Loaded_Image* image = resources_loaded_image_get(resources, cubemap.faces[i].image);
+        Map* map = map_get((Map_Ref*) &cubemap.maps.faces[i]);
+        if(!map)
+            continue;
+
+        Image_Builder* image = image_get((Image_Ref*) &map->image);
         if(image)
         {
-            images[i] = image_from_builder(image->image);
-            had_at_least_one_size = true;
-            builder_append(&concatenated_paths, string_from_builder(image->path));
+            images[i] = image_from_builder(*image);
+            had_at_least_one_side = true;
+            String path = {0};
+            image_get_path(&path, (Image_Ref*) &map->image);
+            builder_append(&concatenated_paths, path);
         }
 
         array_push(&concatenated_paths, '\0');
@@ -1176,21 +1187,25 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer, 
     Render_Cubeimage_Handle handle = {0};
 
     //Scan if we have this cubemap already
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, h, Render_Image*, image_ptr)
+    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, Render_Cubeimage_Handle, h, Render_Image*, image_ptr)
         if(builder_is_equal(image_ptr->path, concatenated_paths))
         {
-            handle.h = h;
+            handle = h;
             break;
         }
     HANDLE_TABLE_FOR_EACH_END
 
-    if(handle.h.index == 0)
+    if(HANDLE_IS_NULL(handle))
     {
-        if(had_at_least_one_size)
+        if(had_at_least_one_side)
         {
             Render_Cubeimage render_image = {0};
-            render_cubeimage_init(&render_image, images, string_from_builder(cubemap.faces[0].name));
+            String name = {0};
+            map_get_name(&name, (Map_Ref*) &cubemap.maps.faces[0]);
+            render_cubeimage_init(&render_image, images, name);
             SWAP(&render_image.path, &concatenated_paths, String_Builder);
+
+            //@NOTE: something seems to be missing here!
 
             handle = renderer_cubeimage_add(renderer, &render_image);
         }
@@ -1199,7 +1214,7 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer, 
     array_deinit(&concatenated_paths);
 
     Render_Cubemap out = {0};
-    out.info = cubemap.faces[0].info;
+    //@NOTE: not setting info!
     out.image = handle;
     return out;
 }
@@ -1210,26 +1225,39 @@ void render_map_unuse(Render_Map map)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void render_pbr_material_init_from_material(Render_Material* render_material, Renderer* renderer, Material* material, Resources* resources)
+
+void render_pbr_material_init_from_material(Render_Material* render_material, Renderer* renderer, Material_Ref material_ref)
 {
     render_pbr_material_init(render_material, renderer);
-
-    ASSERT(material);
+    Material* material = material_get(&material_ref);
     if(material)
     {
-        array_copy(&render_material->name, material->name);
-        array_copy(&render_material->path, material->path);
+        String path = {0};
+        String name = {0};
+        material_get_name(&name, &material_ref);
+        material_get_path(&name, &material_ref);
+
+        builder_assign(&render_material->name, name);
+        builder_assign(&render_material->path, path);
 
         render_material->info = material->info;
 
         for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-            render_material->maps[i] = render_map_from_map(material->maps[i], renderer, resources);  
+        {
+            //@TODO: this is PAIN!
+            Map* map = map_get((Map_Ref*) &material->maps[i]);
+            if(map)
+                render_material->maps[i] = render_map_from_map(*map, renderer);  
+        }
 
         for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-            render_material->cubemaps[i] = render_cubemap_from_cubemap(material->cubemaps[i], renderer, resources);  
+        {
+            Cubemap* cubemap = cubemap_get((Cubemap_Ref*) &material->cubemaps[i]);
+            if(cubemap)
+                render_material->cubemaps[i] = render_cubemap_from_cubemap(*cubemap, renderer);  
+        }
     }
 }
-
 
 //@TODO: carry the concept of leaf groups also to Object!
 typedef struct Render_Object_Leaf_Group {
@@ -1262,49 +1290,63 @@ void render_object_init(Render_Object* render_object, Renderer* renderer)
     array_init(&render_object->leaf_groups, renderer->alloc);
 }
 
-void render_object_init_from_object(Render_Object* render_object, Renderer* renderer, Object object, Resources* resources)
+void render_object_init_from_object(Render_Object* render_object, Renderer* renderer, const Triangle_Mesh_Ref* object_ref)
 {
-    Shape_Assembly* shape_assembly = resources_shape_get(resources, object.shape);
-    String name = string_from_builder(object.name);
-    if(name.size == 0)
-        name = STRING("default");
+    Triangle_Mesh* object = triangle_mesh_get(object_ref);
+    String name = {0};
+    String path = {0};
+    triangle_mesh_get_name(&name, object_ref);
+    triangle_mesh_get_path(&path, object_ref);
 
     render_object_init(render_object, renderer);
-    if(shape_assembly)
+
+    if(object)
     {
-        Shape shape = {0};
-        shape.triangles = shape_assembly->triangles;
-        shape.vertices = shape_assembly->vertices;
+        Shape_Assembly* shape_assembly = shape_get((Shape_Ref*) &object->shape);
+        ASSERT(shape_assembly);
+        if(name.size == 0)
+            name = STRING("default");
 
-        Render_Mesh out_mesh = {0};
-        render_mesh_init_from_shape(&out_mesh, shape, name);
-    
-        render_object->mesh = renderer_mesh_add(renderer, &out_mesh);
-    }
-
-    LOG_INFO("RENDER", "Creating render object from obect at %s. (%lld groups)", object.path.data, (lld) object.groups.size);
-    log_group_push();
-    for(isize i = 0; i < object.groups.size; i++)
-    {
-        Object_Group* group = &object.groups.data[i];
-        LOG_INFO("RENDER", "Group %lld : %s", (lld) i, group->name.data);
-        log_group_push();
-
-        ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
-        Material* material = resources_material_get(resources, group->material);
-        if(material)
+        if(shape_assembly)
         {
-            Render_Object_Leaf_Group out_group = {0};
-            render_pbr_material_init_from_material(&out_group.material, renderer, material, resources);
-            out_group.triangles_from = group->triangles_from;
-            out_group.triangles_to = group->triangles_to;
+            Shape shape = {0};
+            shape.triangles = shape_assembly->triangles;
+            shape.vertices = shape_assembly->vertices;
 
-            array_push(&render_object->leaf_groups, out_group);
+            Render_Mesh out_mesh = {0};
+            render_mesh_init_from_shape(&out_mesh, shape, name);
+    
+            render_object->mesh = renderer_mesh_add(renderer, &out_mesh);
         }
 
+        LOG_INFO("RENDER", "Creating render object from obect at "STRING_FMT". (%lld groups)", STRING_PRINT(path), (lld) object->groups.size);
+        log_group_push();
+        for(isize i = 0; i < object->groups.size; i++)
+        {
+            Triangle_Mesh_Group* group = &object->groups.data[i];
+            LOG_INFO("RENDER", "Group %lld : %s", (lld) i, group->name.data);
+            log_group_push();
+
+            ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
+            if(group->material_i1)
+            {
+                Material_Ref material_ref = *(Material_Ref*) &object->materials.data[group->material_i1 - 1];
+                Material* material = material_get(&material_ref);
+                if(material)
+                {
+                    Render_Object_Leaf_Group out_group = {0};
+                    render_pbr_material_init_from_material(&out_group.material, renderer, material_ref);
+                    out_group.triangles_from = group->triangles_from;
+                    out_group.triangles_to = group->triangles_to;
+
+                    array_push(&render_object->leaf_groups, out_group);
+                }
+            }
+
+            log_group_pop();
+        }
         log_group_pop();
     }
-    log_group_pop();
 }
 
 typedef struct Triangle_Sub_Range
