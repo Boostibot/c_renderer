@@ -208,37 +208,43 @@ void                 string_to_name(Name* name, String string);
     bool                 name##_remove(Type##_Handle* handle); \
     bool                 name##_force_remove(Type##_Handle* handle); \
     
-#define TESTING
+//#define TESTING
     
-#define Type Image_Builder
-#define type_name image
+#define Storage_Type    Image_Builder
+#define Type            Image
+#define type_name       image
 #include "resources_template_file.h"
     
 #ifndef TESTING
 
-#define Type Shape_Assembly
-#define type_name shape
+#define Storage_Type    Shape_Assembly
+#define Type            Shpae
+#define type_name       shape
 #include "resources_template_file.h"
-
-#define Type Map
-#define type_name map
+ 
+#define Type            Map
+#define type_name       map
 #include "resources_template_file.h"
-
-#define Type Cubemap
-#define type_name cubemap
+ 
+#define Storage_Type    Cubemap
+#define Type            Cubemap
+#define type_name       cubemap
 #include "resources_template_file.h"
-
-#define Type Material
-#define type_name material
+     
+#define Storage_Type    Material
+#define Type            Material
+#define type_name       material
 #include "resources_template_file.h"
-
-#define Type Triangle_Mesh
-#define type_name trinagle_mesh
+     
+#define Storage_Type    Triangle_Mesh
+#define Type            Triangle_Mesh
+#define type_name       trinagle_mesh
 #include "resources_template_file.h"
-
-#define Type Shader
-#define type_name shader
-#include "resources_template_file.h"
+     
+#define Storage_Type    Shader
+#define Type            Shader
+#define type_name       shader
+#include "resources_template_file.h"       
     
 #endif
 
@@ -250,6 +256,46 @@ void                 string_to_name(Name* name, String string);
 
     #define RESOURCE_TEMPLATE_IMPL   
     
+    #define Storage_Type    Image_Builder
+    #define Type            Image
+    #define type_name       image
+    #include "resources_template_file.h"
+    
+    #ifndef TESTING
+
+    #define Storage_Type    Shape_Assembly
+    #define Type            Shape
+    #define type_name       shape
+    #include "resources_template_file.h"
+ 
+    #define Type            Map
+    #define type_name       map
+    #include "resources_template_file.h"
+ 
+    #define Storage_Type    Cubemap
+    #define Type            Cubemap
+    #define type_name       cubemap
+    #include "resources_template_file.h"
+     
+    #define Storage_Type    Material
+    #define Type            Material
+    #define type_name       material
+    #include "resources_template_file.h"
+     
+    #define Storage_Type    Triangle_Mesh
+    #define Type            Triangle_Mesh
+    #define type_name       trinagle_mesh
+    #include "resources_template_file.h"
+     
+    #define Storage_Type    Shader
+    #define Type            Shader
+    #define type_name       shader
+    #include "resources_template_file.h"       
+    
+    #endif
+
+    #endif
+
     void _image_init(Image_Builder* out)
     {
         image_builder_init(out, resources_get()->alloc, 1, PIXEL_FORMAT_U8);
@@ -264,40 +310,76 @@ void                 string_to_name(Name* name, String string);
     {
         image_builder_deinit(out);
     }
-
-    #define Type Image_Builder
-    #define type_name image
-    #include "resources_template_file.h"
     
-    #ifndef TESTING
-
-    #define Type Shape_Assembly
-    #define type_name shape
-    #include "resources_template_file.h"
- 
-    #define Type Map
-    #define type_name map
-    #include "resources_template_file.h"
- 
-    #define Type Cubemap
-    #define type_name cubemap
-    #include "resources_template_file.h"
-     
-    #define Type Material
-    #define type_name material
-    #include "resources_template_file.h"
-     
-    #define Type Triangle_Mesh
-    #define type_name trinagle_mesh
-    #include "resources_template_file.h"
-     
-    #define Type Shader
-    #define type_name shader
-    #include "resources_template_file.h"       
+    void _material_init(Material* item)
+    {
+        _material_deinit(item); 
+    }
     
-    #endif
+    void _material_copy(Material* out, const Material* in)
+    {
+        for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(out->maps[i]))
+            {
+                *out = map_make_shared()            
+            }
+                map_share(&out->maps[i]);  
+        
+        for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(out->cubemaps[i]))
+                cubemap_remove(&out->cubemaps[i]);  
 
-    #endif
+        memset(out, 0, sizeof *out);
+    }
+    
+    void _material_deinit(Material* out)
+    {
+        for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(out->maps[i]))
+                map_remove(&out->maps[i]);  
+        
+        for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
+            if(HANDLE_IS_VALID(out->cubemaps[i]))
+                cubemap_remove(&out->cubemaps[i]);  
+
+        memset(out, 0, sizeof *out);
+    }
+
+    void triangle_mesh_group_init(Triangle_Mesh_Group* item)
+    {
+        triangle_mesh_group_deinit(item);
+        array_init(&item->name, resources_get()->alloc);
+    }
+
+    void triangle_mesh_group_deinit(Triangle_Mesh_Group* item)
+    {
+        array_deinit(&item->name);
+        resources_material_remove(item->material);
+        memset(item, 0, sizeof *item);
+    }
+
+    void triangle_mesh_init(Triangle_Mesh* item)
+    {
+        triangle_mesh_deinit(item);
+
+        array_init(&item->path, resources_get()->alloc);
+        array_init(&item->name, resources_get()->alloc);
+        array_init(&item->groups, resources_get()->alloc);
+    }
+
+    void triangle_mesh_deinit(Triangle_Mesh* item)
+    {
+        array_deinit(&item->path);
+        array_deinit(&item->name);
+        resources_material_remove(item->fallback_material);
+        resources_shape_remove(item->shape);
+
+        for(isize i = 0; i < item->groups.size; i++)
+            triangle_mesh_group_deinit(&item->groups.data[i], resources);
+        
+        array_init(&item->groups, resources_get()->alloc);
+        memset(item, 0, sizeof *item);
+    }
 
     //@TODO: make similar thing for escaping stuff
     String get_ephemeral_full_path(String path)
@@ -362,17 +444,12 @@ void resources_init(Allocator* alloc)
     resources_get()->alloc = alloc;
 
     handle_table_init(&resources_get()->resources[RESOURCE_TYPE_MAP], alloc, sizeof(_Image_Resource), DEF_ALIGN);
-    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_SHAPE], alloc, sizeof(_Image_Resource), DEF_ALIGN);
-    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_TRIANGLE_MESH], alloc, sizeof(_Image_Resource), DEF_ALIGN);
-    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_MAP], alloc, sizeof(_Image_Resource), DEF_ALIGN);
-    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_CUBEMAP], alloc, sizeof(_Image_Resource), DEF_ALIGN);
-    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_SHADER], alloc, sizeof(_Image_Resource), DEF_ALIGN);
+    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_SHAPE], alloc, sizeof(_Shape_Resource), DEF_ALIGN);
+    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_TRIANGLE_MESH], alloc, sizeof(_Triangle_Mesh_Resource), DEF_ALIGN);
+    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_MAP], alloc, sizeof(_Map_Resource), DEF_ALIGN);
+    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_CUBEMAP], alloc, sizeof(_Cubemap_Resource), DEF_ALIGN);
+    handle_table_init(&resources_get()->resources[RESOURCE_TYPE_SHADER], alloc, sizeof(_Shader_Resource), DEF_ALIGN);
 }
-
-
-void resources_end_frame(Resources* resources);
-void resources_check_reloads(Resources* resources);
-void resources_update(Resources* resources);
 
 enum {
     _RESOURCE_CLEANUP_TIME = 1,
@@ -455,56 +532,5 @@ void _resources_cleanup(Resources* resources, i64 cleanup_flags)
 }
 
 
-void material_init(Material* item)
-{
-    material_deinit(item); 
-}
-
-void material_deinit(Material* item)
-{
-    for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        resources_map_remove(&item->maps[i]);  
-        
-    for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        resources_cubemap_remove(&item->cubemaps[i]);  
-
-    memset(item, 0, sizeof *item);
-}
-
-void triangle_mesh_group_init(Triangle_Mesh_Group* item)
-{
-    triangle_mesh_group_deinit(item);
-    array_init(&item->name, resources_get()->alloc);
-}
-
-void triangle_mesh_group_deinit(Triangle_Mesh_Group* item)
-{
-    array_deinit(&item->name);
-    resources_material_remove(item->material);
-    memset(item, 0, sizeof *item);
-}
-
-void triangle_mesh_init(Triangle_Mesh* item)
-{
-    triangle_mesh_deinit(item);
-
-    array_init(&item->path, resources_get()->alloc);
-    array_init(&item->name, resources_get()->alloc);
-    array_init(&item->groups, resources_get()->alloc);
-}
-
-void triangle_mesh_deinit(Triangle_Mesh* item)
-{
-    array_deinit(&item->path);
-    array_deinit(&item->name);
-    resources_material_remove(item->fallback_material);
-    resources_shape_remove(item->shape);
-
-    for(isize i = 0; i < item->groups.size; i++)
-        triangle_mesh_group_deinit(&item->groups.data[i], resources);
-        
-    array_init(&item->groups, resources_get()->alloc);
-    memset(item, 0, sizeof *item);
-}
 
 #endif

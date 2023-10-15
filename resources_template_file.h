@@ -1,6 +1,10 @@
 //THIS IS A TEMPLATE FILE DONT INCLUDE IT ON ITS OWN!
 
 //To include this file the following need to be defined:
+#ifndef Storage_Type
+    #error Storage_Type must be defined to one of the resource types!
+#endif
+
 #ifndef Type
     #error Type must be defined to one of the resource types!
 #endif
@@ -8,6 +12,7 @@
 #ifndef type_name
     #error type_name must be defined
 #endif
+
 
 #include "defines.h"
 #include "string.h"
@@ -18,7 +23,7 @@
 #define CC3(a, b, c) CC_(a, b, c)
 
 #if 0
-typedef int Type;
+typedef int Storage_Type;
 typedef struct Type_Ref {int a, b;} Type_Ref;
 typedef struct Type_Handle {int a, b;} Type_Handle;
 
@@ -55,14 +60,14 @@ typedef struct Type_Handle {int a, b;} Type_Handle;
 #define _resource_copy          CC3(_,type_name,_copy)
 #define _resource_init          CC3(_,type_name,_init)
 
-Type_Handle     resource_add(Resource_Params info, Type** out_ptr_or_null);
-Type_Handle     resource_copy(const Type_Ref* old_ref, Type** out_ptr_or_null, Resource_Params params);
-Type_Handle     resource_make_shared(const Type_Ref* old_ref, Type** out_ptr_or_null);
-Type_Handle     resource_make_unique(const Type_Handle* old_ref, Type** out_ptr_or_null, Resource_Params params);
+Type_Handle     resource_add(Resource_Params info, Storage_Type** out_ptr_or_null);
+Type_Handle     resource_copy(const Type_Ref* old_ref, Storage_Type** out_ptr_or_null, Resource_Params params);
+Type_Handle     resource_make_shared(const Type_Ref* old_ref, Storage_Type** out_ptr_or_null);
+Type_Handle     resource_make_unique(const Type_Handle* old_ref, Storage_Type** out_ptr_or_null, Resource_Params params);
 Type_Ref        resource_find_by_path(String path, const Type_Ref* prev_found_or_null);
 Type_Ref        resource_find_by_name(String name, const Type_Ref* prev_found_or_null);
 Type_Ref        resource_find(String name, String path, const Type_Ref* prev_found_or_null);
-Type*           resource_get(const Type_Ref* old_ref);
+Storage_Type*           resource_get(const Type_Ref* old_ref);
 Resource_Info*  resource_get_info(const Type_Ref* old_ref);
 bool            resource_get_path(String* name, const Type_Ref* old_ref);
 bool            resource_get_name(String* name, const Type_Ref* old_ref);
@@ -74,12 +79,12 @@ bool            resource_force_remove(Type_Handle* handle);
 #ifdef RESOURCE_TEMPLATE_IMPL
 
 //These need to be defined if impl is desired!
-void _resource_init(Type* out);
-void _resource_copy(Type* out, const Type* in);
-void _resource_deinit(Type* out);
+void _resource_init(Storage_Type* out);
+void _resource_copy(Storage_Type* out, const Storage_Type* in);
+void _resource_deinit(Storage_Type* out);
 
 typedef struct {                                                                    
-    Type data;                                                                       
+    Storage_Type data;                                                                       
     Resource_Info info;                                                             
     String_Builder full_path;                                                       
     String_Builder name;
@@ -144,7 +149,7 @@ Type_Ref resource_find(String full_path, String name, const Type_Ref* prev_found
     return _resource_find(full_path, true, name, true, prev_found_or_null);
 }
 
-Type* resource_get(const Type_Ref* old_ref)
+Storage_Type* resource_get(const Type_Ref* old_ref)
 {   
     _Resource* item = (_Resource*) handle_table_get(resources_get()->resources[RESOURCE_TYPE_MAP], (Handle*) old_ref);
     if(item)
@@ -211,7 +216,7 @@ String resource_get_path(const Type_Ref* old_ref)
     return path;
 }
     
-Type_Handle resource_add(Resource_Params params, Type** out_ptr_or_null)
+Type_Handle resource_add(Resource_Params params, Storage_Type** out_ptr_or_null)
 {
     Resource_Info info = resource_info_make(params);
     Type_Handle out = _resource_add(params.name, params.path, info);
@@ -252,7 +257,7 @@ bool resource_force_remove(Type_Handle* handle)
     return prev != NULL;
 }
     
-Type_Handle resource_make_shared(const Type_Ref* old_ref, Type** out_ptr_or_null)
+Type_Handle resource_make_shared(const Type_Ref* old_ref, Storage_Type** out_ptr_or_null)
 {
     Type_Handle out = {0};
     _Resource* item = (_Resource*) handle_table_get(resources_get()->resources[RESOURCE_TYPE_MAP], (Handle*) old_ref);
@@ -269,13 +274,13 @@ Type_Handle resource_make_shared(const Type_Ref* old_ref, Type** out_ptr_or_null
 }
     
 
-Type_Handle resource_copy(const Type_Ref* old_ref, Type** out_ptr_or_null, Resource_Params params)
+Type_Handle resource_copy(const Type_Ref* old_ref, Storage_Type** out_ptr_or_null, Resource_Params params)
 {
     Type_Handle out = {0};
     _Resource* item = (_Resource*) handle_table_get(resources_get()->resources[RESOURCE_TYPE_MAP], (Handle*) old_ref);
     if(item)
     {
-        Type* made = NULL;
+        Storage_Type* made = NULL;
         Resource_Info new_info = item->info;
         new_info.reference_count = 1;
         new_info.duration_type = params.duration_type;
@@ -290,7 +295,7 @@ Type_Handle resource_copy(const Type_Ref* old_ref, Type** out_ptr_or_null, Resou
     }
 }
 
-Type_Handle resource_make_unique(const Type_Handle* old_handle, Type** out_ptr_or_null, Resource_Params params)
+Type_Handle resource_make_unique(const Type_Handle* old_handle, Storage_Type** out_ptr_or_null, Resource_Params params)
 {
     Type_Handle out = {0};
     _Resource* item = (_Resource*) handle_table_get(resources_get()->resources[RESOURCE_TYPE_MAP], (Handle*) old_handle);
@@ -312,7 +317,7 @@ Type_Handle resource_make_unique(const Type_Handle* old_handle, Type** out_ptr_o
 #endif
 
 //undef all the things!
-#undef Type
+#undef Storage_Type
 #undef type_name
 
 
