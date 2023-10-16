@@ -146,6 +146,21 @@ typedef struct Renderer
     Handle_Table materials;
 } Renderer;
 
+
+//typedef struct Renderer_Command_Buffer
+//{
+//} Renderer_Command_Buffer;
+//
+//typedef struct Renderer_Environment
+//{
+//    
+//
+//} Renderer_Environment;
+//
+//void render_scene_begin();
+//void render_scene_end();
+
+
 #define VEC2_FMT "{%f, %f}"
 #define VEC2_PRINT(vec) (vec).x, (vec).y
 
@@ -1167,10 +1182,7 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer)
     Image images[6] = {0};
     for(isize i = 0; i < 6; i++)
     {
-        Map* map = map_get((Map_Ref*) &cubemap.maps.faces[i]);
-        if(!map)
-            continue;
-
+        Map* map = &cubemap.maps.faces[i];
         Image_Builder* image = image_get((Image_Ref*) &map->image);
         if(image)
         {
@@ -1205,7 +1217,7 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer)
             render_cubeimage_init(&render_image, images, name);
             SWAP(&render_image.path, &concatenated_paths, String_Builder);
 
-            //@NOTE: something seems to be missing here!
+            ASSERT_MSG(false, "@NOTE: something seems to be missing here!");
 
             handle = renderer_cubeimage_add(renderer, &render_image);
         }
@@ -1243,19 +1255,10 @@ void render_pbr_material_init_from_material(Render_Material* render_material, Re
         render_material->info = material->info;
 
         for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        {
-            //@TODO: this is PAIN!
-            Map* map = map_get((Map_Ref*) &material->maps[i]);
-            if(map)
-                render_material->maps[i] = render_map_from_map(*map, renderer);  
-        }
+            render_material->maps[i] = render_map_from_map(material->maps[i], renderer);  
 
         for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        {
-            Cubemap* cubemap = cubemap_get((Cubemap_Ref*) &material->cubemaps[i]);
-            if(cubemap)
-                render_material->cubemaps[i] = render_cubemap_from_cubemap(*cubemap, renderer);  
-        }
+            render_material->cubemaps[i] = render_cubemap_from_cubemap(material->cubemaps[i], renderer);  
     }
 }
 

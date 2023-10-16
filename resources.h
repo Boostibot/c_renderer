@@ -120,24 +120,23 @@ typedef struct Map {
 typedef struct Cubemap  {    
     union {
         struct {
-            Map_Handle top;   
-            Map_Handle bottom;
-            Map_Handle front; 
-            Map_Handle back;  
-            Map_Handle left;  
-            Map_Handle right;
+            Map top;   
+            Map bottom;
+            Map front; 
+            Map back;  
+            Map left;  
+            Map right;
         };
 
-        Map_Handle faces[6];
+        Map faces[6];
     } maps;
-
 } Cubemap;
 
 typedef struct Material {
     Material_Info info;
 
-    Map_Handle maps[MAP_TYPE_ENUM_COUNT];
-    Cubemap_Handle cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
+    Map maps[MAP_TYPE_ENUM_COUNT];
+    Cubemap cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
 } Material;
 
 typedef struct Triangle_Mesh_Leaf_Group {
@@ -366,7 +365,8 @@ void                 name_from_string(Name* name, String string);
     void _map_copy(Map* out, const Map* in)
     {
         out->info = in->info;
-        out->image = image_make_shared((Image_Ref*) &in->image, NULL);
+        if(HANDLE_IS_VALID(in->image))
+            out->image = image_make_shared((Image_Ref*) &in->image, NULL);
     }
 
     void _map_deinit(Map* out)
@@ -383,13 +383,13 @@ void                 name_from_string(Name* name, String string);
     void _cubemap_copy(Cubemap* out, const Cubemap* in)
     {
         for(isize i = 0; i < 6; i++)
-            out->maps.faces[i] = map_make_shared((Map_Ref*) &in->maps.faces[i], NULL);
+            _map_copy(&out->maps.faces[i], &in->maps.faces[i]);
     }
 
     void _cubemap_deinit(Cubemap* out)
     {
         for(isize i = 0; i < 6; i++)
-            map_remove(&out->maps.faces[i]);
+            _map_deinit(&out->maps.faces[i]);
     }
     
     //MATERIAL
@@ -401,12 +401,10 @@ void                 name_from_string(Name* name, String string);
     void _material_copy(Material* out, const Material* in)
     {
         for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-            if(HANDLE_IS_VALID(in->maps[i]))
-                out->maps[i] = map_make_shared((Map_Ref*) &in->maps[i], NULL);            
+            _map_copy(&out->maps[i], &in->maps[i]);
         
         for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-            if(HANDLE_IS_VALID(in->cubemaps[i]))
-                out->cubemaps[i] = cubemap_make_shared((Cubemap_Ref*) &in->cubemaps[i], NULL);        
+            _cubemap_copy(&out->cubemaps[i], &in->cubemaps[i]);
 
         memset(out, 0, sizeof *out);
     }
@@ -414,12 +412,10 @@ void                 name_from_string(Name* name, String string);
     void _material_deinit(Material* out)
     {
         for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-            if(HANDLE_IS_VALID(out->maps[i]))
-                map_remove(&out->maps[i]);  
+            _map_deinit(&out->maps[i]);
         
         for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-            if(HANDLE_IS_VALID(out->cubemaps[i]))
-                cubemap_remove(&out->cubemaps[i]);  
+            _cubemap_deinit(&out->cubemaps[i]);
 
         memset(out, 0, sizeof *out);
     }

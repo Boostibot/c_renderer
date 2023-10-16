@@ -439,36 +439,13 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
         else
         {
             Map* map = NULL;
-            map_or_cubemap.handle = map_add(params, &map);
+            if(map_or_cubemap.is_cubemap)
+                map = &material->cubemaps[map_or_cubemap.map_or_cubemap_i].maps.faces[map_or_cubemap.face_i];
+            else
+                map = &material->maps[map_or_cubemap.map_or_cubemap_i];
+
             map->image = map_image;
             map->info = map_or_cubemap.description->info;
-
-            if(map_or_cubemap.is_cubemap)
-            {
-                Cubemap* cubemap = NULL;
-                Cubemap_Handle* cubemap_handle = &material->cubemaps[map_or_cubemap.map_or_cubemap_i];
-
-                //@TODO: this is pain and should probably get removed.
-                //       read the other todo below. Cubemaps and maps SHOULDNT exist
-                //       as resource just as assets which are mappings between files and
-                //       resources or other more complex editor structures.
-                //       Since we use stable pointers we can add editor structures on top by having "fat" pointers
-                //       That is a reference to the underlying struct along with pointer to the appropiate member.
-                //       We use the handle to validate and the pointer to opate on the value. If we use relative pointers
-                //       then this approach also works if we ever decide to compact resources
-                // 
-                //if the cubemap doesnt yet exist create it else get it
-                if(HANDLE_IS_NULL(*cubemap_handle))
-                    *cubemap_handle = cubemap_add(params, &cubemap);
-                else
-                    cubemap = cubemap_get((Cubemap_Ref*) cubemap_handle);
-
-                cubemap->maps.faces[map_or_cubemap.face_i] = map_or_cubemap.handle;
-            }
-            else
-            {
-                material->maps[map_or_cubemap.map_or_cubemap_i] = map_or_cubemap.handle;
-            }
         }
     }
 
