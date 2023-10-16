@@ -1,9 +1,10 @@
 #pragma once
 
-#include "gl.h"
-#include "resource_loading.h"
 #include "log.h"
+#include "camera.h"
+#include "gl.h"
 #include "gl_shader_util.h"
+#include "resource_loading.h"
 
 typedef struct Render_Screen_Frame_Buffers
 {
@@ -83,22 +84,6 @@ typedef struct Blinn_Phong_Params
     f32 gamma;
 } Blinn_Phong_Params;
 
-#define PBR_MAX_LIGHTS 4
-typedef struct PBR_Light
-{
-    Vec3 pos;
-    Vec3 color;
-    f32 radius;
-} PBR_Light;
-
-typedef struct PBR_Params
-{
-    PBR_Light lights[PBR_MAX_LIGHTS];
-    Vec3 view_pos;
-    f32 gamma;
-    f32 attentuation_strength;
-    Vec3 ambient_color;
-} PBR_Params;
 
 DEFINE_HANDLE_TYPES(Render_Mesh);
 DEFINE_HANDLE_TYPES(Render_Image);
@@ -133,8 +118,8 @@ typedef struct Render_Material
 #define MAX_PBR_UNIFORM_BUFFERS 10
 #define MAX_PHONG_UNIFORM_BUFFERS 10
 
-//global renderer state
-typedef struct Renderer
+//global render state
+typedef struct Render
 {
     Allocator* alloc;
     Render_Image single_color_images[MAX_SINGLE_COLOR_MAPS];
@@ -144,21 +129,105 @@ typedef struct Renderer
     Handle_Table cubeimages;
     Handle_Table meshes;
     Handle_Table materials;
-} Renderer;
+} Render;
 
 
-//typedef struct Renderer_Command_Buffer
-//{
-//} Renderer_Command_Buffer;
+#define PBR_MAX_LIGHTS 4
+#define PBR_MAX_SPHERE_LIGHTS 128
+#define PBR_MAX_SHADOW_CASTERS 16
+#define PBR_MAX_QUAD_LIGHTS 4
+#define PBR_MAX_LINE_LIGHTS 4
+
+typedef struct Sphere_Light
+{
+    Vec3 pos;
+    Vec3 color;
+    f32 radius;
+} Sphere_Light;
+
+typedef struct Line_Light
+{
+    Vec3 pos1;
+    Vec3 pos2;
+    Vec3 color1;
+    Vec3 color2;
+    f32 radius;
+} Line_Light;
+
+typedef struct Quad_Light
+{
+    Vec3 top_left;
+    Vec3 bottom_right;
+    Vec3 color;
+} Quad_Light;
+
+typedef struct PBR_Params
+{
+    Sphere_Light lights[PBR_MAX_LIGHTS];
+    Vec3 view_pos;
+    f32 gamma;
+    f32 attentuation_strength;
+    Vec3 ambient_color;
+} PBR_Params;
+
+typedef struct Render_Environment {
+    Sphere_Light sphere_lights[PBR_MAX_SPHERE_LIGHTS];
+    Line_Light   line_lights[PBR_MAX_SPHERE_LIGHTS];
+    Quad_Light   quad_lights[PBR_MAX_QUAD_LIGHTS];
+
+    Camera camera;
+    f32 attentuation_strength;
+    Vec3 ambient_color;
+} Render_Environment;
+
+typedef struct Render_Mesh_Environment
+{
+    int a;
+} Render_Mesh_Environment;
+
+typedef struct Render_Scene_Layer
+{
+    Name name;
+} Render_Scene_Layer;
+
+typedef struct Render_Command {
+    Render_Environment* environment;
+    Triangle_Mesh_Ref mesh;
+    Shader_Ref shader;
+    Transform transform;
+    Render_Mesh_Environment mesh_environment;
+} Render_Command;
+
+
+DEFINE_ARRAY_TYPE(Render_Command, Render_Command_Array);
+
+typedef struct Render_Command_Buffer
+{
+    Render_Command_Array commands; 
+} Render_Command_Buffer;
+
+
+
 //
-//typedef struct Renderer_Environment
-//{
-//    
+// GameWorld world_world = {};
+// Entity 
+
+
+// render_layer_begin("Objects", NULL);
+//    render_add_spherical_lights(world.lights);
+//    render_add_spherical_lights(world.lights);
+// 
+//    render_add_mesh(mesh, environment, 
+// render_layer_end();
 //
-//} Renderer_Environment;
+// render_add_post_process(shader_postprocess1);
+// render_add_post_process(shader_postprocess2);
 //
-//void render_scene_begin();
-//void render_scene_end();
+// render_draw_frame();
+// render_next_frame();
+
+void render_scene_begin();
+void render_scene_end();
 
 
 #define VEC2_FMT "{%f, %f}"
@@ -1000,75 +1069,75 @@ void render_mesh_draw_using_skybox(Render_Mesh mesh, const Render_Shader* skybox
     glDepthFunc(GL_LESS);
 }
 
-void render_pbr_material_deinit(Render_Material* material, Renderer* renderer);
-void render_pbr_material_init(Render_Material* material, Renderer* renderer);
+void render_pbr_material_deinit(Render_Material* material, Render* render);
+void render_pbr_material_init(Render_Material* material, Render* render);
 
 
-void renderer_deinit(Renderer* renderer)
+void render_deinit(Render* render)
 {
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->materials, Handle, h, Render_Material*, render_pbr_material)
-        render_pbr_material_deinit(render_pbr_material, renderer);
+    HANDLE_TABLE_FOR_EACH_BEGIN(render->materials, Handle, h, Render_Material*, render_pbr_material)
+        render_pbr_material_deinit(render_pbr_material, render);
     HANDLE_TABLE_FOR_EACH_END
 
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, Handle, h, Render_Image*, render_image)
+    HANDLE_TABLE_FOR_EACH_BEGIN(render->images, Handle, h, Render_Image*, render_image)
         render_image_deinit(render_image);
     HANDLE_TABLE_FOR_EACH_END
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->shaders, Handle, h, Render_Shader*, render_shader)
+    HANDLE_TABLE_FOR_EACH_BEGIN(render->shaders, Handle, h, Render_Shader*, render_shader)
         render_shader_deinit(render_shader);
     HANDLE_TABLE_FOR_EACH_END
     
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->meshes, Handle, h, Render_Mesh*, render_mesh)
+    HANDLE_TABLE_FOR_EACH_BEGIN(render->meshes, Handle, h, Render_Mesh*, render_mesh)
         render_mesh_deinit(render_mesh);
     HANDLE_TABLE_FOR_EACH_END
     
-    handle_table_deinit(&renderer->materials);
-    handle_table_deinit(&renderer->images);
-    handle_table_deinit(&renderer->cubeimages);
-    handle_table_deinit(&renderer->shaders);
-    handle_table_deinit(&renderer->meshes);
+    handle_table_deinit(&render->materials);
+    handle_table_deinit(&render->images);
+    handle_table_deinit(&render->cubeimages);
+    handle_table_deinit(&render->shaders);
+    handle_table_deinit(&render->meshes);
 
-    memset(renderer, 0, sizeof *renderer);
+    memset(render, 0, sizeof *render);
 }
 
-void renderer_init(Renderer* renderer, Allocator* alloc)
+void render_init(Render* render, Allocator* alloc)
 {
-    renderer_deinit(renderer);
+    render_deinit(render);
 
-    renderer->alloc = alloc;
-    handle_table_init(&renderer->images, alloc, sizeof(Render_Image), DEF_ALIGN);
-    handle_table_init(&renderer->cubeimages, alloc, sizeof(Render_Cubeimage), DEF_ALIGN);
-    handle_table_init(&renderer->shaders, alloc, sizeof(Render_Shader), DEF_ALIGN);
-    handle_table_init(&renderer->meshes, alloc, sizeof(Render_Mesh), DEF_ALIGN);
-    handle_table_init(&renderer->materials, alloc, sizeof(Render_Material), DEF_ALIGN);
+    render->alloc = alloc;
+    handle_table_init(&render->images, alloc, sizeof(Render_Image), DEF_ALIGN);
+    handle_table_init(&render->cubeimages, alloc, sizeof(Render_Cubeimage), DEF_ALIGN);
+    handle_table_init(&render->shaders, alloc, sizeof(Render_Shader), DEF_ALIGN);
+    handle_table_init(&render->meshes, alloc, sizeof(Render_Mesh), DEF_ALIGN);
+    handle_table_init(&render->materials, alloc, sizeof(Render_Material), DEF_ALIGN);
 }
 
 #define DEFINE_RENDERER_RESOURCE(Type, name, member_name)                              \
-    Type##_Handle renderer_##name##_add(Renderer* renderer, Type* item)                \
+    Type##_Handle render_##name##_add(Render* render, Type* item)                \
     {                                                                                   \
         Type##_Handle out = {0};                                                        \
-        Type* added_ptr = (Type*) handle_table_add(&renderer->member_name, (Handle*) &out);     \
+        Type* added_ptr = (Type*) handle_table_add(&render->member_name, (Handle*) &out);     \
         SWAP(added_ptr, item, Type);                                                    \
                                                                                         \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
-    Type##_Handle renderer_##name##_share(Renderer* renderer, Type##_Handle handle)     \
+    Type##_Handle render_##name##_share(Render* render, Type##_Handle handle)     \
     {                                                                                   \
         Type##_Handle out = {0};                                                        \
-        handle_table_share(&renderer->member_name, (Handle*) &handle, (Handle*) &out); \
+        handle_table_share(&render->member_name, (Handle*) &handle, (Handle*) &out); \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
-    Type* renderer_##name##_get(Renderer* renderer, Type##_Handle handle)               \
+    Type* render_##name##_get(Render* render, Type##_Handle handle)               \
     {                                                                                   \
-        Type* out = (Type*) handle_table_get(renderer->member_name, (Handle*) &handle); \
+        Type* out = (Type*) handle_table_get(render->member_name, (Handle*) &handle); \
         return out;                                                                     \
     }                                                                                   \
                                                                                         \
-    Type* renderer_##name##_get_ref(Renderer* renderer, Type##_Ref handle)              \
+    Type* render_##name##_get_ref(Render* render, Type##_Ref handle)              \
     {                                                                                   \
-        return (Type*) handle_table_get(renderer->member_name, (Handle*) &handle);      \
+        return (Type*) handle_table_get(render->member_name, (Handle*) &handle);      \
     }                                                                                   \
 
 DEFINE_RENDERER_RESOURCE(Render_Image, image, images)
@@ -1077,69 +1146,69 @@ DEFINE_RENDERER_RESOURCE(Render_Shader, shader, shaders)
 DEFINE_RENDERER_RESOURCE(Render_Mesh, mesh, meshes)
 DEFINE_RENDERER_RESOURCE(Render_Material, material, materials)
 
-void renderer_image_remove(Renderer* renderer, Render_Image_Handle handle)      
+void render_image_remove(Render* render, Render_Image_Handle handle)      
 {                                                                           
-    Render_Image* removed = (Render_Image*) handle_table_get_unique(renderer->images, (Handle*) &handle);
+    Render_Image* removed = (Render_Image*) handle_table_get_unique(render->images, (Handle*) &handle);
     if(removed)
         render_image_deinit(removed);
 
-    handle_table_remove(&renderer->images, (Handle*) &handle);
+    handle_table_remove(&render->images, (Handle*) &handle);
 }    
 
-void renderer_cubeimage_remove(Renderer* renderer, Render_Cubeimage_Handle handle)      
+void render_cubeimage_remove(Render* render, Render_Cubeimage_Handle handle)      
 {                                                                               
-    Render_Cubeimage* removed = (Render_Cubeimage*) handle_table_get_unique(renderer->cubeimages, (Handle*) &handle);
+    Render_Cubeimage* removed = (Render_Cubeimage*) handle_table_get_unique(render->cubeimages, (Handle*) &handle);
     if(removed)
         render_cubeimage_deinit(removed);
 
-    handle_table_remove(&renderer->cubeimages, (Handle*) &handle);
+    handle_table_remove(&render->cubeimages, (Handle*) &handle);
 }    
 
-void renderer_shader_remove(Renderer* renderer, Render_Shader_Handle handle)      
+void render_shader_remove(Render* render, Render_Shader_Handle handle)      
 {                                                                               
-    Render_Shader* removed = (Render_Shader*) handle_table_get_unique(renderer->shaders, (Handle*) &handle);
+    Render_Shader* removed = (Render_Shader*) handle_table_get_unique(render->shaders, (Handle*) &handle);
     if(removed)
         render_shader_deinit(removed);
-    handle_table_remove(&renderer->shaders, (Handle*) &handle);
+    handle_table_remove(&render->shaders, (Handle*) &handle);
 }  
-void renderer_mesh_remove(Renderer* renderer, Render_Mesh_Handle handle)      
+void render_mesh_remove(Render* render, Render_Mesh_Handle handle)      
 {                                                                               
-    Render_Mesh* removed = (Render_Mesh*) handle_table_get_unique(renderer->meshes, (Handle*) &handle);
+    Render_Mesh* removed = (Render_Mesh*) handle_table_get_unique(render->meshes, (Handle*) &handle);
     if(removed)
         render_mesh_deinit(removed);
-    handle_table_remove(&renderer->meshes, (Handle*) &handle);
+    handle_table_remove(&render->meshes, (Handle*) &handle);
 }  
 
-void renderer_material_remove(Renderer* renderer, Render_Material_Handle handle)      
+void render_material_remove(Render* render, Render_Material_Handle handle)      
 {                                                                               
-    Render_Material* removed = (Render_Material*) handle_table_get_unique(renderer->materials, (Handle*) &handle);
+    Render_Material* removed = (Render_Material*) handle_table_get_unique(render->materials, (Handle*) &handle);
     if(removed)
-        render_pbr_material_deinit(removed, renderer);
-    handle_table_remove(&renderer->materials, (Handle*) &handle);
+        render_pbr_material_deinit(removed, render);
+    handle_table_remove(&render->materials, (Handle*) &handle);
 }  
 
-void render_pbr_material_deinit(Render_Material* material, Renderer* renderer)
+void render_pbr_material_deinit(Render_Material* material, Render* render)
 {
     array_deinit(&material->name);
     array_deinit(&material->path);
     
     for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-        renderer_image_remove(renderer, material->maps[i].image);  
+        render_image_remove(render, material->maps[i].image);  
 
     for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-        renderer_cubeimage_remove(renderer, material->cubemaps[i].image);  
+        render_cubeimage_remove(render, material->cubemaps[i].image);  
     
     memset(material, 0, sizeof *material);
 }
 
-void render_pbr_material_init(Render_Material* material, Renderer* renderer)
+void render_pbr_material_init(Render_Material* material, Render* render)
 {
-    render_pbr_material_deinit(material, renderer);
-    array_init(&material->name, renderer->alloc);
-    array_init(&material->path, renderer->alloc);
+    render_pbr_material_deinit(material, render);
+    array_init(&material->name, render->alloc);
+    array_init(&material->path, render->alloc);
 }
 
-Render_Map render_map_from_map(Map map, Renderer* renderer)
+Render_Map render_map_from_map(Map map, Render* render)
 {
     Render_Map out = {0};
     String path = {0};
@@ -1151,7 +1220,7 @@ Render_Map render_map_from_map(Map map, Renderer* renderer)
         Render_Image_Handle handle = {0};
 
         //Scan if we have this image already
-        HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, Render_Image_Handle, h, Render_Image*, found_image)
+        HANDLE_TABLE_FOR_EACH_BEGIN(render->images, Render_Image_Handle, h, Render_Image*, found_image)
             if(string_is_equal(string_from_builder(found_image->path), path))
             {
                 handle = h;
@@ -1165,7 +1234,7 @@ Render_Map render_map_from_map(Map map, Renderer* renderer)
             Render_Image render_image = {0};
             render_image_init(&render_image, image_from_builder(*image), STRING("@TEMP"), 0);
             builder_assign(&render_image.path, path);
-            handle = renderer_image_add(renderer, &render_image);
+            handle = render_image_add(render, &render_image);
         }
 
         out.image = handle;
@@ -1174,9 +1243,9 @@ Render_Map render_map_from_map(Map map, Renderer* renderer)
     return out;
 }
 
-Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer)
+Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Render* render)
 {
-    String_Builder concatenated_paths = {renderer->alloc};
+    String_Builder concatenated_paths = {render->alloc};
 
     bool had_at_least_one_side = false;
     Image images[6] = {0};
@@ -1199,7 +1268,7 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer)
     Render_Cubeimage_Handle handle = {0};
 
     //Scan if we have this cubemap already
-    HANDLE_TABLE_FOR_EACH_BEGIN(renderer->images, Render_Cubeimage_Handle, h, Render_Image*, image_ptr)
+    HANDLE_TABLE_FOR_EACH_BEGIN(render->images, Render_Cubeimage_Handle, h, Render_Image*, image_ptr)
         if(builder_is_equal(image_ptr->path, concatenated_paths))
         {
             handle = h;
@@ -1219,7 +1288,7 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Renderer* renderer)
 
             ASSERT_MSG(false, "@NOTE: something seems to be missing here!");
 
-            handle = renderer_cubeimage_add(renderer, &render_image);
+            handle = render_cubeimage_add(render, &render_image);
         }
     }
     
@@ -1238,9 +1307,9 @@ void render_map_unuse(Render_Map map)
 }
 
 
-void render_pbr_material_init_from_material(Render_Material* render_material, Renderer* renderer, Material_Ref material_ref)
+void render_pbr_material_init_from_material(Render_Material* render_material, Render* render, Material_Ref material_ref)
 {
-    render_pbr_material_init(render_material, renderer);
+    render_pbr_material_init(render_material, render);
     Material* material = material_get(&material_ref);
     if(material)
     {
@@ -1255,10 +1324,10 @@ void render_pbr_material_init_from_material(Render_Material* render_material, Re
         render_material->info = material->info;
 
         for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
-            render_material->maps[i] = render_map_from_map(material->maps[i], renderer);  
+            render_material->maps[i] = render_map_from_map(material->maps[i], render);  
 
         for(isize i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-            render_material->cubemaps[i] = render_cubemap_from_cubemap(material->cubemaps[i], renderer);  
+            render_material->cubemaps[i] = render_cubemap_from_cubemap(material->cubemaps[i], render);  
     }
 }
 
@@ -1277,23 +1346,23 @@ typedef struct Render_Object {
     Render_Object_Leaf_Group_Array leaf_groups; 
 } Render_Object;
 
-void render_object_deinit(Render_Object* render_object, Renderer* renderer)
+void render_object_deinit(Render_Object* render_object, Render* render)
 {
-    renderer_mesh_remove(renderer, render_object->mesh);
+    render_mesh_remove(render, render_object->mesh);
 
     for(isize i = 0; i < render_object->leaf_groups.size; i++)
-        render_pbr_material_deinit(&render_object->leaf_groups.data[i].material, renderer);
+        render_pbr_material_deinit(&render_object->leaf_groups.data[i].material, render);
 
     array_deinit(&render_object->leaf_groups);
 }
 
-void render_object_init(Render_Object* render_object, Renderer* renderer)
+void render_object_init(Render_Object* render_object, Render* render)
 {
-    render_object_deinit(render_object, renderer);
-    array_init(&render_object->leaf_groups, renderer->alloc);
+    render_object_deinit(render_object, render);
+    array_init(&render_object->leaf_groups, render->alloc);
 }
 
-void render_object_init_from_object(Render_Object* render_object, Renderer* renderer, const Triangle_Mesh_Ref* object_ref)
+void render_object_init_from_object(Render_Object* render_object, Render* render, const Triangle_Mesh_Ref* object_ref)
 {
     Triangle_Mesh* object = triangle_mesh_get(object_ref);
     String name = {0};
@@ -1301,7 +1370,7 @@ void render_object_init_from_object(Render_Object* render_object, Renderer* rend
     triangle_mesh_get_name(&name, object_ref);
     triangle_mesh_get_path(&path, object_ref);
 
-    render_object_init(render_object, renderer);
+    render_object_init(render_object, render);
 
     if(object)
     {
@@ -1319,7 +1388,7 @@ void render_object_init_from_object(Render_Object* render_object, Renderer* rend
             Render_Mesh out_mesh = {0};
             render_mesh_init_from_shape(&out_mesh, shape, name);
     
-            render_object->mesh = renderer_mesh_add(renderer, &out_mesh);
+            render_object->mesh = render_mesh_add(render, &out_mesh);
         }
 
         LOG_INFO("RENDER", "Creating render object from obect at "STRING_FMT". (%lld groups)", STRING_PRINT(path), (lld) object->groups.size);
@@ -1338,7 +1407,7 @@ void render_object_init_from_object(Render_Object* render_object, Renderer* rend
                 if(material)
                 {
                     Render_Object_Leaf_Group out_group = {0};
-                    render_pbr_material_init_from_material(&out_group.material, renderer, material_ref);
+                    render_pbr_material_init_from_material(&out_group.material, render, material_ref);
                     out_group.triangles_from = group->triangles_from;
                     out_group.triangles_to = group->triangles_to;
 
@@ -1389,9 +1458,9 @@ bool render_filled_map_use(Render_Filled_Map map, const Render_Shader* shader, c
 }
 
 //@TODO: remove till 20/10/2023 
-bool render_map_use(Render_Map map, Renderer* renderer, const Render_Shader* shader, const char* name, isize* slot)
+bool render_map_use(Render_Map map, Render* render, const Render_Shader* shader, const char* name, isize* slot)
 {
-    Render_Image* image = renderer_image_get(renderer, map.image);
+    Render_Image* image = render_image_get(render, map.image);
     if(image)
     {
         render_image_use(image, *slot);
@@ -1402,7 +1471,7 @@ bool render_map_use(Render_Map map, Renderer* renderer, const Render_Shader* sha
     return image != NULL;
 }
 
-//@TODO: restore esentially to the previous version. Ie do the querying from Renderer to outside of this func and supply something like Render_Material_Pointers.
+//@TODO: restore esentially to the previous version. Ie do the querying from Render to outside of this func and supply something like Render_Material_Pointers.
 // This is necessary so that this whole thing becomes at least a bit disentagled from the handle mess. I want concrete things in my life again :( 
 void render_mesh_draw_using_pbr(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Filled_Material* material, 
     const Triangle_Sub_Range* sub_range_or_null)
@@ -1482,18 +1551,18 @@ void render_mesh_draw_using_pbr(Render_Mesh mesh, const Render_Shader* pbr_shade
 }
 
 
-Render_Filled_Map render_filled_map_from_map(Renderer* renderer, Render_Map map)
+Render_Filled_Map render_filled_map_from_map(Render* render, Render_Map map)
 {
     Render_Filled_Map filled_map = {0};
-    filled_map.image = renderer_image_get(renderer, map.image);
+    filled_map.image = render_image_get(render, map.image);
     filled_map.info = map.info;
 
     return filled_map;
 }
 
-void render_object(const Render_Object* render_object, Renderer* renderer, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params)
+void render_object(const Render_Object* render_object, Render* render, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params)
 {
-    Render_Mesh* mesh = renderer_mesh_get(renderer, render_object->mesh);
+    Render_Mesh* mesh = render_mesh_get(render, render_object->mesh);
     if(!mesh)
     {
         LOG_ERROR("RENDER", "render object does not have mesh! " SOURCE_INFO_FMT, SOURCE_INFO_PRINT(SOURCE_INFO()));
@@ -1508,11 +1577,11 @@ void render_object(const Render_Object* render_object, Renderer* renderer, const
         sub_range.triangles_to = group->triangles_to;
         filled_material.info = group->material.info;
         
-        filled_material.albedo = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_ALBEDO]);
-        filled_material.normal = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_NORMAL]);
-        filled_material.metallic = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_METALLIC]);
-        filled_material.roughness = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_ROUGNESS]);
-        filled_material.ambient_occlusion = render_filled_map_from_map(renderer, group->material.maps[MAP_TYPE_AMBIENT_OCCLUSION]);
+        filled_material.albedo = render_filled_map_from_map(render, group->material.maps[MAP_TYPE_ALBEDO]);
+        filled_material.normal = render_filled_map_from_map(render, group->material.maps[MAP_TYPE_NORMAL]);
+        filled_material.metallic = render_filled_map_from_map(render, group->material.maps[MAP_TYPE_METALLIC]);
+        filled_material.roughness = render_filled_map_from_map(render, group->material.maps[MAP_TYPE_ROUGNESS]);
+        filled_material.ambient_occlusion = render_filled_map_from_map(render, group->material.maps[MAP_TYPE_AMBIENT_OCCLUSION]);
 
         render_mesh_draw_using_pbr(*mesh, pbr_shader, projection, view, model, params, &filled_material, &sub_range);
     }

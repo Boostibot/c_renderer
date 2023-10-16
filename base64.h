@@ -149,7 +149,9 @@ EXPORT int64_t base64_encode(void* _out, const void* _data, int64_t len, Base64_
     }
 
     int64_t written = (int64_t)(out - (uint8_t*) _out);
+    #ifndef NDEBUG
     ASSERT(0 <= written && written <= olen);
+    #endif // !NDEBUG
     return written;
 }
 

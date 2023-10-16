@@ -45,7 +45,7 @@ int64_t         platform_thread_get_proccessor_count();
 Platform_Thread platform_thread_create(int (*func)(void*), void* context, int64_t stack_size); //CreateThread
 void            platform_thread_destroy(Platform_Thread* thread); //CloseHandle 
 
-int64_t         platform_thread_get_id();
+int32_t         platform_thread_get_id();
 void            platform_thread_yield();
 void            platform_thread_sleep(int64_t ms);
 void            platform_thread_exit(int code);

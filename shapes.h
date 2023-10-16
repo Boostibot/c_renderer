@@ -245,8 +245,12 @@ Winding_Order triangle_get_winding_order(const Vertex v1, const Vertex v2, const
         return WINDING_ORDER_CLOCKWISE;
 }
 
+void dummy_func() {}
+
 Winding_Order triangle_get_winding_order_at_index(const Vertex* vertices, isize vertex_count, Triangle_Index trinagle)
 {
+    !dummy_func ? (void) &vertex_count : (void) 0;
+
     CHECK_BOUNDS(trinagle.vertex_i[0], vertex_count);
     CHECK_BOUNDS(trinagle.vertex_i[1], vertex_count);
     CHECK_BOUNDS(trinagle.vertex_i[2], vertex_count);
@@ -476,6 +480,7 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
 
 Shape shapes_make_uv_sphere(isize iters, f32 radius)
 {
+    (void) radius;
     PERF_COUNTER_START(c);
     ASSERT(radius > 0);
     ASSERT(iters >= 0);

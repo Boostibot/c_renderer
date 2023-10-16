@@ -49,6 +49,7 @@ void main()
 #include "todo.h"
 #include "resource_loading.h"
 #include "render.h"
+#include "camera.h"
 
 //#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
@@ -143,29 +144,6 @@ typedef struct Controls
 #undef near
 #undef far
 
-typedef struct Camera
-{
-    f32 fov;
-    f32 aspect_ratio;
-    Vec3 pos;
-    Vec3 looking_at;
-    Vec3 up_dir;
-
-    f32 near;
-    f32 far;
-    
-    //if is set to true looking_at is relative to pos 
-    //effectively making the looking_at become looking_at + pos
-    bool is_position_relative;  
-
-    //specifies if should use ortographic projection.
-    //If is true uses top/bot/left/right. The area of the rectangle must not be 0!
-    bool is_ortographic;        
-    f32 top;
-    f32 bot;
-    f32 left;
-    f32 right;
-} Camera;
 
 typedef struct App_Settings
 {
@@ -544,38 +522,6 @@ void glfw_error_func(int code, const char* description)
     LOG_ERROR("APP", "GLWF error %d with message: %s", code, description);
 }
 
-Mat4 camera_make_projection_matrix(Camera camera)
-{
-    Mat4 projection = {0};
-    if(camera.is_ortographic)
-        projection = mat4_ortographic_projection(camera.bot, camera.top, camera.left, camera.right, camera.near, camera.far);
-    else
-        projection = mat4_perspective_projection(camera.fov, camera.aspect_ratio, camera.near, camera.far);
-    return projection;
-}
-
-Vec3 camera_get_look_dir(Camera camera)
-{
-    Vec3 look_dir = camera.looking_at;
-    if(camera.is_position_relative == false)
-        look_dir = vec3_sub(look_dir, camera.pos);
-    return look_dir;
-}
-
-Vec3 camera_get_looking_at(Camera camera)
-{
-    Vec3 looking_at = camera.looking_at;
-    if(camera.is_position_relative)
-        looking_at = vec3_add(looking_at, camera.pos); 
-    return looking_at;
-}
-
-Mat4 camera_make_view_matrix(Camera camera)
-{
-    Vec3 looking_at = camera_get_looking_at(camera);
-    Mat4 view = mat4_look_at(camera.pos, looking_at, camera.up_dir);
-    return view;
-}
 
 void run_func(void* context);
 void run_test_func(void* context);
@@ -623,7 +569,7 @@ int main()
         glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
     }
  
-    GLFWwindow* window = glfwCreateWindow(1600, 900, "Renderer", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1600, 900, "Render", NULL, NULL);
     TEST_MSG(window != NULL, "Failed to make glfw window");
 
     App_State app = {0};
@@ -947,8 +893,17 @@ EXPORT void allocator_out_of_memory(
     platform_abort();
 }
 
+
 void run_func(void* context)
 {
+    int64_t counters[1000] = {0};
+    for(isize i = 0; i < STATIC_ARRAY_SIZE(counters); i++)
+        counters[i] = platform_perf_counter();
+
+    for(isize i = 0; i < STATIC_ARRAY_SIZE(counters); i++)
+        LOG_INFO("app", "%lld", counters[i]);
+
+    abort();
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
     LOG_INFO("APP", "run_func enter");
@@ -994,12 +949,12 @@ void run_func(void* context)
     debug_allocator_init(&renderer_alloc, upstream_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
     Resources resources = {0};
-    Renderer renderer = {0};
+    Render renderer = {0};
 
     resources_init(&resources, &resources_alloc.allocator);
     resources_set(&resources);
 
-    renderer_init(&renderer, &renderer_alloc.allocator);
+    render_init(&renderer, &renderer_alloc.allocator);
     
     Triangle_Mesh_Handle falcon_handle = {0};
     Render_Object render_falcon = {0};
@@ -1361,7 +1316,7 @@ void run_func(void* context)
             glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            PBR_Light lights[PBR_MAX_LIGHTS] = {0};
+            Sphere_Light lights[PBR_MAX_LIGHTS] = {0};
 
             f32 light_radius = 0.3f;
             if(control_is_down(&app->controls, CONTROL_DEBUG_4))
@@ -1385,7 +1340,7 @@ void run_func(void* context)
 
             //render blinn phong sphere
             {
-                PBR_Light light = lights[0]; 
+                Sphere_Light light = lights[0]; 
                 Blinn_Phong_Params blinn_phong_params = {0};
                 blinn_phong_params.light_ambient_strength = 0.01f;
                 blinn_phong_params.light_specular_strength = 0.4f;
@@ -1461,7 +1416,7 @@ void run_func(void* context)
             //render light
             for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
             {
-                PBR_Light light = lights[i]; 
+                Sphere_Light light = lights[i]; 
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
                 //render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, settings->screen_gamma);
                 render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, 1);
@@ -1555,7 +1510,7 @@ void run_func(void* context)
             
             log_perf_counters("APP", LOG_TYPE_INFO, true);
 
-            LOG_INFO("RENDER", "Renderer allocation stats:");
+            LOG_INFO("RENDER", "Render allocation stats:");
             log_group_push();
                 log_allocator_stats("RENDER", LOG_TYPE_INFO, allocator_get_stats(&renderer_alloc.allocator));
             log_group_pop();
@@ -1573,7 +1528,7 @@ void run_func(void* context)
         if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
         {
             fps_display_last_update = end_frame_time;
-            format_into(&fps_display, "Renderer %5d fps", (int) (1.0f/frame_time));
+            format_into(&fps_display, "Render %5d fps", (int) (1.0f/frame_time));
             glfwSetWindowTitle(window, cstring_from_builder(fps_display));
         }
     }
@@ -1608,7 +1563,7 @@ void run_func(void* context)
     
     render_object_deinit(&render_falcon, &renderer);
     resources_deinit(&resources);
-    renderer_deinit(&renderer);
+    render_deinit(&renderer);
 
     render_pbr_material_deinit(&material_metal, &renderer);
 

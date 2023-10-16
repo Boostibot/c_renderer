@@ -106,7 +106,7 @@ void platform_thread_destroy(Platform_Thread* thread)
     *thread = null;
 }
 
-int64_t platform_thread_get_id()
+int32_t platform_thread_get_id()
 {
     return GetCurrentThreadId();
 }

@@ -62,13 +62,12 @@ void platform_abort();
 
     //Doesnt do anything (failed branch) but still properly expands x and msg so it can be type checked.
     //Dissabled asserts expand to this.
-    #define DISSABLED_CHECK_RANGE_BOUNDS(i, from, to) ((void) (false && (from) <= (i) && (i) <= (to)))
-    #define DISSABLED_TEST_MSG(x, msg, ...)           (0 ? ((x), assertion_report("", SOURCE_INFO(), (msg), ##__VA_ARGS__)) : (void) 0)
+    #define DISSABLED_TEST_MSG(x, msg, ...)           (0 ? ((void) (x), assertion_report("", SOURCE_INFO(), (msg), ##__VA_ARGS__)) : (void) 0)
 
     //If dissabled expand to this
     #define _IF_NOT_DO_ASSERTS(ignore)         DISSABLED_TEST_MSG
     #define _IF_NOT_DO_ASSERTS_SLOW(ignore)    DISSABLED_TEST_MSG
-    #define _IF_NOT_DO_BOUNDS_CHECK(ignore)    DISSABLED_CHECK_RANGE_BOUNDS
+    #define _IF_NOT_DO_BOUNDS_CHECKS(ignore)   DISSABLED_TEST_MSG
 
     //Pre-Processor (PP) utils
     #define PP_CONCAT2(a, b) a ## b

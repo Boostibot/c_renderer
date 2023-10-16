@@ -504,6 +504,8 @@ INTERNAL Debug_Allocator_Panic_Reason _debug_allocator_check_block(const Debug_A
 
 INTERNAL void _debug_allocator_assert_block(const Debug_Allocator* allocator, void* user_ptr)
 {
+    (void) user_ptr;
+    (void) allocator;
     #ifndef NDEBUG
         isize interpenetration = 0;
         isize found = 0;

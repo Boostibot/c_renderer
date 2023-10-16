@@ -12,10 +12,6 @@ typedef struct Resource_Callstack {
     void* stack_frames[RESOURCE_CALLSTACK_SIZE];
 } Resource_Callstack;
 
-typedef struct Uid {
-    i64 epoch_time;
-    i64 microsecond_index;
-} Uid;
 
 typedef struct Name {
     char data[RESOURCE_NAME_SIZE];

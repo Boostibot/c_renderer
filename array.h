@@ -377,6 +377,7 @@ EXPORT void _array_unappend(void* array, isize item_size, isize data_count)
 
 EXPORT void _array_clear(void* array, isize item_size)
 {
+    (void) item_size;
     ASSERT(_array_is_invariant(array, item_size));
     u8_Array* base = (u8_Array*) array;
     base->size = 0;

@@ -155,9 +155,6 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
 
     INTERNAL isize _lin_probe_hash_rehash(Hash_Index_Entry* new_entries, isize new_entries_size, const Hash_Index_Entry* entries, isize entries_size)
     {  
-        if(entries_size > 0)
-            ASSERT(new_entries_size != 0);
-        
         memset(new_entries, 0, new_entries_size * sizeof *new_entries);
         
         isize hash_colisions = 0;
@@ -204,6 +201,7 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
     
     INTERNAL void _lin_probe_hash_remove(Hash_Index_Entry* entries, isize entries_size, isize found) 
     {
+        (void) entries_size;
         CHECK_BOUNDS(found, entries_size);
 
         Hash_Index_Entry* found_entry = &entries[found];
