@@ -27,14 +27,6 @@ typedef struct Entity {
     Compoment_Mask compoments;
 } Entity;
 
-typedef enum Entity_Duration {
-    ENTITY_DURATION_MANAGED = 0,      //cleaned up when dereferenced
-    ENTITY_DURATION_TIME,             //cleaned up when time is up
-    ENTITY_DURATION_SINGLE_FRAME,     //cleaned up automatically when this frame ends
-    ENTITY_DURATION_PERSISTANT,       //cleaned up when explicitly demanded
-    ENTITY_DURATION_EPHEMERAL,        //cleaned up on some subsequent call to this function. Should be immediately used or coppied
-} Entity_Duration;
-
 bool uid_is_null(Uid id)
 {
     return id.thread_id == 0;
@@ -55,6 +47,8 @@ Uid uid_generate()
     id.counter = platform_interlocked_increment32((volatile i32*) &counter);
     return id;
 }
+
+Entity 
 
 u64 uid_hash64(Uid id)
 {
@@ -97,6 +91,7 @@ typedef struct Compoment_System {
 };
 
 Compoment_System systems[MAX_SYSTEMS] = {0};
+Compoment_Mask default_mask = 0;
 
 void compoment_system_remove(i8 system_bit_index)
 {
