@@ -133,7 +133,7 @@ INTERNAL bool _hash_table_is_invarinat(const void* _table)
             //ASSERT(found.hash_index == found.finished_at);
             ASSERT(found.hash == hash_string(key, table->seed));
 
-            Hash_Index_Entry64 entry = table->index.entries[found.hash_index];
+            Hash_Index64_Entry entry = table->index.entries[found.hash_index];
             ASSERT(found.hash == entry.hash);
             ASSERT((isize) entry.value == i && "The hash index must point back to the original entry");
         }

@@ -74,28 +74,28 @@
 
 #include "allocator.h"
 
-typedef struct Hash_Index_Entry64 {
+typedef struct Hash_Index64_Entry {
     u64 hash;
     u64 value;
-} Hash_Index_Entry64;
+} Hash_Index64_Entry;
 
 typedef struct Hash_Index64
 {
     Allocator* allocator;                
-    Hash_Index_Entry64* entries;                          
+    Hash_Index64_Entry* entries;                          
     int32_t size;                        
     int32_t entries_count;                   
 } Hash_Index64;
 
-typedef struct Hash_Index_Entry32 {
+typedef struct Hash_Index32_Entry {
     u32 hash;
     u32 value;
-} Hash_Index_Entry32;
+} Hash_Index32_Entry;
 
 typedef struct Hash_Index32
 {
     Allocator* allocator;                
-    Hash_Index_Entry32* entries;                          
+    Hash_Index32_Entry* entries;                          
     int32_t size;                        
     int32_t entries_count;                   
 } Hash_Index32;
@@ -112,9 +112,9 @@ EXPORT isize hash_index64_rehash(Hash_Index64* table, isize to_size); //rehashes
 EXPORT void  hash_index64_reserve(Hash_Index64* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
 EXPORT isize hash_index64_insert(Hash_Index64* table, uint64_t hash, uint64_t value);
 EXPORT bool  hash_index64_needs_rehash(Hash_Index64 table, isize to_size);
-EXPORT Hash_Index_Entry64 hash_index64_remove(Hash_Index64* table, isize found);
+EXPORT Hash_Index64_Entry hash_index64_remove(Hash_Index64* table, isize found);
 EXPORT bool  hash_index64_is_invariant(Hash_Index64 table);
-EXPORT bool  hash_index64_is_entry_used(Hash_Index_Entry64 entry);
+EXPORT bool  hash_index64_is_entry_used(Hash_Index64_Entry entry);
 
 EXPORT void  hash_index32_init(Hash_Index32* table, Allocator* allocator);
 EXPORT void  hash_index32_deinit(Hash_Index32* table);
@@ -128,9 +128,9 @@ EXPORT isize hash_index32_rehash(Hash_Index32* table, isize to_size); //rehashes
 EXPORT void  hash_index32_reserve(Hash_Index32* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
 EXPORT isize hash_index32_insert(Hash_Index32* table, uint32_t hash, uint32_t value);
 EXPORT bool  hash_index32_needs_rehash(Hash_Index32 table, isize to_size);
-EXPORT Hash_Index_Entry32 hash_index32_remove(Hash_Index32* table, isize found);
+EXPORT Hash_Index32_Entry hash_index32_remove(Hash_Index32* table, isize found);
 EXPORT bool  hash_index32_is_invariant(Hash_Index32 table);
-EXPORT bool  hash_index32_is_entry_used(Hash_Index_Entry32 entry);
+EXPORT bool  hash_index32_is_entry_used(Hash_Index32_Entry entry);
 
 #endif
 
@@ -144,28 +144,13 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index_Entry32 entry);
         _HASH_ALIVE = 2,
     } Hash_Liveliness;
 
-    INTERNAL void _hash_index64_set_empty(Hash_Index_Entry64* entry)  { entry->hash = _HASH_EMPTY; }
-    INTERNAL void _hash_index64_set_gravestone(Hash_Index_Entry64* entry) { entry->hash = _HASH_GRAVESTONE; }
+    INTERNAL void _hash_index64_set_empty(Hash_Index64_Entry* entry)  { entry->hash = _HASH_EMPTY; }
+    INTERNAL void _hash_index64_set_gravestone(Hash_Index64_Entry* entry) { entry->hash = _HASH_GRAVESTONE; }
     
-    INTERNAL bool _hash_index64_is_empty(const Hash_Index_Entry64* entry) { return entry->hash == _HASH_EMPTY; }
-    INTERNAL bool _hash_index64_is_gravestone(const Hash_Index_Entry64* entry) { return entry->hash == _HASH_GRAVESTONE; }
+    INTERNAL bool _hash_index64_is_empty(const Hash_Index64_Entry* entry) { return entry->hash == _HASH_EMPTY; }
+    INTERNAL bool _hash_index64_is_gravestone(const Hash_Index64_Entry* entry) { return entry->hash == _HASH_GRAVESTONE; }
 
     INTERNAL uint64_t _hash_index64_hash_escape(uint64_t hash)
-    {
-        if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
-            hash += 2;
-
-        return hash;
-    }
-
-    
-    INTERNAL void _hash_index32_set_empty(Hash_Index_Entry32* entry)  { entry->hash = _HASH_EMPTY; }
-    INTERNAL void _hash_index32_set_gravestone(Hash_Index_Entry32* entry) { entry->hash = _HASH_GRAVESTONE; }
-    
-    INTERNAL bool _hash_index32_is_empty(const Hash_Index_Entry32* entry) { return entry->hash == _HASH_EMPTY; }
-    INTERNAL bool _hash_index32_is_gravestone(const Hash_Index_Entry32* entry) { return entry->hash == _HASH_GRAVESTONE; }
-
-    INTERNAL uint64_t _hash_index32_hash_escape(uint32_t hash)
     {
         if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
             hash += 2;
@@ -181,14 +166,29 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index_Entry32 entry);
     
     #define Hash_Index  Hash_Index64
     #define hash_index  hash_index64
-    #define Entry       Hash_Index_Entry64
+    #define Entry       Hash_Index64_Entry
     #define Hash        u64
     #define Value       u64
 
     #define HASH_INDEX_TEMPLATE_IMPL
+    #define HASH_INDEX_IS_EMPTY_ZERO
     #include "hash_index_template.h"
 
     
+    INTERNAL void _hash_index32_set_empty(Hash_Index32_Entry* entry)  { entry->hash = _HASH_EMPTY; }
+    INTERNAL void _hash_index32_set_gravestone(Hash_Index32_Entry* entry) { entry->hash = _HASH_GRAVESTONE; }
+    
+    INTERNAL bool _hash_index32_is_empty(const Hash_Index32_Entry* entry) { return entry->hash == _HASH_EMPTY; }
+    INTERNAL bool _hash_index32_is_gravestone(const Hash_Index32_Entry* entry) { return entry->hash == _HASH_GRAVESTONE; }
+
+    INTERNAL uint64_t _hash_index32_hash_escape(uint32_t hash)
+    {
+        if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
+            hash += 2;
+
+        return hash;
+    }
+
     #define entry_set_empty        _hash_index32_set_empty
     #define entry_set_gravestone   _hash_index32_set_gravestone
     #define entry_is_empty         _hash_index32_is_empty
@@ -197,11 +197,12 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index_Entry32 entry);
     
     #define Hash_Index  Hash_Index32
     #define hash_index  hash_index32
-    #define Entry       Hash_Index_Entry32
+    #define Entry       Hash_Index32_Entry
     #define Hash        u32
     #define Value       u32
 
     #define HASH_INDEX_TEMPLATE_IMPL
+    #define HASH_INDEX_IS_EMPTY_ZERO
     #include "hash_index_template.h"
 
 #endif

@@ -527,7 +527,7 @@ INTERNAL bool _debug_allocator_is_invariant(const Debug_Allocator* allocator)
         isize size_sum = 0;
         for(isize i = 0; i < allocator->alive_allocations_hash.entries_count; i ++)
         {
-            Hash_Index_Entry64 curr = allocator->alive_allocations_hash.entries[i];
+            Hash_Index64_Entry curr = allocator->alive_allocations_hash.entries[i];
             if(hash_index64_is_entry_used(curr) == false)
                 continue;
         
@@ -556,7 +556,7 @@ EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
 
     for(isize i = 0; i < allocator->alive_allocations_hash.entries_count; i++)
     {
-        Hash_Index_Entry64 entry = allocator->alive_allocations_hash.entries[i];
+        Hash_Index64_Entry entry = allocator->alive_allocations_hash.entries[i];
         if(hash_index64_is_entry_used(entry))
         {
             void* ptr = (void*) entry.value;

@@ -119,5 +119,106 @@ typedef struct Compoment_Store {
 
 } Compoment_Store;
 
+
+typedef struct Hash_Ptr_Entry {
+    u64 hash;
+    void* value;
+} Hash_Ptr_Entry;
+
+
+#define _HASH_PTR_EMPTY      (u64) 0
+#define _HASH_PTR_GRAVESTONE (u64) 1
+#define _HASH_PTR_ALIVE      (u64) 2
+
+void* ptr_high_bits_set(void* ptr, u8 num_bits, u64 bit_pattern)
+{
+    CHECK_BOUNDS(num_bits, 64 + 1);
+    u64 val = (u64) ptr;
+    u8 shift = 64 - num_bits;
+    u64 mask = ((u64) 1 << shift) - 1;
+
+    u64 out_val = (val & mask) | (bit_pattern << shift);
+    return (void*) out_val;
+}
+
+u64 ptr_high_bits_get(void* ptr, u8 num_bits)
+{
+    CHECK_BOUNDS(num_bits, 64 + 1);
+    u8 shift = 64 - num_bits;
+    u64 val = (u64) ptr;
+    u64 pattern = val >> shift;
+
+    return pattern;
+}
+void* ptr_high_bits_restore(void* ptr, u8 num_bits)
+{
+    int _high_order_bit_tester = 0;
+    u64 pattern = (u64) &_high_order_bit_tester;
+
+    return ptr_high_bits_set(ptr, num_bits, pattern);
+}
+
+INTERNAL void _hash_ptr_set_empty(Hash_Ptr_Entry* entry)  
+{ 
+    entry->value = ptr_high_bits_set(entry->value, 2, _HASH_PTR_EMPTY);
+}
+INTERNAL void _hash_ptr_set_gravestone(Hash_Ptr_Entry* entry) 
+{ 
+    entry->value = ptr_high_bits_set(entry->value, 2, _HASH_PTR_GRAVESTONE);
+}
+
+//@TODO: Set alive on insert? 
+//@DISCUSSION: 
+// if we insted of the bottom bits use high bits for empty we can devise a bijective hash
+// on the low 62 bits of the number. Such a hash can be used to map (almost) any ptr injectively
+// without having to escape the value at all. This way we would not need any special handling of anything
+// just use ptr_hash_index_hash64 and profit.
+// 
+//@DISCUSSION: 
+// Still it would be useful to have a hash index where we use patterns inside value. For example when hashing 
+// floats such a thing could be very useful since we would not need to validate the reuslt. 
+// There is however a question how to do that generally without it being too annoying to use. The answer is
+// probably to just use bit pattern of 00 for most things and ptr will have to be careful (separate interface?)
+// 
+    
+INTERNAL bool _hash_ptr_is_empty(const Hash_Ptr_Entry* entry) 
+{ 
+    return ptr_high_bits_get(entry->value, 2) == _HASH_PTR_EMPTY;
+}
+INTERNAL bool _hash_ptr_is_gravestone(const Hash_Ptr_Entry* entry) 
+{ 
+    return ptr_high_bits_get(entry->value, 2) == _HASH_PTR_GRAVESTONE;
+}
+
+INTERNAL u64 _hash_ptr_hash_escape(u64 hash)
+{
+    return hash;
+}
+
+INTERNAL void* hash_ptr_get_ptr(void* store)
+{
+    return ptr_high_bits_restore(store, 2);
+}
+
+INTERNAL void* hash_ptr_set_ptr(void* store)
+{
+    return ptr_high_bits_set(store, 2, _HASH_PTR_ALIVE);
+}
+
+#define entry_set_empty        _hash_ptr_set_empty
+#define entry_set_gravestone   _hash_ptr_set_gravestone
+#define entry_is_empty         _hash_ptr_is_empty
+#define entry_is_gravestone    _hash_ptr_is_gravestone
+#define entry_hash_escape      _hash_ptr_hash_escape
+    
+#define Hash_Index  Hash_Index32
+#define hash_index  hash_index32
+#define Entry       Hash_Ptr_Entry
+#define Hash        u32
+#define Value       u32
+
+#define HASH_INDEX_TEMPLATE_IMPL
+#include "hash_index_template.h"
+
 //
 //

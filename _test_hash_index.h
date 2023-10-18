@@ -6,6 +6,7 @@
 #include <string.h>
 
 //@TODO: deduplicate this code and test as template!
+//@TODO: test multiplicit keys!
 
 INTERNAL isize u64_array_find(u64_Array array, u64 looking_for)
 {
@@ -233,7 +234,7 @@ INTERNAL void test_hash_index64_stress(f64 max_seconds)
 			isize found = hash_index64_find(table, key);
 			TEST(table.entries != NULL);
 			TEST(0 <= found && found < table.entries_count && "The returned index must be valid");
-			Hash_Index_Entry64 entry = table.entries[found];
+			Hash_Index64_Entry entry = table.entries[found];
 				
 			TEST(entry.hash == key && entry.value == val && "The entry must be inserted properly");
 		}
@@ -469,7 +470,7 @@ INTERNAL void test_hash_index32_stress(f64 max_seconds)
 			isize found = hash_index32_find(table, key);
 			TEST(table.entries != NULL);
 			TEST(0 <= found && found < table.entries_count && "The returned index must be valid");
-			Hash_Index_Entry32 entry = table.entries[found];
+			Hash_Index32_Entry entry = table.entries[found];
 				
 			TEST(entry.hash == key && entry.value == val && "The entry must be inserted properly");
 		}

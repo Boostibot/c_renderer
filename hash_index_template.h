@@ -161,8 +161,8 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
 
     INTERNAL isize _hash_index_rehash(Entry* new_entries, isize new_entries_size, const Entry* entries, isize entries_size)
     {  
-        //#define IS_EMPTY_ZERO
-        #ifdef IS_EMPTY_ZERO
+        //#define HASH_INDEX_IS_EMPTY_ZERO
+        #ifdef HASH_INDEX_IS_EMPTY_ZERO
         memset(new_entries, 0, new_entries_size * sizeof *new_entries);
         #else
         for(isize i = 0; i < new_entries_size; i++)
@@ -395,6 +395,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
 #undef entry_hash_escape
 #undef HASH_INDEX_TEMPLATE_IMPL
 #undef HASH_INDEX_NO_DEFINE_TYPE
+#undef HASH_INDEX_IS_EMPTY_ZERO
 
 //Undef custom defines
 #undef CC_
