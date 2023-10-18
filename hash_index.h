@@ -1,38 +1,6 @@
 #ifndef LIB_HASH_INDEX
 #define LIB_HASH_INDEX
 
-
-#ifndef NEW_DECL
-
-#include "allocator.h"
-
-typedef struct Hash_Index_Entry {
-    u64 hash;
-    u64 value;
-} Hash_Index_Entry;
-
-typedef struct Hash_Index
-{
-    Allocator* allocator;                
-    Hash_Index_Entry* entries;                          
-    int32_t size;                        
-    int32_t entries_count;                   
-} Hash_Index;
-
-
-#define Hash_Index  Hash_Index
-#define hash_index  hash_index
-#define Entry       Hash_Index_Entry
-#define Hash        u64
-#define Value       u64
-
-#define HASH_INDEX_NO_DEFINE_TYPE
-#include "hash_index_template.h"
-
-#else
-
-#include "allocator.h"
-
 // A simple and flexible linear-probing-hash style hash index.
 // 
 // We use the term hash index as opposed to hash table because this structure
@@ -43,7 +11,7 @@ typedef struct Hash_Index
 // 
 // This approach has certain benefits most importantly enabling to simply
 // write SQL style tables where every single row value can have 
-// its own accelarating Hash_Index (thats where the name comes from). 
+// its own accelarating Hash_Index64 (thats where the name comes from). 
 // Consider the following table:
 //
 // OWNER     AGE   NAME         ANIMAL   BIG_CHUNK_OF_DATA
@@ -104,38 +72,65 @@ typedef struct Hash_Index
 // @TODO: Implement robin-hood hashing for better percantage utilization 
 // @TODO: Implement a 32 bit variant for faster lookup (was not needed yet)
 
-typedef struct Hash_Index_Entry
-{
-    uint64_t hash;
-    uint64_t value;
-} Hash_Index_Entry;
+#include "allocator.h"
 
-typedef struct Hash_Index
+typedef struct Hash_Index_Entry64 {
+    u64 hash;
+    u64 value;
+} Hash_Index_Entry64;
+
+typedef struct Hash_Index64
 {
     Allocator* allocator;                
-    Hash_Index_Entry* entries;                          
+    Hash_Index_Entry64* entries;                          
     int32_t size;                        
     int32_t entries_count;                   
-} Hash_Index;
+} Hash_Index64;
 
-EXPORT void  hash_index_init(Hash_Index* table, Allocator* allocator);
-EXPORT void  hash_index_deinit(Hash_Index* table);
-EXPORT void  hash_index_copy(Hash_Index* to_table, Hash_Index from_table);
-EXPORT void  hash_index_clear(Hash_Index* to_table);
-EXPORT isize hash_index_find(Hash_Index table, uint64_t hash);
-EXPORT isize hash_index_find_first(Hash_Index table, uint64_t hash, isize* finished_at);
-EXPORT isize hash_index_find_next(Hash_Index table, uint64_t hash, isize prev_found, isize* finished_at);
-EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash, uint64_t value_if_inserted);
-EXPORT isize hash_index_rehash(Hash_Index* table, isize to_size); //rehashes 
-EXPORT void  hash_index_reserve(Hash_Index* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
-EXPORT isize hash_index_insert(Hash_Index* table, uint64_t hash, uint64_t value);
-EXPORT bool  hash_index_needs_rehash(Hash_Index table, isize to_size);
+typedef struct Hash_Index_Entry32 {
+    u32 hash;
+    u32 value;
+} Hash_Index_Entry32;
 
-EXPORT Hash_Index_Entry hash_index_remove(Hash_Index* table, isize found);
-EXPORT bool  hash_index_is_invariant(Hash_Index table);
-EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
+typedef struct Hash_Index32
+{
+    Allocator* allocator;                
+    Hash_Index_Entry32* entries;                          
+    int32_t size;                        
+    int32_t entries_count;                   
+} Hash_Index32;
 
-#endif
+EXPORT void  hash_index64_init(Hash_Index64* table, Allocator* allocator);
+EXPORT void  hash_index64_deinit(Hash_Index64* table);
+EXPORT void  hash_index64_copy(Hash_Index64* to_table, Hash_Index64 from_table);
+EXPORT void  hash_index64_clear(Hash_Index64* to_table);
+EXPORT isize hash_index64_find(Hash_Index64 table, uint64_t hash);
+EXPORT isize hash_index64_find_first(Hash_Index64 table, uint64_t hash, isize* finished_at);
+EXPORT isize hash_index64_find_next(Hash_Index64 table, uint64_t hash, isize prev_found, isize* finished_at);
+EXPORT isize hash_index64_find_or_insert(Hash_Index64* table, uint64_t hash, uint64_t value_if_inserted);
+EXPORT isize hash_index64_rehash(Hash_Index64* table, isize to_size); //rehashes 
+EXPORT void  hash_index64_reserve(Hash_Index64* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
+EXPORT isize hash_index64_insert(Hash_Index64* table, uint64_t hash, uint64_t value);
+EXPORT bool  hash_index64_needs_rehash(Hash_Index64 table, isize to_size);
+EXPORT Hash_Index_Entry64 hash_index64_remove(Hash_Index64* table, isize found);
+EXPORT bool  hash_index64_is_invariant(Hash_Index64 table);
+EXPORT bool  hash_index64_is_entry_used(Hash_Index_Entry64 entry);
+
+EXPORT void  hash_index32_init(Hash_Index32* table, Allocator* allocator);
+EXPORT void  hash_index32_deinit(Hash_Index32* table);
+EXPORT void  hash_index32_copy(Hash_Index32* to_table, Hash_Index32 from_table);
+EXPORT void  hash_index32_clear(Hash_Index32* to_table);
+EXPORT isize hash_index32_find(Hash_Index32 table, uint32_t hash);
+EXPORT isize hash_index32_find_first(Hash_Index32 table, uint32_t hash, isize* finished_at);
+EXPORT isize hash_index32_find_next(Hash_Index32 table, uint32_t hash, isize prev_found, isize* finished_at);
+EXPORT isize hash_index32_find_or_insert(Hash_Index32* table, uint32_t hash, uint32_t value_if_inserted);
+EXPORT isize hash_index32_rehash(Hash_Index32* table, isize to_size); //rehashes 
+EXPORT void  hash_index32_reserve(Hash_Index32* table, isize to_size); //reserves space such that inserting up to to_size elements will not trigger rehash
+EXPORT isize hash_index32_insert(Hash_Index32* table, uint32_t hash, uint32_t value);
+EXPORT bool  hash_index32_needs_rehash(Hash_Index32 table, isize to_size);
+EXPORT Hash_Index_Entry32 hash_index32_remove(Hash_Index32* table, isize found);
+EXPORT bool  hash_index32_is_invariant(Hash_Index32 table);
+EXPORT bool  hash_index32_is_entry_used(Hash_Index_Entry32 entry);
 
 #endif
 
@@ -149,27 +144,28 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         _HASH_ALIVE = 2,
     } Hash_Liveliness;
 
-    INTERNAL void _hash_index_set_empty(Hash_Index_Entry* entry) 
-    {
-        entry->hash = _HASH_EMPTY;
-    }
-
-    INTERNAL void _hash_index_set_gravestone(Hash_Index_Entry* entry)
-    {
-        entry->hash = _HASH_GRAVESTONE;
-    }
+    INTERNAL void _hash_index64_set_empty(Hash_Index_Entry64* entry)  { entry->hash = _HASH_EMPTY; }
+    INTERNAL void _hash_index64_set_gravestone(Hash_Index_Entry64* entry) { entry->hash = _HASH_GRAVESTONE; }
     
-    INTERNAL bool _hash_index_is_empty(const Hash_Index_Entry* entry)
+    INTERNAL bool _hash_index64_is_empty(const Hash_Index_Entry64* entry) { return entry->hash == _HASH_EMPTY; }
+    INTERNAL bool _hash_index64_is_gravestone(const Hash_Index_Entry64* entry) { return entry->hash == _HASH_GRAVESTONE; }
+
+    INTERNAL uint64_t _hash_index64_hash_escape(uint64_t hash)
     {
-        return entry->hash == _HASH_EMPTY;
+        if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
+            hash += 2;
+
+        return hash;
     }
 
-    INTERNAL bool _hash_index_is_gravestone(const Hash_Index_Entry* entry)
-    {
-        return entry->hash == _HASH_GRAVESTONE;
-    }
+    
+    INTERNAL void _hash_index32_set_empty(Hash_Index_Entry32* entry)  { entry->hash = _HASH_EMPTY; }
+    INTERNAL void _hash_index32_set_gravestone(Hash_Index_Entry32* entry) { entry->hash = _HASH_GRAVESTONE; }
+    
+    INTERNAL bool _hash_index32_is_empty(const Hash_Index_Entry32* entry) { return entry->hash == _HASH_EMPTY; }
+    INTERNAL bool _hash_index32_is_gravestone(const Hash_Index_Entry32* entry) { return entry->hash == _HASH_GRAVESTONE; }
 
-    INTERNAL uint64_t _hash_index_hash_escape(uint64_t hash)
+    INTERNAL uint64_t _hash_index32_hash_escape(uint32_t hash)
     {
         if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
             hash += 2;
@@ -177,285 +173,35 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         return hash;
     }
     
+    #define entry_set_empty        _hash_index64_set_empty
+    #define entry_set_gravestone   _hash_index64_set_gravestone
+    #define entry_is_empty         _hash_index64_is_empty
+    #define entry_is_gravestone    _hash_index64_is_gravestone
+    #define entry_hash_escape      _hash_index64_hash_escape
     
-#ifndef NEW_DECL
-    
-    #define entry_set_empty        _hash_index_set_empty
-    #define entry_set_gravestone   _hash_index_set_gravestone
-    #define entry_is_empty         _hash_index_is_empty
-    #define entry_is_gravestone    _hash_index_is_gravestone
-    #define entry_hash_escape      _hash_index_hash_escape
-    
-    #define Hash_Index  Hash_Index
-    #define hash_index  hash_index
-    #define Entry       Hash_Index_Entry
+    #define Hash_Index  Hash_Index64
+    #define hash_index  hash_index64
+    #define Entry       Hash_Index_Entry64
     #define Hash        u64
     #define Value       u64
 
     #define HASH_INDEX_TEMPLATE_IMPL
     #include "hash_index_template.h"
 
-#else
-    INTERNAL isize _lin_probe_hash_find_from(const Hash_Index_Entry* entries, isize entries_size, uint64_t hash, isize prev_index, isize* finished_at)
-    {
-        if(entries_size <= 0)
-        {
-            *finished_at = 0;
-            return -1;
-        }
-
-        CHECK_BOUNDS(prev_index, entries_size);
-        uint64_t mask = (uint64_t) entries_size - 1;
-        uint64_t i = prev_index & mask;
-        isize counter = 0;
-        for(; _hash_index_is_empty(&entries[i]) == false; i = (i + 1) & mask)
-        {
-            if(counter >= entries_size)
-                break;
-            if(entries[i].hash == hash)
-            {
-                *finished_at = i;
-                return i;
-            }
-
-            counter += 1;
-        }
-
-        *finished_at = i;
-        return -1;
-    }
     
-    EXPORT bool hash_index_is_entry_used(Hash_Index_Entry entry)
-    {
-        return _hash_index_is_empty(&entry) == false 
-            && _hash_index_is_gravestone(&entry) == false;
-    }
-
-    INTERNAL isize _lin_probe_hash_rehash(Hash_Index_Entry* new_entries, isize new_entries_size, const Hash_Index_Entry* entries, isize entries_size)
-    {  
-        //#define IS_EMPTY_ZERO
-        #ifdef IS_EMPTY_ZERO
-        memset(new_entries, 0, new_entries_size * sizeof *new_entries);
-        #else
-        for(isize i = 0; i < new_entries_size; i++)
-            _hash_index_set_empty(&new_entries[i]);
-        #endif
-
-        isize hash_colisions = 0;
-        uint64_t mask = (uint64_t) new_entries_size - 1;
-        for(isize i = 0; i < entries_size; i++)
-        {
-            Hash_Index_Entry curr = entries[i];
-            if(hash_index_is_entry_used(curr) == false)
-                continue;
-            
-            uint64_t k = curr.hash & mask;
-            isize counter = 0;
-            for(; hash_index_is_entry_used(new_entries[k]); k = (k + 1) & mask)
-            {
-                hash_colisions += 1;
-                ASSERT(counter < new_entries_size && "must not be completely full!");
-                ASSERT(counter < entries_size && "its impossible to have more then what we started with");
-                counter += 1;
-            }
-
-            new_entries[k] = curr;
-        }
-
-        return hash_colisions;
-    }   
-
-    INTERNAL isize _lin_probe_hash_insert(Hash_Index_Entry* entries, isize entries_size, uint64_t hash, uint64_t value) 
-    {
-        ASSERT(entries_size > 0 && "there must be space for insertion");
-        uint64_t mask = (uint64_t) entries_size - 1;
+    #define entry_set_empty        _hash_index32_set_empty
+    #define entry_set_gravestone   _hash_index32_set_gravestone
+    #define entry_is_empty         _hash_index32_is_empty
+    #define entry_is_gravestone    _hash_index32_is_gravestone
+    #define entry_hash_escape      _hash_index32_hash_escape
     
-        uint64_t escaped = _hash_index_hash_escape(hash);
-        uint64_t i = escaped & mask;
-        isize counter = 0;
-        for(; hash_index_is_entry_used(entries[i]); i = (i + 1) & mask)
-            ASSERT(counter ++ < entries_size && "must not be completely full!");
+    #define Hash_Index  Hash_Index32
+    #define hash_index  hash_index32
+    #define Entry       Hash_Index_Entry32
+    #define Hash        u32
+    #define Value       u32
 
-        entries[i].hash = escaped;
-        entries[i].value = value;
-        return i;
-    }
-    
-    INTERNAL void _lin_probe_hash_remove(Hash_Index_Entry* entries, isize entries_size, isize found) 
-    {
-        (void) entries_size;
-        CHECK_BOUNDS(found, entries_size);
-
-        Hash_Index_Entry* found_entry = &entries[found];
-        _hash_index_set_gravestone(found_entry);
-    }
-
-    EXPORT void hash_index_init(Hash_Index* table, Allocator* allocator)
-    {
-        Hash_Index null = {0};
-        *table = null;
-        table->allocator = allocator;
-    }   
-
-    EXPORT void hash_index_deinit(Hash_Index* table)
-    {
-        ASSERT(hash_index_is_invariant(*table));
-        if(table->entries != NULL)
-            allocator_deallocate(table->allocator, table->entries, table->entries_count * sizeof *table->entries, DEF_ALIGN, SOURCE_INFO());
-
-        Hash_Index null = {0};
-        *table = null;
-    }
-
-    EXPORT bool hash_index_needs_rehash(Hash_Index table, isize to_size)
-    {
-        return to_size * 2 >= table.entries_count;
-    }
-
-    EXPORT void hash_index_copy(Hash_Index* to_table, Hash_Index from_table)
-    {
-        ASSERT(hash_index_is_invariant(*to_table));
-        ASSERT(hash_index_is_invariant(from_table));
-
-        if(hash_index_needs_rehash(*to_table, from_table.size))
-        {   
-            int32_t rehash_to = 16;
-            while(rehash_to < from_table.size)
-                rehash_to *= 2;
-
-            int32_t elem_size = sizeof to_table->entries[0];
-            if(to_table->allocator == NULL)
-               to_table->allocator = allocator_get_default();
-            to_table->entries = allocator_reallocate(to_table->allocator, rehash_to * elem_size, to_table->entries, to_table->entries_count * elem_size, DEF_ALIGN, SOURCE_INFO());
-            to_table->entries_count = rehash_to;
-        }
-        
-        to_table->size = from_table.size;
-        _lin_probe_hash_rehash(to_table->entries, to_table->entries_count, from_table.entries, from_table.entries_count);
-        
-        ASSERT(hash_index_is_invariant(*to_table));
-        ASSERT(hash_index_is_invariant(from_table));
-    }
-
-    EXPORT void hash_index_clear(Hash_Index* to_table)
-    {
-        memset(to_table->entries, 0, to_table->entries_count*sizeof(*to_table->entries));
-        to_table->size = 0;
-    }
-    
-    EXPORT bool hash_index_is_invariant(Hash_Index table)
-    {
-        bool ptr_size_inv = (table.entries == NULL) == (table.entries_count == 0);
-        bool allocator_inv = true;
-        if(table.entries != NULL)
-            allocator_inv = table.allocator != NULL;
-
-        bool sizes_inv = table.size >= 0 && table.entries_count >= 0 && table.entries_count >= table.size;
-        bool cap_inv = is_power_of_two_or_zero(table.entries_count);
-        bool final_inv = ptr_size_inv && allocator_inv && cap_inv && sizes_inv && cap_inv;
-
-        ASSERT(final_inv);
-        return final_inv;
-    }
-    
-    
-    EXPORT isize hash_index_find_first(Hash_Index table, uint64_t hash, isize* finished_at)
-    {
-        uint64_t escaped = _hash_index_hash_escape(hash);
-        uint64_t mask = (uint64_t) table.entries_count - 1;
-        uint64_t start_at = escaped & mask;
-        return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, start_at, finished_at);
-    }
-    
-    EXPORT isize hash_index_find(Hash_Index table, uint64_t hash)
-    {
-        isize finished_at = 0;
-        return hash_index_find_first(table, hash, &finished_at);
-    }
-    
-    EXPORT isize hash_index_find_next(Hash_Index table, uint64_t hash, isize prev_found, isize* finished_at)
-    {
-        uint64_t escaped = _hash_index_hash_escape(hash);
-        return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, prev_found + 1, finished_at);
-    }
-
-    EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash, uint64_t value_if_inserted)
-    {
-        hash_index_reserve(table, table->size + 1);
-        isize finish_at = 0;
-        uint64_t escaped = _hash_index_hash_escape(hash);
-        uint64_t mask = (uint64_t) table->entries_count - 1;
-        uint64_t start_at = escaped & mask;
-        isize found = _lin_probe_hash_find_from(table->entries, table->entries_count, escaped, start_at, &finish_at);
-            
-        if(found == -1)
-        {
-            ASSERT(finish_at < table->entries_count);
-            table->entries[finish_at].hash = escaped;
-            table->entries[finish_at].value = value_if_inserted;
-            table->size += 1;
-            found = finish_at;
-        }
-
-        return found;
-    }
-
-    EXPORT isize hash_index_rehash(Hash_Index* table, isize to_size)
-    {
-        ASSERT(hash_index_is_invariant(*table));
-        Hash_Index rehashed = {0};
-        hash_index_init(&rehashed, table->allocator);
-        
-        isize rehash_to = 16;
-        while(rehash_to < to_size)
-            rehash_to *= 2;
-
-        //Cannot shrink beyond needed size
-        if(rehash_to <= table->size)
-            return 0;
-
-        isize elem_size = sizeof table->entries[0];
-        if(rehashed.allocator == NULL)
-           rehashed.allocator = allocator_get_default();
-
-        rehashed.entries = allocator_allocate(rehashed.allocator, rehash_to * elem_size, DEF_ALIGN, SOURCE_INFO());
-        rehashed.size = table->size;
-        rehashed.entries_count = (int32_t) rehash_to;
-
-
-        isize hash_colisions = _lin_probe_hash_rehash(rehashed.entries, rehashed.entries_count, table->entries, table->entries_count);
-        hash_index_deinit(table);
-        *table = rehashed;
-        
-        ASSERT(hash_index_is_invariant(*table));
-        return hash_colisions;
-    }
-
-    EXPORT void hash_index_reserve(Hash_Index* table, isize to_size)
-    {
-        if(hash_index_needs_rehash(*table, to_size))
-            hash_index_rehash(table, to_size);
-    }
-
-    EXPORT isize hash_index_insert(Hash_Index* table, uint64_t hash, uint64_t value)
-    {
-        hash_index_reserve(table, table->size + 1);
-
-        isize out = _lin_probe_hash_insert(table->entries, table->entries_count, hash, value);
-        table->size += 1;
-        ASSERT(hash_index_is_invariant(*table));
-        return out;
-    }
-
-    EXPORT Hash_Index_Entry hash_index_remove(Hash_Index* table, isize found)
-    {
-        ASSERT(table->size > 0);
-        Hash_Index_Entry removed = table->entries[found];
-        _lin_probe_hash_remove(table->entries, table->entries_count, found);
-        table->size -= 1;
-        ASSERT(hash_index_is_invariant(*table));
-        return removed;
-    }
-#endif
+    #define HASH_INDEX_TEMPLATE_IMPL
+    #include "hash_index_template.h"
 
 #endif

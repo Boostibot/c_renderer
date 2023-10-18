@@ -75,7 +75,7 @@ typedef struct Debug_Allocator
     const char* name;
     
     Debug_Allocation_Array dead_allocations;
-    Hash_Index alive_allocations_hash;
+    Hash_Index64 alive_allocations_hash;
 
     bool do_printing;            //wheter each allocations/deallocations should be printed. can be safely togled during lifetime
     bool do_contnual_checks;     //wheter it should checks all allocations for overwrites after each allocation.
@@ -226,7 +226,7 @@ EXPORT void debug_allocator_init_custom(Debug_Allocator* debug, Allocator* paren
     ASSERT(debug->is_init == false && "must not be init!");
 
     array_init(&debug->dead_allocations, parent);
-    hash_index_init(&debug->alive_allocations_hash, parent);
+    hash_index64_init(&debug->alive_allocations_hash, parent);
 
     if(options.dead_zone_size == 0)
         options.dead_zone_size = 16;
@@ -448,7 +448,7 @@ INTERNAL int _debug_allocation_alloc_time_compare(const void* a, const void* b)
 INTERNAL isize _debug_allocator_find_allocation(const Debug_Allocator* self, void* ptr)
 {
     u64 hashed = hash64((u64) ptr);
-    isize hash_found = hash_index_find(self->alive_allocations_hash, hashed);
+    isize hash_found = hash_index64_find(self->alive_allocations_hash, hashed);
     
     for(isize counter = 0; counter < self->alive_allocations_hash.entries_count; counter ++)
     {
@@ -459,7 +459,7 @@ INTERNAL isize _debug_allocator_find_allocation(const Debug_Allocator* self, voi
             break;
 
         isize finished_at = 0;
-        hash_found = hash_index_find_next(self->alive_allocations_hash, hashed, hash_found, &finished_at);
+        hash_found = hash_index64_find_next(self->alive_allocations_hash, hashed, hash_found, &finished_at);
     }
 
     return hash_found;
@@ -527,8 +527,8 @@ INTERNAL bool _debug_allocator_is_invariant(const Debug_Allocator* allocator)
         isize size_sum = 0;
         for(isize i = 0; i < allocator->alive_allocations_hash.entries_count; i ++)
         {
-            Hash_Index_Entry curr = allocator->alive_allocations_hash.entries[i];
-            if(hash_index_is_entry_used(curr) == false)
+            Hash_Index_Entry64 curr = allocator->alive_allocations_hash.entries[i];
+            if(hash_index64_is_entry_used(curr) == false)
                 continue;
         
             isize interpenetration = 0;
@@ -556,8 +556,8 @@ EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
 
     for(isize i = 0; i < allocator->alive_allocations_hash.entries_count; i++)
     {
-        Hash_Index_Entry entry = allocator->alive_allocations_hash.entries[i];
-        if(hash_index_is_entry_used(entry))
+        Hash_Index_Entry64 entry = allocator->alive_allocations_hash.entries[i];
+        if(hash_index64_is_entry_used(entry))
         {
             void* ptr = (void*) entry.value;
             
@@ -568,7 +568,7 @@ EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
 
     allocator_set(allocator->allocator_backup);
     debug_allocator_deinit_allocation_array(&allocator->dead_allocations);
-    hash_index_deinit(&allocator->alive_allocations_hash);
+    hash_index64_deinit(&allocator->alive_allocations_hash);
     
     Debug_Allocator null = {0};
     *allocator = null;
@@ -577,7 +577,7 @@ EXPORT void debug_allocator_deinit(Debug_Allocator* allocator)
 EXPORT Debug_Allocation_Array debug_allocator_get_alive_allocations(const Debug_Allocator allocator, isize print_max)
 {
     isize count = print_max;
-    const Hash_Index* hash = &allocator.alive_allocations_hash;
+    const Hash_Index64* hash = &allocator.alive_allocations_hash;
     if(count <= 0)
         count = hash->size;
         
@@ -587,7 +587,7 @@ EXPORT Debug_Allocation_Array debug_allocator_get_alive_allocations(const Debug_
     Debug_Allocation_Array out = {allocator.parent};
     for(isize i = 0; i < hash->entries_count; i++)
     {
-        if(hash_index_is_entry_used(hash->entries[i]))
+        if(hash_index64_is_entry_used(hash->entries[i]))
         {
             void* user_ptr = (void*) hash->entries[i].value;
             _debug_allocator_assert_block(&allocator, user_ptr);
@@ -848,7 +848,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     {
         ASSERT(hash_found != -1 && "must be found!");
 
-        hash_index_remove(&self->alive_allocations_hash, hash_found);
+        hash_index64_remove(&self->alive_allocations_hash, hash_found);
 
         if(self->dead_allocation_max > 0)
         {
@@ -881,7 +881,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
 
         u64 hashed = hash64((u64) new_ptr);
 
-        hash_index_insert(&self->alive_allocations_hash, hashed, (u64) new_ptr);
+        hash_index64_insert(&self->alive_allocations_hash, hashed, (u64) new_ptr);
         _debug_allocator_assert_block(self, new_ptr);
     
     }

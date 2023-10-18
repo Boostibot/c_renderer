@@ -119,8 +119,12 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
     INTERNAL bool entry_is_gravestone(const Entry* entry);
     INTERNAL uint64_t entry_hash_escape(Hash hash);
     // ==============================================================
+    
+    #define _hash_index_find_from       CC3(_,hash_index,_find_from)
+    #define _hash_index_rehash          CC3(_,hash_index,_rehash)
+    #define _hash_index_insert          CC3(_,hash_index,_insert)
 
-    INTERNAL isize _lin_probe_hash_find_from(const Entry* entries, isize entries_size, Hash hash, isize prev_index, isize* finished_at)
+    INTERNAL isize _hash_index_find_from(const Entry* entries, isize entries_size, Hash hash, isize prev_index, isize* finished_at)
     {
         if(entries_size <= 0)
         {
@@ -155,7 +159,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
             && entry_is_gravestone(&entry) == false;
     }
 
-    INTERNAL isize _lin_probe_hash_rehash(Entry* new_entries, isize new_entries_size, const Entry* entries, isize entries_size)
+    INTERNAL isize _hash_index_rehash(Entry* new_entries, isize new_entries_size, const Entry* entries, isize entries_size)
     {  
         //#define IS_EMPTY_ZERO
         #ifdef IS_EMPTY_ZERO
@@ -189,7 +193,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         return hash_colisions;
     }   
 
-    INTERNAL isize _lin_probe_hash_insert(Entry* entries, isize entries_size, Hash hash, Value value) 
+    INTERNAL isize _hash_index_insert(Entry* entries, isize entries_size, Hash hash, Value value) 
     {
         ASSERT(entries_size > 0 && "there must be space for insertion");
         uint64_t mask = (uint64_t) entries_size - 1;
@@ -200,18 +204,9 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         for(; hash_index_is_entry_used(entries[i]); i = (i + 1) & mask)
             ASSERT(counter ++ < entries_size && "must not be completely full!");
 
-        entries[i].hash = escaped;
+        entries[i].hash = (Hash) escaped;
         entries[i].value = value;
         return i;
-    }
-    
-    INTERNAL void _lin_probe_hash_remove(Entry* entries, isize entries_size, isize found) 
-    {
-        (void) entries_size;
-        CHECK_BOUNDS(found, entries_size);
-
-        Entry* found_entry = &entries[found];
-        entry_set_gravestone(found_entry);
     }
 
     EXPORT void hash_index_init(Hash_Index* table, Allocator* allocator)
@@ -255,7 +250,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         }
         
         to_table->size = from_table.size;
-        _lin_probe_hash_rehash(to_table->entries, to_table->entries_count, from_table.entries, from_table.entries_count);
+        _hash_index_rehash(to_table->entries, to_table->entries_count, from_table.entries, from_table.entries_count);
         
         ASSERT(hash_index_is_invariant(*to_table));
         ASSERT(hash_index_is_invariant(from_table));
@@ -288,7 +283,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         uint64_t escaped = entry_hash_escape(hash);
         uint64_t mask = (uint64_t) table.entries_count - 1;
         uint64_t start_at = escaped & mask;
-        return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, start_at, finished_at);
+        return _hash_index_find_from(table.entries, table.entries_count, (Hash) escaped, start_at, finished_at);
     }
     
     EXPORT isize hash_index_find(Hash_Index table, Hash hash)
@@ -300,7 +295,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
     EXPORT isize hash_index_find_next(Hash_Index table, Hash hash, isize prev_found, isize* finished_at)
     {
         uint64_t escaped = entry_hash_escape(hash);
-        return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, prev_found + 1, finished_at);
+        return _hash_index_find_from(table.entries, table.entries_count, (Hash) escaped, prev_found + 1, finished_at);
     }
 
     EXPORT isize hash_index_find_or_insert(Hash_Index* table, Hash hash, Value value_if_inserted)
@@ -310,12 +305,12 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         uint64_t escaped = entry_hash_escape(hash);
         uint64_t mask = (uint64_t) table->entries_count - 1;
         uint64_t start_at = escaped & mask;
-        isize found = _lin_probe_hash_find_from(table->entries, table->entries_count, escaped, start_at, &finish_at);
+        isize found = _hash_index_find_from(table->entries, table->entries_count, (Hash) escaped, start_at, &finish_at);
             
         if(found == -1)
         {
             ASSERT(finish_at < table->entries_count);
-            table->entries[finish_at].hash = escaped;
+            table->entries[finish_at].hash = (Hash) escaped;
             table->entries[finish_at].value = value_if_inserted;
             table->size += 1;
             found = finish_at;
@@ -347,7 +342,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         rehashed.entries_count = (int32_t) rehash_to;
 
 
-        isize hash_colisions = _lin_probe_hash_rehash(rehashed.entries, rehashed.entries_count, table->entries, table->entries_count);
+        isize hash_colisions = _hash_index_rehash(rehashed.entries, rehashed.entries_count, table->entries, table->entries_count);
         hash_index_deinit(table);
         *table = rehashed;
         
@@ -365,7 +360,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
     {
         hash_index_reserve(table, table->size + 1);
 
-        isize out = _lin_probe_hash_insert(table->entries, table->entries_count, hash, value);
+        isize out = _hash_index_insert(table->entries, table->entries_count, hash, value);
         table->size += 1;
         ASSERT(hash_index_is_invariant(*table));
         return out;
@@ -374,8 +369,12 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
     EXPORT Entry hash_index_remove(Hash_Index* table, isize found)
     {
         ASSERT(table->size > 0);
-        Entry removed = table->entries[found];
-        _lin_probe_hash_remove(table->entries, table->entries_count, found);
+        CHECK_BOUNDS(found, table->entries_count);
+        
+        Entry* found_entry = &table->entries[found];
+        Entry removed = *found_entry;
+        entry_set_gravestone(found_entry);
+
         table->size -= 1;
         ASSERT(hash_index_is_invariant(*table));
         return removed;

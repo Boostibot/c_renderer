@@ -112,7 +112,7 @@ typedef struct Compoment_Meta {
 DEFINE_ARRAY_TYPE(Compoment_Store_Block*, Compoment_Store_Block_Ptr_Array);
 
 typedef struct Compoment_Store {
-    Hash_Index entity_to_compoment_ptr;
+    Hash_Index64 entity_to_compoment_ptr;
     Compoment_Store_Block_Ptr_Array blocks;
     
     isize compoment_size;
