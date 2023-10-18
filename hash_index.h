@@ -1,6 +1,36 @@
 #ifndef LIB_HASH_INDEX
 #define LIB_HASH_INDEX
 
+
+#ifndef NEW_DECL
+
+#include "allocator.h"
+
+typedef struct Hash_Index_Entry {
+    u64 hash;
+    u64 value;
+} Hash_Index_Entry;
+
+typedef struct Hash_Index
+{
+    Allocator* allocator;                
+    Hash_Index_Entry* entries;                          
+    int32_t size;                        
+    int32_t entries_count;                   
+} Hash_Index;
+
+
+#define Hash_Index  Hash_Index
+#define hash_index  hash_index
+#define Entry       Hash_Index_Entry
+#define Hash        u64
+#define Value       u64
+
+#define HASH_INDEX_NO_DEFINE_TYPE
+#include "hash_index_template.h"
+
+#else
+
 #include "allocator.h"
 
 // A simple and flexible linear-probing-hash style hash index.
@@ -107,15 +137,39 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
 
 #endif
 
+#endif
+
 #if (defined(LIB_ALL_IMPL) || defined(LIB_HASH_INDEX_IMPL)) && !defined(LIB_HASH_INDEX_HAS_IMPL)
 #define LIB_HASH_INDEX_HAS_IMPL
-
     #include <string.h>
     
-    #define _HASH_GRAVESTONE 1
-    #define _HASH_EMPTY 0
+    typedef enum {
+        _HASH_EMPTY = 0,
+        _HASH_GRAVESTONE = 1,
+        _HASH_ALIVE = 2,
+    } Hash_Liveliness;
 
-    INTERNAL uint64_t _lin_probe_hash_escape(uint64_t hash)
+    INTERNAL void _hash_index_set_empty(Hash_Index_Entry* entry) 
+    {
+        entry->hash = _HASH_EMPTY;
+    }
+
+    INTERNAL void _hash_index_set_gravestone(Hash_Index_Entry* entry)
+    {
+        entry->hash = _HASH_GRAVESTONE;
+    }
+    
+    INTERNAL bool _hash_index_is_empty(const Hash_Index_Entry* entry)
+    {
+        return entry->hash == _HASH_EMPTY;
+    }
+
+    INTERNAL bool _hash_index_is_gravestone(const Hash_Index_Entry* entry)
+    {
+        return entry->hash == _HASH_GRAVESTONE;
+    }
+
+    INTERNAL uint64_t _hash_index_hash_escape(uint64_t hash)
     {
         if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
             hash += 2;
@@ -123,9 +177,27 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         return hash;
     }
     
+    
+#ifndef NEW_DECL
+    
+    #define entry_set_empty        _hash_index_set_empty
+    #define entry_set_gravestone   _hash_index_set_gravestone
+    #define entry_is_empty         _hash_index_is_empty
+    #define entry_is_gravestone    _hash_index_is_gravestone
+    #define entry_hash_escape      _hash_index_hash_escape
+    
+    #define Hash_Index  Hash_Index
+    #define hash_index  hash_index
+    #define Entry       Hash_Index_Entry
+    #define Hash        u64
+    #define Value       u64
+
+    #define HASH_INDEX_TEMPLATE_IMPL
+    #include "hash_index_template.h"
+
+#else
     INTERNAL isize _lin_probe_hash_find_from(const Hash_Index_Entry* entries, isize entries_size, uint64_t hash, isize prev_index, isize* finished_at)
     {
-        uint64_t escaped = _lin_probe_hash_escape(hash);
         if(entries_size <= 0)
         {
             *finished_at = 0;
@@ -136,11 +208,11 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         uint64_t mask = (uint64_t) entries_size - 1;
         uint64_t i = prev_index & mask;
         isize counter = 0;
-        for(; entries[i].hash != _HASH_EMPTY; i = (i + 1) & mask)
+        for(; _hash_index_is_empty(&entries[i]) == false; i = (i + 1) & mask)
         {
             if(counter >= entries_size)
                 break;
-            if(entries[i].hash == escaped)
+            if(entries[i].hash == hash)
             {
                 *finished_at = i;
                 return i;
@@ -152,24 +224,34 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         *finished_at = i;
         return -1;
     }
+    
+    EXPORT bool hash_index_is_entry_used(Hash_Index_Entry entry)
+    {
+        return _hash_index_is_empty(&entry) == false 
+            && _hash_index_is_gravestone(&entry) == false;
+    }
 
     INTERNAL isize _lin_probe_hash_rehash(Hash_Index_Entry* new_entries, isize new_entries_size, const Hash_Index_Entry* entries, isize entries_size)
     {  
+        //#define IS_EMPTY_ZERO
+        #ifdef IS_EMPTY_ZERO
         memset(new_entries, 0, new_entries_size * sizeof *new_entries);
-        
+        #else
+        for(isize i = 0; i < new_entries_size; i++)
+            _hash_index_set_empty(&new_entries[i]);
+        #endif
+
         isize hash_colisions = 0;
         uint64_t mask = (uint64_t) new_entries_size - 1;
         for(isize i = 0; i < entries_size; i++)
         {
             Hash_Index_Entry curr = entries[i];
-            if(curr.hash == _HASH_GRAVESTONE || 
-                curr.hash == _HASH_EMPTY)
+            if(hash_index_is_entry_used(curr) == false)
                 continue;
             
-
             uint64_t k = curr.hash & mask;
             isize counter = 0;
-            for(; new_entries[k].hash != _HASH_EMPTY; k = (k + 1) & mask)
+            for(; hash_index_is_entry_used(new_entries[k]); k = (k + 1) & mask)
             {
                 hash_colisions += 1;
                 ASSERT(counter < new_entries_size && "must not be completely full!");
@@ -188,10 +270,10 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         ASSERT(entries_size > 0 && "there must be space for insertion");
         uint64_t mask = (uint64_t) entries_size - 1;
     
-        uint64_t escaped = _lin_probe_hash_escape(hash);
+        uint64_t escaped = _hash_index_hash_escape(hash);
         uint64_t i = escaped & mask;
         isize counter = 0;
-        for(; entries[i].hash > _HASH_GRAVESTONE; i = (i + 1) & mask)
+        for(; hash_index_is_entry_used(entries[i]); i = (i + 1) & mask)
             ASSERT(counter ++ < entries_size && "must not be completely full!");
 
         entries[i].hash = escaped;
@@ -205,10 +287,7 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         CHECK_BOUNDS(found, entries_size);
 
         Hash_Index_Entry* found_entry = &entries[found];
-
-        //ASSERT(found_entry->value == found.value);
-        found_entry->hash = _HASH_GRAVESTONE;
-        found_entry->value = 0;
+        _hash_index_set_gravestone(found_entry);
     }
 
     EXPORT void hash_index_init(Hash_Index* table, Allocator* allocator)
@@ -279,14 +358,10 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         return final_inv;
     }
     
-    EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry)
-    {
-        return entry.hash > _HASH_GRAVESTONE;
-    }
     
     EXPORT isize hash_index_find_first(Hash_Index table, uint64_t hash, isize* finished_at)
     {
-        uint64_t escaped = _lin_probe_hash_escape(hash);
+        uint64_t escaped = _hash_index_hash_escape(hash);
         uint64_t mask = (uint64_t) table.entries_count - 1;
         uint64_t start_at = escaped & mask;
         return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, start_at, finished_at);
@@ -300,14 +375,15 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
     
     EXPORT isize hash_index_find_next(Hash_Index table, uint64_t hash, isize prev_found, isize* finished_at)
     {
-        return _lin_probe_hash_find_from(table.entries, table.entries_count, hash, prev_found + 1, finished_at);
+        uint64_t escaped = _hash_index_hash_escape(hash);
+        return _lin_probe_hash_find_from(table.entries, table.entries_count, escaped, prev_found + 1, finished_at);
     }
 
     EXPORT isize hash_index_find_or_insert(Hash_Index* table, uint64_t hash, uint64_t value_if_inserted)
     {
         hash_index_reserve(table, table->size + 1);
         isize finish_at = 0;
-        uint64_t escaped = _lin_probe_hash_escape(hash);
+        uint64_t escaped = _hash_index_hash_escape(hash);
         uint64_t mask = (uint64_t) table->entries_count - 1;
         uint64_t start_at = escaped & mask;
         isize found = _lin_probe_hash_find_from(table->entries, table->entries_count, escaped, start_at, &finish_at);
@@ -380,5 +456,6 @@ EXPORT bool  hash_index_is_entry_used(Hash_Index_Entry entry);
         ASSERT(hash_index_is_invariant(*table));
         return removed;
     }
+#endif
 
 #endif

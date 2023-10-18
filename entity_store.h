@@ -1,7 +1,11 @@
 #pragma once
 
 #include "entity.h"
+#include "hash_index.h"
 
+
+
+#define ENTITY_EPHEMERAL_SLOTS 64
 typedef struct Entity_Store {
 
 } Entity_Store;

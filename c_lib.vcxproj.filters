@@ -194,7 +194,7 @@
     <ClInclude Include="clock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resources_template_file.h">
+    <ClInclude Include="resources_template.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource_descriptions.h">
@@ -207,6 +207,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="render_world.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="entity_store.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="compoment_table.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="guid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hash_index_template.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

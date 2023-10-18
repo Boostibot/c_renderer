@@ -186,43 +186,43 @@ void                 name_from_string(Name* name, String string);
 #define Type            Image
 #define RESOURCE_TYPE   RESOURCE_TYPE_IMAGE
 #define type_name       image
-#include "resources_template_file.h"
+#include "resources_template.h"
 
 #define Storage_Type    Shape_Assembly
 #define Type            Shape
 #define RESOURCE_TYPE   RESOURCE_TYPE_SHAPE
 #define type_name       shape
-#include "resources_template_file.h"
+#include "resources_template.h"
  
 #define Storage_Type    Map
 #define Type            Map
 #define RESOURCE_TYPE   RESOURCE_TYPE_MAP
 #define type_name       map
-#include "resources_template_file.h"
+#include "resources_template.h"
  
 #define Storage_Type    Cubemap
 #define Type            Cubemap
 #define RESOURCE_TYPE   RESOURCE_TYPE_CUBEMAP
 #define type_name       cubemap
-#include "resources_template_file.h"
+#include "resources_template.h"
      
 #define Storage_Type    Material
 #define Type            Material
 #define RESOURCE_TYPE   RESOURCE_TYPE_MATERIAL
 #define type_name       material
-#include "resources_template_file.h"
+#include "resources_template.h"
      
 #define Storage_Type    Triangle_Mesh
 #define Type            Triangle_Mesh
 #define RESOURCE_TYPE   RESOURCE_TYPE_TRIANGLE_MESH
 #define type_name       triangle_mesh
-#include "resources_template_file.h"
+#include "resources_template.h"
      
 #define Storage_Type    Shader
 #define Type            Shader
 #define RESOURCE_TYPE   RESOURCE_TYPE_SHADER
 #define type_name       shader
-#include "resources_template_file.h"       
+#include "resources_template.h"       
 
 #endif
 
@@ -254,43 +254,43 @@ void                 name_from_string(Name* name, String string);
     #define Type            Image
     #define RESOURCE_TYPE   RESOURCE_TYPE_IMAGE
     #define type_name       image
-    #include "resources_template_file.h"
+    #include "resources_template.h"
 
     #define Storage_Type    Shape_Assembly
     #define Type            Shape
     #define RESOURCE_TYPE   RESOURCE_TYPE_SHAPE
     #define type_name       shape
-    #include "resources_template_file.h"
+    #include "resources_template.h"
  
     #define Storage_Type    Map
     #define Type            Map
     #define RESOURCE_TYPE   RESOURCE_TYPE_MAP
     #define type_name       map
-    #include "resources_template_file.h"
+    #include "resources_template.h"
  
     #define Storage_Type    Cubemap
     #define Type            Cubemap
     #define RESOURCE_TYPE   RESOURCE_TYPE_CUBEMAP
     #define type_name       cubemap
-    #include "resources_template_file.h"
+    #include "resources_template.h"
      
     #define Storage_Type    Material
     #define Type            Material
     #define RESOURCE_TYPE   RESOURCE_TYPE_MATERIAL
     #define type_name       material
-    #include "resources_template_file.h"
+    #include "resources_template.h"
      
     #define Storage_Type    Triangle_Mesh
     #define Type            Triangle_Mesh
     #define RESOURCE_TYPE   RESOURCE_TYPE_TRIANGLE_MESH
     #define type_name       triangle_mesh
-    #include "resources_template_file.h"
+    #include "resources_template.h"
      
     #define Storage_Type    Shader
     #define Type            Shader
     #define RESOURCE_TYPE   RESOURCE_TYPE_SHADER
     #define type_name       shader
-    #include "resources_template_file.h"      
+    #include "resources_template.h"      
     
     #endif
 

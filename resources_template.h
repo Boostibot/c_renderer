@@ -22,6 +22,10 @@
 //#include "string.h"
 //#include "resources.h"
 
+#undef CC_
+#undef CC2
+#undef CC3
+
 #define CC_(a, b, c) a##b##c
 #define CC2(a, b) CC_(a, b,)
 #define CC3(a, b, c) CC_(a, b, c)

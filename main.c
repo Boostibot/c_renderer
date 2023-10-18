@@ -893,17 +893,12 @@ EXPORT void allocator_out_of_memory(
     platform_abort();
 }
 
+#include "_test_hash_index.h"
 
 void run_func(void* context)
 {
-    int64_t counters[1000] = {0};
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(counters); i++)
-        counters[i] = platform_perf_counter();
+    test_hash_index(3.0);
 
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(counters); i++)
-        LOG_INFO("app", "%lld", counters[i]);
-
-    abort();
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
     LOG_INFO("APP", "run_func enter");
