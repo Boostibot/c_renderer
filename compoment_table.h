@@ -111,12 +111,20 @@ typedef struct Compoment_Meta {
 
 DEFINE_ARRAY_TYPE(Compoment_Store_Block*, Compoment_Store_Block_Ptr_Array);
 
+#define Hash_Index  Hash_Ptr
+#define hash_index  hash_ptr
+#define Entry       Hash_Ptr_Entry
+#define Hash        u32
+#define Value       u32
+
+#include "hash_index_template.h"
+
 typedef struct Compoment_Store {
-    Hash_Index64 entity_to_compoment_ptr;
+    Hash_Ptr entity_to_compoment_ptr;
     Compoment_Store_Block_Ptr_Array blocks;
     
-    isize compoment_size;
-
+    i32 compoment_align;
+    i32 compoment_size;
 } Compoment_Store;
 
 
@@ -126,9 +134,9 @@ typedef struct Hash_Ptr_Entry {
 } Hash_Ptr_Entry;
 
 
-#define _HASH_PTR_EMPTY      (u64) 0
-#define _HASH_PTR_GRAVESTONE (u64) 1
-#define _HASH_PTR_ALIVE      (u64) 2
+#define _HASH_PTR_EMPTY      (u64) 1
+#define _HASH_PTR_GRAVESTONE (u64) 2
+#define _HASH_PTR_ALIVE      (u64) 0
 
 void* ptr_high_bits_set(void* ptr, u8 num_bits, u64 bit_pattern)
 {
@@ -195,14 +203,14 @@ INTERNAL u64 _hash_ptr_hash_escape(u64 hash)
     return hash;
 }
 
-INTERNAL void* hash_ptr_get_ptr(void* store)
+INTERNAL void* _hash_ptr_value_escape(void* value)
 {
-    return ptr_high_bits_restore(store, 2);
+    return ptr_high_bits_set(value, 2, _HASH_PTR_ALIVE);
 }
 
-INTERNAL void* hash_ptr_set_ptr(void* store)
+INTERNAL void* hash_ptr_ptr_restore(void* stored)
 {
-    return ptr_high_bits_set(store, 2, _HASH_PTR_ALIVE);
+    return ptr_high_bits_restore(stored, 2);
 }
 
 #define entry_set_empty        _hash_ptr_set_empty
@@ -210,15 +218,18 @@ INTERNAL void* hash_ptr_set_ptr(void* store)
 #define entry_is_empty         _hash_ptr_is_empty
 #define entry_is_gravestone    _hash_ptr_is_gravestone
 #define entry_hash_escape      _hash_ptr_hash_escape
+#define entry_value_escape     _hash_ptr_value_escape
     
-#define Hash_Index  Hash_Index32
-#define hash_index  hash_index32
+#define Hash_Index  Hash_Ptr
+#define hash_index  hash_ptr
 #define Entry       Hash_Ptr_Entry
 #define Hash        u32
 #define Value       u32
 
 #define HASH_INDEX_TEMPLATE_IMPL
 #include "hash_index_template.h"
+
+
 
 //
 //

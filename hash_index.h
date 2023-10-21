@@ -149,7 +149,8 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index32_Entry entry);
     
     INTERNAL bool _hash_index64_is_empty(const Hash_Index64_Entry* entry) { return entry->hash == _HASH_EMPTY; }
     INTERNAL bool _hash_index64_is_gravestone(const Hash_Index64_Entry* entry) { return entry->hash == _HASH_GRAVESTONE; }
-
+    
+    INTERNAL uint64_t _hash_index64_value_escape(uint64_t value) { return value; }
     INTERNAL uint64_t _hash_index64_hash_escape(uint64_t hash)
     {
         if(hash == _HASH_GRAVESTONE || hash == _HASH_EMPTY)
@@ -163,6 +164,7 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index32_Entry entry);
     #define entry_is_empty         _hash_index64_is_empty
     #define entry_is_gravestone    _hash_index64_is_gravestone
     #define entry_hash_escape      _hash_index64_hash_escape
+    #define entry_value_escape     _hash_index64_value_escape
     
     #define Hash_Index  Hash_Index64
     #define hash_index  hash_index64
@@ -188,12 +190,15 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index32_Entry entry);
 
         return hash;
     }
+    
+    INTERNAL uint32_t _hash_index32_value_escape(uint32_t value) { return value; }
 
     #define entry_set_empty        _hash_index32_set_empty
     #define entry_set_gravestone   _hash_index32_set_gravestone
     #define entry_is_empty         _hash_index32_is_empty
     #define entry_is_gravestone    _hash_index32_is_gravestone
     #define entry_hash_escape      _hash_index32_hash_escape
+    #define entry_value_escape     _hash_index32_value_escape
     
     #define Hash_Index  Hash_Index32
     #define hash_index  hash_index32

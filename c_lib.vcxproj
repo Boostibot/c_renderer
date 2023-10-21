@@ -266,6 +266,7 @@
     <ClInclude Include="gl_shader_util.h" />
     <ClInclude Include="resources.h" />
     <ClInclude Include="shapes.h" />
+    <ClInclude Include="stable_array.h" />
     <ClInclude Include="string.h" />
     <ClInclude Include="temp.h" />
     <ClInclude Include="time.h" />

@@ -58,9 +58,16 @@ inline static void platform_compiler_memory_fence();
 inline static void platform_memory_fence();
 inline static void platform_processor_pause();
 
-inline static int64_t platform_find_first_set_bit(int64_t num);
-inline static int64_t platform_find_last_set_bit(int64_t num);
-inline static int64_t platform_pop_count(int64_t num);
+
+//Returns the first/last set bit position. If num is zero result is undefined
+inline static int32_t platform_find_last_set_bit32(uint32_t num); 
+inline static int32_t platform_find_last_set_bit64(uint64_t num);
+inline static int32_t platform_find_first_set_bit32(uint32_t num);
+inline static int32_t platform_find_first_set_bit64(uint64_t num);
+
+//Returns the number of on bits 
+inline static int32_t platform_pop_count32(uint32_t num);
+inline static int32_t platform_pop_count64(uint64_t num);
 
 inline static bool platform_interlocked_compare_and_swap64(volatile int64_t* target, int64_t old_value, int64_t new_value);
 inline static bool platform_interlocked_compare_and_swap32(volatile int32_t* target, int32_t old_value, int32_t new_value);
@@ -343,6 +350,24 @@ typedef enum {
     //
     //}
     
+    
+    inline static int32_t platform_find_last_set_bit32(uint32_t num); 
+    inline static int32_t platform_find_last_set_bit64(uint64_t num);
+    inline static int32_t platform_find_first_set_bit32(uint32_t num)
+    {
+        assert(num != 0);
+        unsigned long out = 0;
+        _BitScanForward(&out, (unsigned long) num);
+        return (int32_t) out;
+    }
+    inline static int32_t platform_find_first_set_bit64(uint64_t num)
+    {
+        assert(num != 0);
+        unsigned long out = 0;
+        _BitScanForward64(&out, (unsigned long long) num);
+        return (int32_t) out;
+    }
+
     inline static bool platform_interlocked_compare_and_swap64(volatile int64_t* target, int64_t old_value, int64_t new_value)
     {
         return _InterlockedCompareExchange64((volatile long long*) target, (long long) new_value, (long long) old_value) == (long long) old_value;

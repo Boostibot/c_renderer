@@ -49,6 +49,10 @@
 #ifndef entry_hash_escape
     #error entry_hash_escape needs to be defined to be a function (see below SIGNATURES section for siganture)
 #endif
+
+#ifndef entry_value_escape
+    #error entry_value_escape needs to be defined to be a function (see below SIGNATURES section for siganture)
+#endif
 #endif
 
 //@REMOVE
@@ -118,6 +122,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
     INTERNAL bool entry_is_empty(const Entry* entry);
     INTERNAL bool entry_is_gravestone(const Entry* entry);
     INTERNAL uint64_t entry_hash_escape(Hash hash);
+    INTERNAL Value entry_value_escape(Value hash);
     // ==============================================================
     
     #define _hash_index_find_from       CC3(_,hash_index,_find_from)
@@ -205,7 +210,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
             ASSERT(counter ++ < entries_size && "must not be completely full!");
 
         entries[i].hash = (Hash) escaped;
-        entries[i].value = value;
+        entries[i].value = entry_value_escape(value);
         return i;
     }
 
@@ -311,7 +316,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
         {
             ASSERT(finish_at < table->entries_count);
             table->entries[finish_at].hash = (Hash) escaped;
-            table->entries[finish_at].value = value_if_inserted;
+            table->entries[finish_at].value = entry_value_escape(value_if_inserted);
             table->size += 1;
             found = finish_at;
         }
@@ -393,6 +398,7 @@ EXPORT bool  hash_index_is_entry_used(Entry entry);
 #undef entry_is_empty
 #undef entry_is_gravestone
 #undef entry_hash_escape
+#undef entry_value_escape
 #undef HASH_INDEX_TEMPLATE_IMPL
 #undef HASH_INDEX_NO_DEFINE_TYPE
 #undef HASH_INDEX_IS_EMPTY_ZERO

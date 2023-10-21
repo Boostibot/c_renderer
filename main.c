@@ -894,10 +894,69 @@ EXPORT void allocator_out_of_memory(
 }
 
 #include "_test_hash_index.h"
+#include "stable_array.h"
+
+void test_stable_array()
+{
+    
+    Debug_Allocator resources_alloc = {0};
+    debug_allocator_init(&resources_alloc, allocator_get_default(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+    {
+    
+        Stable_Array stable = {0};
+        stable_array_init(&stable, allocator_get_default(), sizeof(i32), DEF_ALIGN);
+
+        i32* val = NULL;
+        isize i1 = stable_array_insert(&stable, (void**) &val);
+
+        i32* val_get = stable_array_at(&stable, i1);
+        TEST(val == val_get);
+        *val = 32;
+
+        TEST(stable_array_at_safe(&stable, -2) == NULL);
+        TEST(stable_array_at_safe(&stable, -1) == NULL);
+        TEST(stable_array_at_safe(&stable, 0) != NULL);
+        TEST(stable_array_at_safe(&stable, 1) == NULL);
+        TEST(stable_array_at_safe(&stable, 2) == NULL);
+        TEST(stable_array_remove(&stable, 0));
+
+        enum {INSERT_COUNT = 129};
+        for(isize i = 0; i < INSERT_COUNT; i++)
+        {
+            if(i == 64)
+            {
+                int x = 10; (void) x;
+            }
+
+            i32* at = NULL;
+            isize index = stable_array_insert(&stable, (void**) &at);
+            *at = (i32) i;
+            TEST(index == i);
+        }
+
+        for(isize i = 0; i < INSERT_COUNT; i++)
+        {
+            if(i == 64)
+            {
+                int x = 10; (void) x;
+            }
+
+            i32* at = stable_array_at(&stable, i);
+            TEST(*at == i);
+            TEST(stable_array_remove(&stable, i));
+        }
+
+        stable_array_deinit(&stable);
+    }
+
+    debug_allocator_deinit(&resources_alloc);
+}
 
 void run_func(void* context)
 {
-    test_hash_index(3.0);
+    test_stable_array();
+    platform_abort();
+    //test_hash_index(3.0);
 
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
