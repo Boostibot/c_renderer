@@ -132,6 +132,24 @@ EXPORT Hash_Index32_Entry hash_index32_remove(Hash_Index32* table, isize found);
 EXPORT bool  hash_index32_is_invariant(Hash_Index32 table);
 EXPORT bool  hash_index32_is_entry_used(Hash_Index32_Entry entry);
 
+typedef struct Hash_Ptr_Entry {
+    u64 hash;
+    u64 value;
+} Hash_Ptr_Entry;
+
+#define Hash_Index  Hash_Ptr
+#define hash_index  hash_ptr
+#define Entry       Hash_Ptr_Entry
+#define Hash        u64
+#define Value       u64
+
+#include "hash_index_template.h"
+
+EXPORT void* ptr_high_bits_set(void* ptr, u8 num_bits, u64 bit_pattern);
+EXPORT u64 ptr_high_bits_get(void* ptr, u8 num_bits);
+EXPORT void* ptr_high_bits_restore(void* ptr, u8 num_bits);
+EXPORT void* hash_ptr_ptr_restore(void* stored);
+
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_HASH_INDEX_IMPL)) && !defined(LIB_HASH_INDEX_HAS_IMPL)
@@ -208,6 +226,87 @@ EXPORT bool  hash_index32_is_entry_used(Hash_Index32_Entry entry);
 
     #define HASH_INDEX_TEMPLATE_IMPL
     #define HASH_INDEX_IS_EMPTY_ZERO
+    #include "hash_index_template.h"
+    
+    #define _HASH_PTR_EMPTY      (u64) 1
+    #define _HASH_PTR_GRAVESTONE (u64) 2
+    #define _HASH_PTR_ALIVE      (u64) 0
+
+    EXPORT void* ptr_high_bits_set(void* ptr, u8 num_bits, u64 bit_pattern)
+    {
+        CHECK_BOUNDS(num_bits, 64 + 1);
+        u64 val = (u64) ptr;
+        u8 shift = 64 - num_bits;
+        u64 mask = ((u64) 1 << shift) - 1;
+
+        u64 out_val = (val & mask) | (bit_pattern << shift);
+        return (void*) out_val;
+    }
+
+    EXPORT u64 ptr_high_bits_get(void* ptr, u8 num_bits)
+    {
+        CHECK_BOUNDS(num_bits, 64 + 1);
+        u8 shift = 64 - num_bits;
+        u64 val = (u64) ptr;
+        u64 pattern = val >> shift;
+
+        return pattern;
+    }
+    EXPORT void* ptr_high_bits_restore(void* ptr, u8 num_bits)
+    {
+        static int _high_order_bit_tester = 0;
+        u64 pattern = (u64) &_high_order_bit_tester;
+
+        return ptr_high_bits_set(ptr, num_bits, pattern);
+    }
+
+    INTERNAL void _hash_ptr_set_empty(Hash_Ptr_Entry* entry)  
+    { 
+        entry->value = (u64) ptr_high_bits_set((void*) entry->value, 2, _HASH_PTR_EMPTY);
+    }
+    INTERNAL void _hash_ptr_set_gravestone(Hash_Ptr_Entry* entry) 
+    { 
+        entry->value = (u64) ptr_high_bits_set((void*) entry->value, 2, _HASH_PTR_GRAVESTONE);
+    }
+    
+    INTERNAL bool _hash_ptr_is_empty(const Hash_Ptr_Entry* entry) 
+    { 
+        return ptr_high_bits_get((void*) entry->value, 2) == _HASH_PTR_EMPTY;
+    }
+    INTERNAL bool _hash_ptr_is_gravestone(const Hash_Ptr_Entry* entry) 
+    { 
+        return ptr_high_bits_get((void*) entry->value, 2) == _HASH_PTR_GRAVESTONE;
+    }
+
+    INTERNAL u64 _hash_ptr_hash_escape(u64 hash)
+    {
+        return hash;
+    }
+
+    INTERNAL u64 _hash_ptr_value_escape(u64 value)
+    {
+        return (u64) ptr_high_bits_set((void*) value, 2, _HASH_PTR_ALIVE);
+    }
+
+    EXPORT void* hash_ptr_ptr_restore(void* stored)
+    {
+        return ptr_high_bits_restore(stored, 2);
+    }
+
+    #define entry_set_empty        _hash_ptr_set_empty
+    #define entry_set_gravestone   _hash_ptr_set_gravestone
+    #define entry_is_empty         _hash_ptr_is_empty
+    #define entry_is_gravestone    _hash_ptr_is_gravestone
+    #define entry_hash_escape      _hash_ptr_hash_escape
+    #define entry_value_escape     _hash_ptr_value_escape
+    
+    #define Hash_Index  Hash_Ptr
+    #define hash_index  hash_ptr
+    #define Entry       Hash_Ptr_Entry
+    #define Hash        u64
+    #define Value       u64
+
+    #define HASH_INDEX_TEMPLATE_IMPL
     #include "hash_index_template.h"
 
 #endif

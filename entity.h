@@ -19,17 +19,18 @@
 typedef u64 Compoment_Mask;
 
 typedef struct Entity {
-    Guid id;
+    Id id;
     Compoment_Mask compoments;
 } Entity;
 
-typedef void(*Compoment_System_Notify)(Guid id, bool added_if_true_removed_if_false, void* context); 
+typedef void(*Compoment_System_Notify)(Id id, bool added_if_true_removed_if_false, void* context); 
 
 EXPORT Compoment_Mask entity_get_compoments(Entity entity);
 EXPORT Compoment_Mask entity_set_compoments(Entity* entity, Compoment_Mask to);
 EXPORT Entity         entity_generate(Compoment_Mask compoments);
 EXPORT void           entity_remove(Entity* entity);
 
+EXPORT Compoment_Mask compoment_bit(i8 system);
 EXPORT Compoment_Mask compoment_add(Compoment_Mask to, i8 system);
 EXPORT Compoment_Mask compoment_system_get_default();
 EXPORT Compoment_Mask compoment_system_set_default(Compoment_Mask compoments);
@@ -42,12 +43,16 @@ EXPORT void compoment_system_add(String name, i8 system_bit_index, Compoment_Sys
 #if (defined(LIB_ALL_IMPL) || defined(LIB_ENTITY_IMPL)) && !defined(LIB_ENTITY_HAS_IMPL)
 #define LIB_ENTITY_HAS_IMPL
 
+
 EXPORT Compoment_Mask compoment_add(Compoment_Mask to, i8 system)
 {
     CHECK_BOUNDS(system, MAX_SYSTEMS);
     return to | ((Compoment_Mask) 1 << system);
 }
-
+EXPORT Compoment_Mask compoment_bit(i8 system)
+{
+    return compoment_add(0, system);
+}
 EXPORT Compoment_Mask entity_get_compoments(Entity entity)
 {
     return entity.compoments;
@@ -140,8 +145,8 @@ EXPORT Compoment_Mask entity_set_compoments(Entity* entity, Compoment_Mask to)
 EXPORT Entity entity_generate(Compoment_Mask compoments)
 {
     Entity out = {0};
-    Compoment_Mask all_compoments = compoments | compoment_system_set_default();
-    out.id = guid_generate();
+    Compoment_Mask all_compoments = compoments | compoment_system_get_default();
+    out.id = id_generate();
 
     entity_set_compoments(&out, all_compoments);
     return out;

@@ -894,7 +894,7 @@ EXPORT void allocator_out_of_memory(
 }
 
 #include "_test_hash_index.h"
-#include "stable_array.h"
+#include "stable_array2.h"
 
 void test_stable_array()
 {
@@ -904,7 +904,7 @@ void test_stable_array()
     {
     
         Stable_Array stable = {0};
-        stable_array_init(&stable, allocator_get_default(), sizeof(i32), DEF_ALIGN);
+        stable_array_init(&stable, allocator_get_default(), sizeof(i32));
 
         i32* val = NULL;
         isize i1 = stable_array_insert(&stable, (void**) &val);
@@ -934,6 +934,10 @@ void test_stable_array()
             TEST(index == i);
         }
 
+        ITERATE_STABLE_ARRAY_BEGIN(stable, i32*, ptr, isize, index)
+            LOG_INFO("TEST", "[%lld]: %lld", (lld) index, (lld)*ptr);
+        ITERATE_STABLE_ARRAY_END
+
         for(isize i = 0; i < INSERT_COUNT; i++)
         {
             if(i == 64)
@@ -951,6 +955,8 @@ void test_stable_array()
 
     debug_allocator_deinit(&resources_alloc);
 }
+
+#include "render_world.h"
 
 void run_func(void* context)
 {
@@ -1005,11 +1011,15 @@ void run_func(void* context)
     Resources resources = {0};
     Render renderer = {0};
 
+    render_world_init(&renderer_alloc.allocator);
+
     resources_init(&resources, &resources_alloc.allocator);
     resources_set(&resources);
 
     render_init(&renderer, &renderer_alloc.allocator);
     
+    Entity falcon = entity_generate(0);
+
     Triangle_Mesh_Handle falcon_handle = {0};
     Render_Object render_falcon = {0};
 
@@ -1180,14 +1190,16 @@ void run_func(void* context)
             {
                 triangle_mesh_read_entire(&falcon_handle, STRING("resources/sponza/sponza.obj"));
             
+                
+                Transform transf = {0};
+                transf.translate = vec3(20, 0, 20);
+                transf.scale = vec3_of(0.1f);
+                render_compoment_add(&falcon, HANDLE_CAST(Triangle_Mesh_Ref, falcon_handle), transf, 0);
+
                 //falcon_object = resources_object_get(&resources, falcon_handle);
                 //@TODO: add error returns here!
                 render_object_init_from_object(&render_falcon, &renderer, (Triangle_Mesh_Ref*) &falcon_handle);
             }
-
-            //@TODO: make Handle_Table type polymorphic!
-            //       rework platform to include support for allocators
-            //       rework platform to include support for paths
 
             Error error = {0};
 

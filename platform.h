@@ -315,6 +315,7 @@ typedef enum {
 #if defined(_MSC_VER)
     #include <stdio.h>
     #include <intrin.h>
+    #include <assert.h>
 
     #undef platform_trap
     #define platform_trap() __debugbreak() 

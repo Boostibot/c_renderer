@@ -97,6 +97,9 @@ EXPORT void* handle_table_get_unique(Handle_Table table, const Handle* handle);
 EXPORT bool handle_table_remove(Handle_Table* table, const Handle* handle);
 
 
+
+
+
 //Retrives an adress of the item referenced by handle. If the handle is invalid returns NULL.
 EXPORT void* handle_table_get(Handle_Table table, const Handle* handle);
 

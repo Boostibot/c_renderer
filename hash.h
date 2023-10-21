@@ -24,11 +24,31 @@ uint32_t hash32(uint32_t value)
     hash = (hash >> 16) ^ hash;
     return hash;
 }
-    
+
+static
+uint64_t hash_mix64(uint64_t hash1, uint64_t hash2)
+{
+    hash1 ^= hash2 + 0x517cc1b727220a95 + (hash1 << 6) + (hash1 >> 2);
+    return hash1;
+}
+
+static
+uint32_t hash_mix32(uint32_t hash1, uint32_t hash2)
+{
+    hash1 ^= hash2 + 0x9e3779b9 + (hash1 << 6) + (hash1 >> 2);
+    return hash1;
+}
+
+static
+uint32_t hash_fold64(uint64_t hash)
+{
+    return hash_mix32((uint32_t) hash, (uint32_t)(hash >> 32));
+}
+
 static
 uint32_t hash64_to32(uint64_t value) 
 {
-    return hash32((uint32_t) value ^ (uint32_t)(value >> 32));
+    return hash_fold64(hash64(value));
 }
 
 static
@@ -93,19 +113,23 @@ uint64_t hash64_murmur(const void* key, int64_t size, uint64_t seed)
     const uint64_t * data = (const uint64_t *)key;
     const uint64_t * end = data + (size/8);
 
+    bool is_big_endian = false;
+    #ifdef PLATFORM_BIG_ENDIAN
+    is_big_endian = true;
+    #endif
+
     while(data != end)
     {
-        #ifdef PLATFORM_BIG_ENDIAN
-			uint64 k = *data++;
+		uint64_t k = *data++;
+        if(is_big_endian)
+        {
 			char *p = (char *)&k;
 			char c;
 			c = p[0]; p[0] = p[7]; p[7] = c;
 			c = p[1]; p[1] = p[6]; p[6] = c;
 			c = p[2]; p[2] = p[5]; p[5] = c;
 			c = p[3]; p[3] = p[4]; p[4] = c;
-		#else
-			uint64_t k = *data++;
-		#endif
+        }
 
         k *= m; 
         k ^= k >> r; 
