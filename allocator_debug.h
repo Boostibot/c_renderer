@@ -747,6 +747,28 @@ INTERNAL bool _debug_allocator_is_aligned(void* ptr, isize alignment)
     return ptr == align_backward(ptr, alignment);
 }
 
+
+
+void print_pre(Debug_Allocation_Pre_Block pre, const char* c)
+{
+    LOG_TRACE("DEBUG", "printing pre block \"%s\" from: " SOURCE_INFO_FMT, c, SOURCE_INFO_PRINT(pre.header->allocation_source));
+    log_group_push();
+        LOG_TRACE("DEBUG", "header:             %p", pre.header);
+        LOG_TRACE("DEBUG", "user_ptr:           %p", pre.user_ptr);
+        LOG_TRACE("DEBUG", "call_stack:         %p", pre.call_stack);
+        LOG_TRACE("DEBUG", "dead_zone:          %p", pre.dead_zone);
+        LOG_TRACE("DEBUG", "dead_zone_size:     %lld", (lld) pre.dead_zone_size);
+        LOG_TRACE("DEBUG", "call_stack_size:    %lld", (lld) pre.call_stack_size);
+        log_group_push();
+        LOG_TRACE("DEBUG", "header.size:                %lld", (lld) pre.header->size);
+        LOG_TRACE("DEBUG", "header.align:               %lld", (lld) pre.header->align);
+        LOG_TRACE("DEBUG", "header.block_start_offset:  %lld", (lld) pre.header->block_start_offset);
+        LOG_TRACE("DEBUG", "header.allocation_time_s:   %lf", pre.header->allocation_time_s);
+        log_group_pop();
+
+    log_group_pop();
+}
+
 EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* old_ptr_, isize old_size, isize align, Source_Info called_from)
 {
     PERF_COUNTER_START(c);
@@ -796,6 +818,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     if(old_ptr != NULL)
     {
         Debug_Allocation_Pre_Block pre = _debug_allocator_get_pre_block(self, old_ptr);
+        //print_pre(pre, "before");
         ASSERT(_debug_allocator_is_aligned(pre.header, DEF_ALIGN));
 
         if(self->dead_allocation_max > 0)
@@ -832,7 +855,7 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     }
 
     
-    new_block_ptr = (u8*) allocator_try_reallocate(self->parent, total_new_size, old_block_ptr, total_old_size, DEF_ALIGN, called_from);
+    new_block_ptr = (u8*) self->parent->allocate(self->parent, total_new_size, old_block_ptr, total_old_size, DEF_ALIGN, called_from);
     //new_block_ptr = (u8*) self->parent->allocate(self->parent, total_new_size, old_block_ptr, total_old_size, DEF_ALIGN, called_from);
     
     //if failed return failiure and do nothing
@@ -883,6 +906,8 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
 
         hash_index64_insert(&self->alive_allocations_hash, hashed, (u64) new_ptr);
         _debug_allocator_assert_block(self, new_ptr);
+
+        //print_pre(new_block.pre, "after");
     
     }
 

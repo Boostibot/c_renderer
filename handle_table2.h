@@ -32,7 +32,7 @@
 //      We will then use the first pointer causing memroy corruption from the caller. 
 //      This bug is annoying and fairly hard to get rid of. 
 //  
-// The result* is a series of large page size multiple sized stable blocks with densely packed data.  
+// The result is a series of large page size multiple sized stable blocks with densely packed data.  
 // In addition we store the generation counters and pointers to the blocks inside lookup accelerating array.
 // We use space of the currently unsued item slots to store a linked list of indeces conecting all unsued items together.
 // 
@@ -78,17 +78,19 @@ typedef struct Handle_Table {
 
 EXPORT void* handle_table_insert(Handle_Table* table, Handle* _out_handle);
 EXPORT isize handle_table_remove(Handle_Table* table, const Handle* handle, void* save_to_if_removed, isize save_to_byte_size);
+EXPORT isize handle_table_force_remove(Handle_Table* table, const Handle* handle, void* save_to_if_removed, isize save_to_byte_size);
 EXPORT void  handle_table_reserve(Handle_Table* table, isize to_size);
 EXPORT void* handle_table_get(Handle_Table table, const Handle* handle);
 EXPORT void* handle_table_make_shared(Handle_Table* table, const Handle* handle, Handle* out_handle);
-EXPORT void* handle_table_make_unique(Handle_Table* table, const Handle* handle, Handle* out_handle);
+EXPORT void* handle_table_make_unique(Handle_Table* table, const Handle* handle, Handle* out_handle, void** old_data);
+EXPORT Handle_Table_Slot* handle_table_get_slot(Handle_Table table, const Handle* handle, void** user_data);
 
 EXPORT void handle_table_init(Handle_Table* table, Allocator* alloc, i32 type_size, i32 type_align);
 EXPORT void handle_table_deinit(Handle_Table* table);
 
 //A macro used to iterate all entries of a handle table.
 //This is better than iterating using handles because we can skip all the checks.
-#define HANDLE_TABLE_FOR_EACH_BEGIN(handle_table, Handle_Type, handle_name, Ptr_Type, ptr_name)             \
+#define HANDLE_TABLE_FOR_EACH_BEGIN(table, Handle_Type, handle_name, Ptr_Type, ptr_name)             \
     for(isize _block_i = 0; _block_i < (table).blocks.size; _block_i++)                                     \
     {                                                                                                       \
         u8* _block = (u8*) (table).blocks.data[_block_i];                                                   \
@@ -139,10 +141,10 @@ EXPORT void handle_table_deinit(Handle_Table* table)
 
 INTERNAL Handle_Table_Slot* _handle_table_slot_by_index(const Handle_Table* table, u32 index)
 {
+    ASSERT(index < (u32) table->blocks.size);
     u32 block_i = (index - 1) / HANDLE_TABLE_BLOCK_SIZE;
     u32 item_i = (index - 1) % HANDLE_TABLE_BLOCK_SIZE;
 
-    ASSERT(index < table->blocks.size);
     u8* block = (u8*) table->blocks.data[block_i];
 
     u32 slot_size = table->blocks.block_size / HANDLE_TABLE_BLOCK_SIZE;
@@ -150,16 +152,21 @@ INTERNAL Handle_Table_Slot* _handle_table_slot_by_index(const Handle_Table* tabl
     return slot;
 }
 
-INTERNAL Handle_Table_Slot* _handle_table_slot_by_handle(const Handle_Table* table, Handle handle)
+
+EXPORT Handle_Table_Slot* handle_table_get_slot(Handle_Table table, const Handle* handle, void** user_data)
 {
-    if(handle.index < 1 || handle.index > table->size)
-        return NULL;
+    if(handle->index > 1 || handle->index <= table.size)
+    {
+        Handle_Table_Slot* slot = _handle_table_slot_by_index(&table, (u32) handle->index);
+        if(slot->generation == handle->generation)
+        {
+            *user_data = slot + 1;
+            return slot;
+        }
+    }
 
-    Handle_Table_Slot* slot = _handle_table_slot_by_index(table, (u32) handle.index);
-    if(slot->generation != handle.generation)
-        return NULL;
-
-    return slot;
+    *user_data = NULL;
+    return NULL;
 }
 
 EXPORT void handle_table_reserve(Handle_Table* table, isize to_size)
@@ -217,9 +224,22 @@ EXPORT void* handle_table_insert(Handle_Table* table, Handle* _out_handle)
     return out_ptr;
 }
 
+INTERNAL void _handle_table_force_remove(Handle_Table* table, Handle_Table_Slot* found_slot, const Handle* handle, void* save_to_if_removed, isize save_to_byte_size)
+{
+    void* item = found_slot + 1;
+    memmove(save_to_if_removed, item, MIN(save_to_byte_size, table->type_size));
+    memset(item, 0, table->type_size);
+
+    found_slot->generation += 1;
+    found_slot->references = (table->free_slot_i1 - 1) | HANDLE_TABLE_LINK_BIT;
+    table->free_slot_i1 = (u32) handle->index + 1;
+}
+
 EXPORT isize handle_table_remove(Handle_Table* table, const Handle* handle, void* save_to_if_removed, isize save_to_byte_size)
 {
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, *handle);
+    void* out = NULL;
+    Handle_Table_Slot* found_slot = handle_table_get_slot(*table, handle, &out);
+    ASSERT_MSG(save_to_byte_size >= table->type_size, "not enough space given!");
     isize new_refs = -1;
     if(found_slot)
     {
@@ -227,54 +247,75 @@ EXPORT isize handle_table_remove(Handle_Table* table, const Handle* handle, void
         if(new_refs <= 0)
         {
             new_refs = 0;
-            void* item = found_slot + 1;
-            ASSERT_MSG(save_to_byte_size >= table->type_size, "not enough space given!");
-            memmove(save_to_if_removed, item, MIN(save_to_byte_size, table->type_size));
-            memset(item, 0, table->type_size);
-
-            found_slot->generation += 1;
-            found_slot->references = (table->free_slot_i1 - 1) | HANDLE_TABLE_LINK_BIT;
-            table->free_slot_i1 == handle->index + 1;
+            _handle_table_force_remove(table, found_slot, handle, save_to_if_removed, save_to_byte_size);
         }
     }
 
     return new_refs;
 }
 
+EXPORT isize handle_table_force_remove(Handle_Table* table, const Handle* handle, void* save_to_if_removed, isize save_to_byte_size)
+{
+    void* out = NULL;
+    Handle_Table_Slot* found_slot = handle_table_get_slot(*table, handle, &out);
+    ASSERT_MSG(save_to_byte_size >= table->type_size, "not enough space given!");
+    isize new_refs = -1;
+    if(found_slot)
+    {
+        _handle_table_force_remove(table, found_slot, handle, save_to_if_removed, save_to_byte_size);
+        new_refs = 0;
+    }
+    
+    return new_refs;
+}
+
 EXPORT void* handle_table_get(Handle_Table table, const Handle* handle)
 {
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(&table, *handle);
-    if(found_slot)
-        return found_slot + 1;
-    else
-        return NULL;
+    void* out = NULL;
+    handle_table_get_slot(table, handle, &out);
+    return out;
 }
 
 EXPORT void* handle_table_make_shared(Handle_Table* table, const Handle* handle, Handle* out_handle)
 {
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, *handle);
+    void* out = NULL;
+    Handle_Table_Slot* found_slot = handle_table_get_slot(*table, handle, &out);
     if(found_slot)
     {
         found_slot->references += 1;
         *out_handle = *handle;
-        return found_slot + 1;
-    }
-
-    Handle null = {0};
-    *out_handle = null;
-    return NULL;
-}
-
-EXPORT void* handle_table_make_unique(Handle_Table* table, const Handle* handle, Handle* out_handle)
-{
-    Handle_Table_Slot* found_slot = _handle_table_slot_by_handle(table, *handle);
-    if(found_slot && found_slot->references == 1)
-    {
-        *out_handle = *handle;
-        return found_slot + 1;
     }
     else
-        return handle_table_insert(table, out_handle);
+    {
+        Handle null = {0};
+        *out_handle = null;
+    }
+    return out;
+}
+
+EXPORT void* handle_table_make_unique(Handle_Table* table, const Handle* handle, Handle* out_handle, void** prev)
+{
+    void* out = NULL;
+    Handle_Table_Slot* found_slot = handle_table_get_slot(*table, handle, prev);
+    if(found_slot)
+    {
+        if(found_slot->references == 1)
+        {
+            *out_handle = *handle;
+            out = found_slot + 1;
+        }
+        else
+        {
+            out = handle_table_insert(table, out_handle);
+        }
+    }
+    else
+    {
+        Handle null = {0};
+        *out_handle = null;
+    }
+
+    return out;
 }
 
 

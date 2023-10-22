@@ -45,8 +45,8 @@ EXPORT void block_array_grow(Block_Array* stable, isize to, isize growth_base, f
                 
 #endif
 
-#if (defined(LIB_ALL_IMPL) || defined(LIB_LOG_IMPL)) && !defined(LIB_LOG_HAS_IMPL)
-#define LIB_LOG_HAS_IMPL
+#if (defined(LIB_ALL_IMPL) || defined(LIB_BLOCK_ARRAY_IMPL)) && !defined(LIB_BLOCK_ARRAY_HAS_IMPL)
+#define LIB_BLOCK_ARRAY_HAS_IMPL
 
 #define _BLOCK_ARRAY_DO_CHECKS
 #define _BLOCK_ARRAY_DO_SLOW_CHECKS

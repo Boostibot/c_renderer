@@ -610,8 +610,8 @@ int main()
 
 int perf_counter_compare_total_time_func(const void* a_, const void* b_)
 {
-    Perf_Counter* a = (Perf_Counter*) a_;
-    Perf_Counter* b = (Perf_Counter*) b_;
+    Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
+    Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
     
     if(profile_get_counter_total_running_time_s(*a) > profile_get_counter_total_running_time_s(*b))
         return -1;
@@ -621,20 +621,20 @@ int perf_counter_compare_total_time_func(const void* a_, const void* b_)
 
 int perf_counter_compare_file_func(const void* a_, const void* b_)
 {
-    Perf_Counter* a = (Perf_Counter*) a_;
-    Perf_Counter* b = (Perf_Counter*) b_;
+    Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
+    Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
     
     return strcmp(a->file, b->file);
 }
 
 void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_name)
 {
-    DEFINE_ARRAY_TYPE(Perf_Counter, _Perf_Counter_Array);
+    DEFINE_ARRAY_TYPE(Global_Perf_Counter, _Global_Perf_Counter_Array);
 
     String common_prefix = {0};
 
-    _Perf_Counter_Array counters = {0};
-    for(Perf_Counter* counter = profile_get_counters(); counter != NULL; counter = counter->next)
+    _Global_Perf_Counter_Array counters = {0};
+    for(Global_Perf_Counter* counter = profile_get_counters(); counter != NULL; counter = counter->next)
     {
 
         String curent_file = string_make(counter->file);
@@ -657,29 +657,26 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
     }
     
     if(sort_by_name)
-        qsort(counters.data, counters.size, sizeof(Perf_Counter), perf_counter_compare_file_func);
+        qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_file_func);
     else
-        qsort(counters.data, counters.size, sizeof(Perf_Counter), perf_counter_compare_total_time_func);
+        qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_total_time_func);
     
     LOG(log_module, log_type, "Logging perf counters (still running %lld):", (lld) profile_get_total_running_counters_count());
     log_group_push();
     for(isize i = 0; i < counters.size; i++)
     {
-        Perf_Counter counter = counters.data[i];
+        Global_Perf_Counter counter = counters.data[i];
+        Perf_Counter_Stats stats = perf_counter_get_stats(counter.counter, 1);
+
         if(counter.is_detailed)
         {
-            if(i == counters.size - 1)
-            {
-                (void) profile_get_counter_normalized_standard_deviation_s(counter);
-            }
-
 		    LOG(log_module, log_type, "total: %15.8lf avg: %15.8lf runs: %-9lld σ/μ %15.8lf [%15.8lf %15.8lf] (ms) from %20s %-4lld %s \"%s\"", 
-			    profile_get_counter_total_running_time_s(counter)*1000,
-			    profile_get_counter_average_running_time_s(counter)*1000,
-                (lld) counter.runs,
-                profile_get_counter_normalized_standard_deviation_s(counter),
-			    profile_get_counter_min_running_time_s(counter)*1000,
-			    profile_get_counter_max_running_time_s(counter)*1000,
+			    stats.total_s*1000,
+			    stats.average_s*1000,
+                (lld) stats.runs,
+                stats.normalized_standard_deviation_s,
+			    stats.min_s*1000,
+			    stats.max_s*1000,
                 counter.file + common_prefix.size,
 			    (lld) counter.line,
 			    counter.function,
@@ -689,9 +686,9 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
         else
         {
 		    LOG(log_module, log_type, "total: %15.8lf avg: %15.8lf runs: %-9lld (ms) from %20s %-4lld %s \"%s\"", 
-			    profile_get_counter_total_running_time_s(counter)*1000,
-			    profile_get_counter_average_running_time_s(counter)*1000,
-                (lld) counter.runs,
+			    stats.total_s*1000,
+			    stats.average_s*1000,
+                (lld) stats.runs,
                 counter.file + common_prefix.size,
 			    (lld) counter.line,
 			    counter.function,
@@ -894,7 +891,60 @@ EXPORT void allocator_out_of_memory(
 }
 
 #include "_test_hash_index.h"
-#include "stable_array2.h"
+#include "stable_array3.h"
+
+
+void break_debug_allocator()
+{
+    //My theory is that when reallocating from high aligned offset to low aligned offset we dont shift over the data
+    //I belive this can be easily solved by alloc & dealloc pair instead of the singular realloc we do currenlty.
+
+    Debug_Allocator debug_alloc = {0};
+    debug_allocator_init(&debug_alloc, allocator_get_default(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+    {
+        Allocator* allocator = allocator_get_default();
+        isize alloc_gran = 41;
+        enum {ITERS = 100, TEST_VAL = 0x66};
+        u8* allocs[ITERS] = {0};
+        isize sizes[ITERS] = {0};
+        isize aligns[ITERS] = {0};
+
+        isize i = 6;
+        //for(isize i = 0; i < ITERS; i++)
+        {
+            sizes[i] = alloc_gran*i;
+            aligns[i] = (isize) 1 << (i % 13); 
+            allocs[i] = (u8*) debug_allocator_allocate(allocator, sizes[i], NULL, 0, aligns[i], SOURCE_INFO());
+
+            memset(allocs[i], TEST_VAL, sizes[i]);
+            for(isize k = 0; k < sizes[i]; k++)
+                TEST(allocs[i][k] == TEST_VAL);
+        }
+        
+        //for(isize i = 0; i < ITERS; i++)
+        {
+            u8* alloc = allocs[i];
+            isize size = sizes[i];
+            isize align = aligns[i];
+
+            allocs[i] = (u8*) debug_allocator_allocate(allocator, size + alloc_gran, alloc, size, align, SOURCE_INFO());
+            sizes[i] = size + alloc_gran;
+            for(isize k = 0; k < size - alloc_gran; k++)
+                TEST(alloc[k] == TEST_VAL);
+        }
+        //for(isize i = 0; i < ITERS; i++)
+        {
+            u8* alloc = allocs[i];
+            isize size = sizes[i];
+            isize align = aligns[i]; 
+            for(isize k = 0; k < size - alloc_gran; k++)
+                TEST(alloc[k] == TEST_VAL);
+
+            allocator_deallocate(allocator, alloc, size, align, SOURCE_INFO());
+        }
+    }
+    debug_allocator_deinit(&debug_alloc);
+}
 
 void test_stable_array()
 {
@@ -902,7 +952,6 @@ void test_stable_array()
     Debug_Allocator resources_alloc = {0};
     debug_allocator_init(&resources_alloc, allocator_get_default(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
     {
-    
         Stable_Array stable = {0};
         stable_array_init(&stable, allocator_get_default(), sizeof(i32));
 
@@ -913,21 +962,16 @@ void test_stable_array()
         TEST(val == val_get);
         *val = 32;
 
-        TEST(stable_array_at_safe(&stable, -2) == NULL);
-        TEST(stable_array_at_safe(&stable, -1) == NULL);
-        TEST(stable_array_at_safe(&stable, 0) != NULL);
-        TEST(stable_array_at_safe(&stable, 1) == NULL);
-        TEST(stable_array_at_safe(&stable, 2) == NULL);
+        TEST(stable_array_at_if_alive(&stable, -2) == NULL);
+        TEST(stable_array_at_if_alive(&stable, -1) == NULL);
+        TEST(stable_array_at_if_alive(&stable, 0) != NULL);
+        TEST(stable_array_at_if_alive(&stable, 1) == NULL);
+        TEST(stable_array_at_if_alive(&stable, 2) == NULL);
         TEST(stable_array_remove(&stable, 0));
 
         enum {INSERT_COUNT = 129};
         for(isize i = 0; i < INSERT_COUNT; i++)
         {
-            if(i == 64)
-            {
-                int x = 10; (void) x;
-            }
-
             i32* at = NULL;
             isize index = stable_array_insert(&stable, (void**) &at);
             *at = (i32) i;
@@ -940,11 +984,6 @@ void test_stable_array()
 
         for(isize i = 0; i < INSERT_COUNT; i++)
         {
-            if(i == 64)
-            {
-                int x = 10; (void) x;
-            }
-
             i32* at = stable_array_at(&stable, i);
             TEST(*at == i);
             TEST(stable_array_remove(&stable, i));
@@ -957,11 +996,14 @@ void test_stable_array()
 }
 
 #include "render_world.h"
+#include "_test_stable_array.h"
 
 void run_func(void* context)
 {
-    test_stable_array();
+    test_stable_array_benchmark(1.0);
+    log_perf_counters("APP", LOG_TYPE_INFO, true);
     platform_abort();
+    test_stable_array();
     //test_hash_index(3.0);
 
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");

@@ -4,7 +4,7 @@
 #include "hash_index.h"
 #include "array.h"
 #include "entity.h"
-#include "stable_array2.h"
+#include "stable_array3.h"
 #include "resources.h"
 #include "systems.h"
 

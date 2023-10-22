@@ -2,71 +2,71 @@
 
 #include "block_array.h"
 
-#define STABLE_ARRAY_BLOCK_SIZE 64
+#define STABLE_ARRAY2_BLOCK_SIZE 64
 
-typedef struct Stable_Array_Block_Header {
+typedef struct Stable_Array2_Block_Header {
     u32 magic;
     i32 next_not_filled_i1; 
     u64 mask;
-} Stable_Array_Block_Header;
+} Stable_Array2_Block_Header;
 
-typedef struct Stable_Array {
+typedef struct Stable_Array2 {
     Block_Array blocks;
     isize size;
     i32 first_not_filled_i1;
     i32 item_size;
     i32 growth_lin;
     f32 growth_mult;
-} Stable_Array;
+} Stable_Array2;
 
-EXPORT void  stable_array_init_custom(Stable_Array* stable, Allocator* alloc, isize item_size, isize item_align, isize growth_lin, f32 growth_mult);
-EXPORT void  stable_array_init(Stable_Array* stable, Allocator* alloc, isize item_size);
-EXPORT void  stable_array_deinit(Stable_Array* stable);
+EXPORT void  stable_array2_init_custom(Stable_Array2* stable, Allocator* alloc, isize item_size, isize item_align, isize growth_lin, f32 growth_mult);
+EXPORT void  stable_array2_init(Stable_Array2* stable, Allocator* alloc, isize item_size);
+EXPORT void  stable_array2_deinit(Stable_Array2* stable);
 
-EXPORT isize stable_array_capacity(const Stable_Array* stable);
-EXPORT void* stable_array_get_block(const Stable_Array* stable, isize index);
-EXPORT void* stable_array_get_block_safe(const Stable_Array* stable, isize index);
-EXPORT void* stable_array_at(const Stable_Array* stable, isize index);
-EXPORT void* stable_array_at_safe(const Stable_Array* stable, isize index);
-EXPORT void* stable_array_at_noncrashing(const Stable_Array* stable, isize index);
-EXPORT isize stable_array_insert(Stable_Array* stable, void** out);
-EXPORT bool  stable_array_remove(Stable_Array* stable, isize index);
-EXPORT void  stable_array_reserve(Stable_Array* stable, isize to);
+EXPORT isize stable_array2_capacity(const Stable_Array2* stable);
+EXPORT void* stable_array2_get_block(const Stable_Array2* stable, isize index);
+EXPORT void* stable_array2_get_block_safe(const Stable_Array2* stable, isize index);
+EXPORT void* stable_array2_at(const Stable_Array2* stable, isize index);
+EXPORT void* stable_array2_at_safe(const Stable_Array2* stable, isize index);
+EXPORT void* stable_array2_at_noncrashing(const Stable_Array2* stable, isize index);
+EXPORT isize stable_array2_insert(Stable_Array2* stable, void** out);
+EXPORT bool  stable_array2_remove(Stable_Array2* stable, isize index);
+EXPORT void  stable_array2_reserve(Stable_Array2* stable, isize to);
 
-EXPORT Stable_Array_Block_Header* stable_array_get_block_header(const Stable_Array* stable, void* block_addr);
+EXPORT Stable_Array2_Block_Header* stable_array2_get_block_header(const Stable_Array2* stable, void* block_addr);
 
-#define ITERATE_STABLE_ARRAY_BEGIN(stable, Ptr_Type, ptr, Index_Type, index)                    \
+#define ITERATE_STABLE_ARRAY2_BEGIN(stable, Ptr_Type, ptr, Index_Type, index)                    \
     for(isize _block_i = 0; _block_i < (stable).blocks.size; _block_i++)                        \
     {                                                                                           \
         void* _block = (stable).blocks.data[_block_i];                                          \
-        Stable_Array_Block_Header* _block_header = stable_array_get_block_header(&(stable), _block); \
-        for(isize _item_i = 0; _item_i < STABLE_ARRAY_BLOCK_SIZE; _item_i++)                    \
+        Stable_Array2_Block_Header* _block_header = stable_array2_get_block_header(&(stable), _block); \
+        for(isize _item_i = 0; _item_i < STABLE_ARRAY2_BLOCK_SIZE; _item_i++)                    \
         {                                                                                       \
             if(_block_header->mask & ((u64) 1 << _item_i))                                      \
             {                                                                                   \
                 Ptr_Type ptr = (Ptr_Type) ((u8*) _block + _item_i*(stable).item_size); (void) ptr;   \
-                Index_Type index = (Index_Type) (_item_i + _block_i * STABLE_ARRAY_BLOCK_SIZE); (void) index; \
+                Index_Type index = (Index_Type) (_item_i + _block_i * STABLE_ARRAY2_BLOCK_SIZE); (void) index; \
                 
-#define ITERATE_STABLE_ARRAY_END }}}   
+#define ITERATE_STABLE_ARRAY2_END }}}   
 
-#define _STABLE_ARRAY_DO_CHECKS
-#define _STABLE_ARRAY_DO_SLOW_CHECKS
-#define _STABLE_ARRAY_DO_FFS
-#define _STABLE_ARRAY_MAGIC                 (u16) 0x5354 /* 'ST' in hex */
+#define _STABLE_ARRAY2_DO_CHECKS
+#define _STABLE_ARRAY2_DO_SLOW_CHECKS
+#define _STABLE_ARRAY2_DO_FFS
+#define _STABLE_ARRAY2_MAGIC                 (u16) 0x5354 /* 'ST' in hex */
 
-typedef struct _Stable_Array_Lookup {
+typedef struct _Stable_Array2_Lookup {
     isize block_i;
     isize item_i;
     void* block;
     void* item;
-} _Stable_Array_Lookup;
+} _Stable_Array2_Lookup;
 
-EXPORT void stable_array_init_custom(Stable_Array* stable, Allocator* alloc, isize item_size, isize item_align, isize growth_lin, f32 growth_mult)
+EXPORT void stable_array2_init_custom(Stable_Array2* stable, Allocator* alloc, isize item_size, isize item_align, isize growth_lin, f32 growth_mult)
 {
     ASSERT(item_size > 0 && is_power_of_two(item_align));
 
-    stable_array_deinit(stable);
-    block_array_init(&stable->blocks, alloc, item_size*STABLE_ARRAY_BLOCK_SIZE + sizeof(Stable_Array_Block_Header), item_align);
+    stable_array2_deinit(stable);
+    block_array_init(&stable->blocks, alloc, item_size*STABLE_ARRAY2_BLOCK_SIZE + sizeof(Stable_Array2_Block_Header), item_align);
     stable->size = 0;
     stable->item_size = (i32) item_size;
     stable->first_not_filled_i1 = 0;
@@ -74,16 +74,16 @@ EXPORT void stable_array_init_custom(Stable_Array* stable, Allocator* alloc, isi
     stable->growth_mult = growth_mult;
 }
 
-EXPORT void stable_array_init(Stable_Array* stable, Allocator* alloc, isize item_size)
+EXPORT void stable_array2_init(Stable_Array2* stable, Allocator* alloc, isize item_size)
 {
-    stable_array_init_custom(stable, alloc, item_size, DEF_ALIGN, STABLE_ARRAY_BLOCK_SIZE, 1.5f);
+    stable_array2_init_custom(stable, alloc, item_size, DEF_ALIGN, STABLE_ARRAY2_BLOCK_SIZE, 1.5f);
 }
 
-INTERNAL _Stable_Array_Lookup _stable_array_lookup(const Stable_Array* stable, isize index)
+INTERNAL _Stable_Array2_Lookup _stable_array2_lookup(const Stable_Array2* stable, isize index)
 {
-    _Stable_Array_Lookup out = {0};
-    out.block_i = index / STABLE_ARRAY_BLOCK_SIZE;
-    out.item_i = index %  STABLE_ARRAY_BLOCK_SIZE;
+    _Stable_Array2_Lookup out = {0};
+    out.block_i = index / STABLE_ARRAY2_BLOCK_SIZE;
+    out.item_i = index %  STABLE_ARRAY2_BLOCK_SIZE;
     
     out.block = stable->blocks.data[out.block_i];
     out.item = (u8*) out.block + stable->item_size*out.item_i;
@@ -91,20 +91,20 @@ INTERNAL _Stable_Array_Lookup _stable_array_lookup(const Stable_Array* stable, i
     return out;
 }
 
-EXPORT isize stable_array_capacity(const Stable_Array* stable)
+EXPORT isize stable_array2_capacity(const Stable_Array2* stable)
 {
-    return stable->blocks.size * STABLE_ARRAY_BLOCK_SIZE;
+    return stable->blocks.size * STABLE_ARRAY2_BLOCK_SIZE;
 }
 
-EXPORT Stable_Array_Block_Header* stable_array_get_block_header(const Stable_Array* stable, void* block_addr)
+EXPORT Stable_Array2_Block_Header* stable_array2_get_block_header(const Stable_Array2* stable, void* block_addr)
 {
-    Stable_Array_Block_Header* block_header = (Stable_Array_Block_Header*) ((u8*) block_addr + stable->item_size*STABLE_ARRAY_BLOCK_SIZE);
+    Stable_Array2_Block_Header* block_header = (Stable_Array2_Block_Header*) ((u8*) block_addr + stable->item_size*STABLE_ARRAY2_BLOCK_SIZE);
     return block_header;
 }
 
-INTERNAL void _stable_array_check_invariants(const Stable_Array* stable);
+INTERNAL void _stable_array2_check_invariants(const Stable_Array2* stable);
 
-EXPORT void stable_array_deinit(Stable_Array* stable)
+EXPORT void stable_array2_deinit(Stable_Array2* stable)
 {
     block_array_deinit(&stable->blocks);
     stable->size = 0;
@@ -112,23 +112,23 @@ EXPORT void stable_array_deinit(Stable_Array* stable)
     stable->first_not_filled_i1 = 0;
 }
 
-EXPORT void* stable_array_get_block(const Stable_Array* stable, isize index)
+EXPORT void* stable_array2_get_block(const Stable_Array2* stable, isize index)
 {
-    _stable_array_check_invariants(stable);
-    CHECK_BOUNDS(index, stable_array_capacity(stable));
+    _stable_array2_check_invariants(stable);
+    CHECK_BOUNDS(index, stable_array2_capacity(stable));
 
-    isize block_i = index / STABLE_ARRAY_BLOCK_SIZE;
+    isize block_i = index / STABLE_ARRAY2_BLOCK_SIZE;
 
     void* block = stable->blocks.data[block_i];
     return block;
 }
 
-EXPORT void* stable_array_get_block_safe(const Stable_Array* stable, isize index)
+EXPORT void* stable_array2_get_block_safe(const Stable_Array2* stable, isize index)
 {
-    _stable_array_check_invariants(stable);
-    if(0 <= index && index <= stable_array_capacity(stable))
+    _stable_array2_check_invariants(stable);
+    if(0 <= index && index <= stable_array2_capacity(stable))
     {
-        isize block_i = index / STABLE_ARRAY_BLOCK_SIZE;
+        isize block_i = index / STABLE_ARRAY2_BLOCK_SIZE;
 
         void* block = stable->blocks.data[block_i];
         return block;
@@ -137,30 +137,30 @@ EXPORT void* stable_array_get_block_safe(const Stable_Array* stable, isize index
     return NULL;
 }
 
-EXPORT void* stable_array_at(const Stable_Array* stable, isize index)
+EXPORT void* stable_array2_at(const Stable_Array2* stable, isize index)
 {
-    _stable_array_check_invariants(stable);
-    CHECK_BOUNDS(index, stable_array_capacity(stable));
+    _stable_array2_check_invariants(stable);
+    CHECK_BOUNDS(index, stable_array2_capacity(stable));
 
-    _Stable_Array_Lookup lookup = _stable_array_lookup(stable, index);
+    _Stable_Array2_Lookup lookup = _stable_array2_lookup(stable, index);
 
     #ifdef DO_BOUNDS_CHECKS
-    Stable_Array_Block_Header* block_header = stable_array_get_block_header(stable, lookup.block);
+    Stable_Array2_Block_Header* block_header = stable_array2_get_block_header(stable, lookup.block);
     u64 bit = (u64) 1 << lookup.item_i;
     bool is_alive = !!(block_header->mask & bit);
-    TEST_MSG(is_alive, "Needs to be alive! Use stable_array_at_safe if unsure!");
+    TEST_MSG(is_alive, "Needs to be alive! Use stable_array2_at_safe if unsure!");
     #endif // DO_BOUNDS_CHECKS
 
     return lookup.item;
 }
 
-EXPORT void* stable_array_at_safe(const Stable_Array* stable, isize index)
+EXPORT void* stable_array2_at_safe(const Stable_Array2* stable, isize index)
 {
-    _stable_array_check_invariants(stable);
-    if(0 <= index && index <= stable_array_capacity(stable))
+    _stable_array2_check_invariants(stable);
+    if(0 <= index && index <= stable_array2_capacity(stable))
     {
-        _Stable_Array_Lookup lookup = _stable_array_lookup(stable, index);
-        Stable_Array_Block_Header* block_header = stable_array_get_block_header(stable, lookup.block);
+        _Stable_Array2_Lookup lookup = _stable_array2_lookup(stable, index);
+        Stable_Array2_Block_Header* block_header = stable_array2_get_block_header(stable, lookup.block);
         u64 bit = (u64) 1 << lookup.item_i;
         bool is_alive = !!(block_header->mask & bit);
         if(is_alive)
@@ -171,22 +171,22 @@ EXPORT void* stable_array_at_safe(const Stable_Array* stable, isize index)
 }
 
 //@TODO: remove
-EXPORT void* stable_array_at_noncrashing(const Stable_Array* stable, isize index)
+EXPORT void* stable_array2_at_noncrashing(const Stable_Array2* stable, isize index)
 {
-    _stable_array_check_invariants(stable);
-    if(0 <= index && index <= stable_array_capacity(stable))
+    _stable_array2_check_invariants(stable);
+    if(0 <= index && index <= stable_array2_capacity(stable))
     {
-        _Stable_Array_Lookup lookup = _stable_array_lookup(stable, index);
+        _Stable_Array2_Lookup lookup = _stable_array2_lookup(stable, index);
         return lookup.item;
     }
 
     return NULL;
 }
 
-EXPORT isize stable_array_insert(Stable_Array* stable, void** out)
+EXPORT isize stable_array2_insert(Stable_Array2* stable, void** out)
 {
-    _stable_array_check_invariants(stable);
-    stable_array_reserve(stable, stable->size + 1);
+    _stable_array2_check_invariants(stable);
+    stable_array2_reserve(stable, stable->size + 1);
 
     ASSERT_MSG(out != NULL, "out must not be NULL!");
     ASSERT_MSG(stable->first_not_filled_i1 != 0, "needs to have a place thats not filled when we reserved one!");
@@ -194,11 +194,11 @@ EXPORT isize stable_array_insert(Stable_Array* stable, void** out)
     CHECK_BOUNDS(block_i, stable->blocks.size);
 
     u8* block_ptr = (u8*) stable->blocks.data[block_i];
-    Stable_Array_Block_Header* block_header = stable_array_get_block_header(stable, block_ptr);
+    Stable_Array2_Block_Header* block_header = stable_array2_get_block_header(stable, block_ptr);
     ASSERT_MSG(~block_header->mask != 0, "Needs to have a free slot");
 
     bool do_ffs = false;
-    #ifdef _STABLE_ARRAY_DO_FFS
+    #ifdef _STABLE_ARRAY2_DO_FFS
     do_ffs = true;
     #endif
 
@@ -231,24 +231,24 @@ EXPORT isize stable_array_insert(Stable_Array* stable, void** out)
         block_header->next_not_filled_i1 = 0;
     }
 
-    isize out_index = block_i * STABLE_ARRAY_BLOCK_SIZE + first_empty_index;
+    isize out_index = block_i * STABLE_ARRAY2_BLOCK_SIZE + first_empty_index;
     void* out_ptr = block_ptr + first_empty_index * stable->item_size;
     memset(out_ptr, 0, stable->item_size);
 
     stable->size += 1;
-    _stable_array_check_invariants(stable);
+    _stable_array2_check_invariants(stable);
 
     *out = out_ptr;
     return out_index;
 }
 
-EXPORT bool stable_array_remove(Stable_Array* stable, isize index)
+EXPORT bool stable_array2_remove(Stable_Array2* stable, isize index)
 {
-    _stable_array_check_invariants(stable);
-    if(0 <= index && index <= stable_array_capacity(stable))
+    _stable_array2_check_invariants(stable);
+    if(0 <= index && index <= stable_array2_capacity(stable))
     {
-        _Stable_Array_Lookup lookup = _stable_array_lookup(stable, index);
-        Stable_Array_Block_Header* block_header = stable_array_get_block_header(stable, lookup.block);
+        _Stable_Array2_Lookup lookup = _stable_array2_lookup(stable, index);
+        Stable_Array2_Block_Header* block_header = stable_array2_get_block_header(stable, lookup.block);
         u64 bit = (u64) 1 << lookup.item_i;
 
         #ifdef DO_ASSERTS
@@ -270,42 +270,42 @@ EXPORT bool stable_array_remove(Stable_Array* stable, isize index)
             block_header->mask = block_header->mask & ~bit;
         }
 
-        _stable_array_check_invariants(stable);
+        _stable_array2_check_invariants(stable);
         return is_alive;
     }
 
     return false;
 }
 
-EXPORT void stable_array_reserve(Stable_Array* stable, isize to_size)
+EXPORT void stable_array2_reserve(Stable_Array2* stable, isize to_size)
 {
-    isize capacity = stable_array_capacity(stable);
+    isize capacity = stable_array2_capacity(stable);
     if(to_size > capacity)
     {
-        _stable_array_check_invariants(stable);
+        _stable_array2_check_invariants(stable);
         ASSERT_MSG(stable->first_not_filled_i1 == 0, "If there are not empty slots the stable array should really be full");
 
         i32 blocks_before = stable->blocks.size;
-        block_array_grow(&stable->blocks, DIV_ROUND_UP(to_size, STABLE_ARRAY_BLOCK_SIZE), DIV_ROUND_UP(stable->growth_lin, STABLE_ARRAY_BLOCK_SIZE), stable->growth_mult);
+        block_array_grow(&stable->blocks, DIV_ROUND_UP(to_size, STABLE_ARRAY2_BLOCK_SIZE), DIV_ROUND_UP(stable->growth_lin, STABLE_ARRAY2_BLOCK_SIZE), stable->growth_mult);
         i32 blocks_after = stable->blocks.size;
         
         for(i32 block_i = blocks_after; block_i-- > blocks_before; )
         {
             u8* block = (u8*) stable->blocks.data[block_i];
-            Stable_Array_Block_Header* curr_block = stable_array_get_block_header(stable, block);
+            Stable_Array2_Block_Header* curr_block = stable_array2_get_block_header(stable, block);
             curr_block->mask = 0;
-            curr_block->magic = _STABLE_ARRAY_MAGIC;
+            curr_block->magic = _STABLE_ARRAY2_MAGIC;
             curr_block->next_not_filled_i1 = stable->first_not_filled_i1;
             stable->first_not_filled_i1 = block_i + 1;
         }
         
-        _stable_array_check_invariants(stable);
+        _stable_array2_check_invariants(stable);
     }
 }
 
-INTERNAL void _stable_array_check_invariants(const Stable_Array* stable)
+INTERNAL void _stable_array2_check_invariants(const Stable_Array2* stable)
 {
-    _block_array_check_invariants(&stable->blocks);
+    //_block_array_check_invariants(&stable->blocks);
 
     bool do_checks = false;
     bool do_slow_check = false;
@@ -314,7 +314,7 @@ INTERNAL void _stable_array_check_invariants(const Stable_Array* stable)
     do_checks = true;
     #endif
 
-    #if defined(_STABLE_ARRAY_DO_SLOW_CHECKS) && defined(DO_ASSERTS_SLOW)
+    #if defined(_STABLE_ARRAY2_DO_SLOW_CHECKS) && defined(DO_ASSERTS_SLOW)
     do_slow_check = true;
     #endif
 
@@ -325,7 +325,7 @@ INTERNAL void _stable_array_check_invariants(const Stable_Array* stable)
         TEST_MSG(stable->item_size > 0, 
             "The item size must be valid");
 
-        TEST_MSG((stable->first_not_filled_i1 == 0) == (stable->size == stable_array_capacity(stable)), 
+        TEST_MSG((stable->first_not_filled_i1 == 0) == (stable->size == stable_array2_capacity(stable)), 
             "The not filled list is empty exactly when the stable array is completely filled (size == capacity)");
         
         TEST_MSG(IS_IN_RANGE(0, stable->first_not_filled_i1, stable->blocks.size + 1), 
@@ -340,9 +340,9 @@ INTERNAL void _stable_array_check_invariants(const Stable_Array* stable)
             for(isize i = 0; i < stable->blocks.size; i++)
             {
                 u8* block_data = (u8*) stable->blocks.data[i];
-                Stable_Array_Block_Header* block = stable_array_get_block_header(stable, block_data);
+                Stable_Array2_Block_Header* block = stable_array2_get_block_header(stable, block_data);
 
-                TEST_MSG(block->magic == _STABLE_ARRAY_MAGIC,                           
+                TEST_MSG(block->magic == _STABLE_ARRAY2_MAGIC,                           
                     "block is not corrupted");
                 TEST_MSG(IS_IN_RANGE(0, block->next_not_filled_i1, stable->blocks.size + 1),  
                     "its next not filled needs to be in range");
@@ -372,7 +372,7 @@ INTERNAL void _stable_array_check_invariants(const Stable_Array* stable)
             
                 TEST_MSG(IS_IN_RANGE(0, block_i1, stable->blocks.size + 1), "the block needs to be in range");
                 void* block_ptr = stable->blocks.data[block_i1 - 1];
-                Stable_Array_Block_Header* block = stable_array_get_block_header(stable, block_ptr);
+                Stable_Array2_Block_Header* block = stable_array2_get_block_header(stable, block_ptr);
 
                 block_i1 = block->next_not_filled_i1;
                 linke_list_size += 1;

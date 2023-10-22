@@ -243,6 +243,7 @@
     <ClInclude Include="logger_file.h" />
     <ClInclude Include="logger_memory.h" />
     <ClInclude Include="callstack.h" />
+    <ClInclude Include="perf.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />
     <ClInclude Include="resources_template.h" />
@@ -266,9 +267,9 @@
     <ClInclude Include="gl_shader_util.h" />
     <ClInclude Include="resources.h" />
     <ClInclude Include="shapes.h" />
-    <ClInclude Include="stable_array.h" />
     <ClInclude Include="block_array.h" />
     <ClInclude Include="stable_array2.h" />
+    <ClInclude Include="stable_array3.h" />
     <ClInclude Include="string.h" />
     <ClInclude Include="systems.h" />
     <ClInclude Include="temp.h" />
@@ -285,6 +286,7 @@
     <ClInclude Include="_test_log.h" />
     <ClInclude Include="_test_math.h" />
     <ClInclude Include="_test_random.h" />
+    <ClInclude Include="_test_stable_array.h" />
     <ClInclude Include="_test_unicode.h" />
   </ItemGroup>
   <ItemGroup>
