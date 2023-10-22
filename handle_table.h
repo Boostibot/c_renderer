@@ -52,6 +52,7 @@
 // does not change much.
 // 
 
+//@TODO: remove this class
 //@TODO: make type generic interface for this similar to array to remove the needed boilerplate and increase safety!
 
 #include "array.h"
@@ -95,10 +96,6 @@ EXPORT void* handle_table_share(Handle_Table* table, const Handle* handle, Handl
 EXPORT void* handle_table_get_unique(Handle_Table table, const Handle* handle);
 
 EXPORT bool handle_table_remove(Handle_Table* table, const Handle* handle);
-
-
-
-
 
 //Retrives an adress of the item referenced by handle. If the handle is invalid returns NULL.
 EXPORT void* handle_table_get(Handle_Table table, const Handle* handle);

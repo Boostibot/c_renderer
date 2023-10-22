@@ -221,16 +221,7 @@
     <ClInclude Include="systems.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="block_array.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="handle_table2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="stable_array2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="stable_array3.h">
+    <ClInclude Include="stable_array.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="_test_stable_array.h">

@@ -238,7 +238,6 @@
     <ClInclude Include="format_lpf.h" />
     <ClInclude Include="format_netbpm.h" />
     <ClInclude Include="guid.h" />
-    <ClInclude Include="handle_table2.h" />
     <ClInclude Include="hash_index_template.h" />
     <ClInclude Include="logger_file.h" />
     <ClInclude Include="logger_memory.h" />
@@ -267,9 +266,7 @@
     <ClInclude Include="gl_shader_util.h" />
     <ClInclude Include="resources.h" />
     <ClInclude Include="shapes.h" />
-    <ClInclude Include="block_array.h" />
-    <ClInclude Include="stable_array2.h" />
-    <ClInclude Include="stable_array3.h" />
+    <ClInclude Include="stable_array.h" />
     <ClInclude Include="string.h" />
     <ClInclude Include="systems.h" />
     <ClInclude Include="temp.h" />

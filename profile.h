@@ -1,6 +1,9 @@
 #ifndef LIB_PROFILE
 #define LIB_PROFILE
 
+#include "platform.h"
+#include "defines.h"
+#include "assert.h"
 #include "perf.h"
 
 // This file provides a simple and performant API
@@ -166,7 +169,7 @@ EXPORT f64 profile_get_counter_average_running_time_s(Global_Perf_Counter counte
 
 		return running;
 	}
-	FORCE_INLINE INTERNAL void _perf_counter_end(Global_Perf_Counter_Running* running, bool detailed)
+	INTERNAL void _perf_counter_end(Global_Perf_Counter_Running* running, bool detailed)
 	{
 		Global_Perf_Counter* counter = running->my_counter;
 		i64 runs = perf_counter_end_interlocked_custom(&counter->counter, running->running, detailed);
@@ -226,7 +229,6 @@ EXPORT f64 profile_get_counter_average_running_time_s(Global_Perf_Counter counte
 	{
 		return counter.counter.frquency ? counter.counter.frquency : platform_perf_counter_frequency();
 	}
-	
 
 	EXPORT f64 profile_get_counter_total_running_time_s(Global_Perf_Counter counter)
 	{

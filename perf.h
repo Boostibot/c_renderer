@@ -1,43 +1,62 @@
 #ifndef LIB_PERF
 #define LIB_PERF
 
-#include "platform.h"
-#include "defines.h"
-#include "assert.h"
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 #include <math.h>
+#include <stdint.h>
+
+#ifndef ASSERT
+	#include <assert.h>
+	#define ASSERT(x) assert(x)
+#endif
+
+#ifndef EXPORT
+	#define EXPORT 
+#endif
 
 typedef struct Perf_Counter {
-	i64 counter;
-	i64 runs;
-	i64 frquency;
-	i64 mean_estimate;
-	i64 sum_of_squared_offset_counters;
-	i64 max_counter;
-	i64 min_counter;
+	int64_t counter;
+	int64_t runs;
+	int64_t frquency;
+	int64_t mean_estimate;
+	int64_t sum_of_squared_offset_counters;
+	int64_t max_counter;
+	int64_t min_counter;
 } Perf_Counter;
 
 typedef struct Perf_Counter_Running {
-	i64 start;
+	int64_t start;
 } Perf_Counter_Running;
 
 typedef struct Perf_Counter_Stats {
-	i64 runs;
-	i64 batch_size;
+	int64_t runs;
+	int64_t batch_size;
 
-	f64 total_s;
-	f64 average_s;
-	f64 min_s;
-	f64 max_s;
-	f64 standard_deviation_s;
-	f64 normalized_standard_deviation_s; //(σ/μ)
+	double total_s;
+	double average_s;
+	double min_s;
+	double max_s;
+	double standard_deviation_s;
+	double normalized_standard_deviation_s; //(σ/μ)
 } Perf_Counter_Stats;
 
 EXPORT Perf_Counter_Running perf_counter_start();
 EXPORT void					perf_counter_end(Perf_Counter* counter, Perf_Counter_Running running);
 EXPORT void					perf_counter_end_interlocked(Perf_Counter* counter, Perf_Counter_Running running);
-EXPORT i64					perf_counter_end_interlocked_custom(Perf_Counter* counter, Perf_Counter_Running running, bool detailed);
-EXPORT f64					perf_counter_get_ellapsed(Perf_Counter_Running running);
-EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch_size);
+EXPORT int64_t				perf_counter_end_interlocked_custom(Perf_Counter* counter, Perf_Counter_Running running, bool detailed);
+EXPORT double				perf_counter_get_ellapsed(Perf_Counter_Running running);
+EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, int64_t batch_size);
+
+//Needs implementation:
+int64_t platform_perf_counter();
+int64_t platform_perf_counter_frequency();
+inline static bool    platform_interlocked_compare_and_swap64(volatile int64_t* target, int64_t old_value, int64_t new_value);
+inline static int64_t platform_interlocked_add64(volatile int64_t* target, int64_t value);
+inline static int64_t platform_interlocked_increment64(volatile int64_t* target);
+inline static int64_t platform_interlocked_decrement64(volatile int64_t* target);
+
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_PERF_IMPL)) && !defined(LIB_PERF_HAS_IMPL)
@@ -49,19 +68,19 @@ EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch
 		return running;
 	}
 	
-	EXPORT f64 perf_counter_get_ellapsed(Perf_Counter_Running running)
+	EXPORT double perf_counter_get_ellapsed(Perf_Counter_Running running)
 	{
-		i64 delta = platform_perf_counter() - running.start;
-		static f64 freq = 0;
+		int64_t delta = platform_perf_counter() - running.start;
+		static double freq = 0;
 		if(freq == 0)
-			freq = (f64) platform_perf_counter_frequency();
+			freq = (double) platform_perf_counter_frequency();
 
-		return (f64) delta / freq;
+		return (double) delta / freq;
 	}
 
 	EXPORT void perf_counter_end(Perf_Counter* counter, Perf_Counter_Running running)
 	{
-		i64 delta = platform_perf_counter() - running.start;
+		int64_t delta = platform_perf_counter() - running.start;
 		ASSERT(counter != NULL && delta >= 0 && "invalid Global_Perf_Counter_Running submitted");
 
 		counter->runs += 1; 
@@ -73,19 +92,19 @@ EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch
 			counter->mean_estimate = delta;
 		}
 	
-		i64 offset_delta = delta - counter->mean_estimate;
+		int64_t offset_delta = delta - counter->mean_estimate;
 		counter->counter += delta;
 		counter->sum_of_squared_offset_counters += offset_delta*offset_delta;
 		counter->min_counter = MIN(counter->min_counter, delta);
 		counter->max_counter = MAX(counter->max_counter, delta);
 	}
 	
-	EXPORT i64 perf_counter_end_interlocked_custom(Perf_Counter* counter, Perf_Counter_Running running, bool detailed)
+	EXPORT int64_t perf_counter_end_interlocked_custom(Perf_Counter* counter, Perf_Counter_Running running, bool detailed)
 	{
-		i64 delta = platform_perf_counter() - running.start;
+		int64_t delta = platform_perf_counter() - running.start;
 
 		ASSERT(counter != NULL && delta >= 0 && "invalid Global_Perf_Counter_Running submitted");
-		i64 runs = platform_interlocked_increment64(&counter->runs); 
+		int64_t runs = platform_interlocked_increment64(&counter->runs); 
 		
 		//only save the stats that dont need to be updated on the first run
 		if(runs == 1)
@@ -100,7 +119,7 @@ EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch
 
 		if(detailed)
 		{
-			i64 offset_delta = delta - counter->mean_estimate;
+			int64_t offset_delta = delta - counter->mean_estimate;
 			platform_interlocked_add64(&counter->sum_of_squared_offset_counters, offset_delta*offset_delta);
 
 			do {
@@ -121,7 +140,7 @@ EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch
 	{
 		perf_counter_end_interlocked_custom(counter, running, true);
 	}
-	EXPORT Perf_Counter_Stats perf_counter_get_stats(Perf_Counter counter, i64 batch_size)
+	EXPORT Perf_Counter_Stats perf_counter_get_stats(Perf_Counter counter, int64_t batch_size)
 	{
 		if(batch_size <= 0)
 			batch_size = 1;
@@ -129,40 +148,40 @@ EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch
 		if(counter.frquency == 0)
 			counter.frquency = platform_perf_counter_frequency();
 
-		ASSERT_MSG(counter.min_counter * counter.runs <= counter.counter, "min must be smaller than sum");
-		ASSERT_MSG(counter.max_counter * counter.runs >= counter.counter, "max must be bigger than sum");
+		ASSERT(counter.min_counter * counter.runs <= counter.counter && "min must be smaller than sum");
+		ASSERT(counter.max_counter * counter.runs >= counter.counter && "max must be bigger than sum");
         
 		//batch_size is in case we 'batch' our tested function: 
 		// ie instead of running the tested function once we run it 100 times
 		// this just means that each run is multiplied batch_size times
-		i64 iters = batch_size * (counter.runs);
+		int64_t iters = batch_size * (counter.runs);
         
-		f64 batch_deviation_s = 0;
+		double batch_deviation_s = 0;
 		if(counter.runs > 1)
 		{
-			f64 n = (f64) counter.runs;
-			f64 sum = (f64) counter.counter;
-			f64 sum2 = (f64) counter.sum_of_squared_offset_counters;
+			double n = (double) counter.runs;
+			double sum = (double) counter.counter;
+			double sum2 = (double) counter.sum_of_squared_offset_counters;
             
 			//Welford's algorithm for calculating varience
-			f64 varience_ns = (sum2 - (sum * sum) / n) / (n - 1.0);
+			double varience_ns = (sum2 - (sum * sum) / n) / (n - 1.0);
 
 			//deviation = sqrt(varience) and deviation is unit dependent just like mean is
-			batch_deviation_s = sqrt(fabs(varience_ns)) / (f64) counter.frquency;
+			batch_deviation_s = sqrt(fabs(varience_ns)) / (double) counter.frquency;
 		}
 
-		f64 total_s = 0.0;
-		f64 mean_s = 0.0;
-		f64 min_s = 0.0;
-		f64 max_s = 0.0;
+		double total_s = 0.0;
+		double mean_s = 0.0;
+		double min_s = 0.0;
+		double max_s = 0.0;
 
 		ASSERT(counter.min_counter * counter.runs <= counter.counter);
 		ASSERT(counter.max_counter * counter.runs >= counter.counter);
 		if(counter.frquency != 0)
 		{
-			total_s = (f64) counter.counter / (f64) counter.frquency;
-			min_s = (f64) counter.min_counter / (f64) (batch_size * counter.frquency);
-			max_s = (f64) counter.max_counter / (f64) (batch_size * counter.frquency);
+			total_s = (double) counter.counter / (double) counter.frquency;
+			min_s = (double) counter.min_counter / (double) (batch_size * counter.frquency);
+			max_s = (double) counter.max_counter / (double) (batch_size * counter.frquency);
 		}
 		if(iters != 0)
 			mean_s = total_s / iters;
@@ -183,7 +202,7 @@ EXPORT Perf_Counter_Stats	perf_counter_get_stats(Perf_Counter counter, i64 batch
 		// deviation_element = deviation_sampling * sqrt(samples) / samples
 		//                   = deviation_sampling / sqrt(samples)
 
-		f64 sqrt_batch_size = sqrt((f64) batch_size);
+		double sqrt_batch_size = sqrt((double) batch_size);
 		Perf_Counter_Stats stats = {0};
 
 		//since min and max are also somewhere within the confidence interval

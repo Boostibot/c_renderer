@@ -627,6 +627,11 @@ int perf_counter_compare_file_func(const void* a_, const void* b_)
     return strcmp(a->file, b->file);
 }
 
+//void log_perf_counter(const char* log_module, Log_Type log_type)
+//{
+//
+//}
+
 void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_name)
 {
     DEFINE_ARRAY_TYPE(Global_Perf_Counter, _Global_Perf_Counter_Array);
@@ -670,7 +675,7 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
 
         if(counter.is_detailed)
         {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %15.8lf runs: %-9lld σ/μ %15.8lf [%15.8lf %15.8lf] (ms) from %20s %-4lld %s \"%s\"", 
+		    LOG(log_module, log_type, "total: %15.8lf avg: %12.8lf runs: %-8lld σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lld %s \"%s\"", 
 			    stats.total_s*1000,
 			    stats.average_s*1000,
                 (lld) stats.runs,
@@ -685,7 +690,7 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
         }
         else
         {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %15.8lf runs: %-9lld (ms) from %20s %-4lld %s \"%s\"", 
+		    LOG(log_module, log_type, "total: %15.8lf avg: %13.6lf runs: %-8lld (ms) from %20s %-4lld %s \"%s\"", 
 			    stats.total_s*1000,
 			    stats.average_s*1000,
                 (lld) stats.runs,
@@ -891,7 +896,7 @@ EXPORT void allocator_out_of_memory(
 }
 
 #include "_test_hash_index.h"
-#include "stable_array3.h"
+#include "stable_array.h"
 
 
 void break_debug_allocator()
@@ -946,54 +951,6 @@ void break_debug_allocator()
     debug_allocator_deinit(&debug_alloc);
 }
 
-void test_stable_array()
-{
-    
-    Debug_Allocator resources_alloc = {0};
-    debug_allocator_init(&resources_alloc, allocator_get_default(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
-    {
-        Stable_Array stable = {0};
-        stable_array_init(&stable, allocator_get_default(), sizeof(i32));
-
-        i32* val = NULL;
-        isize i1 = stable_array_insert(&stable, (void**) &val);
-
-        i32* val_get = stable_array_at(&stable, i1);
-        TEST(val == val_get);
-        *val = 32;
-
-        TEST(stable_array_at_if_alive(&stable, -2) == NULL);
-        TEST(stable_array_at_if_alive(&stable, -1) == NULL);
-        TEST(stable_array_at_if_alive(&stable, 0) != NULL);
-        TEST(stable_array_at_if_alive(&stable, 1) == NULL);
-        TEST(stable_array_at_if_alive(&stable, 2) == NULL);
-        TEST(stable_array_remove(&stable, 0));
-
-        enum {INSERT_COUNT = 129};
-        for(isize i = 0; i < INSERT_COUNT; i++)
-        {
-            i32* at = NULL;
-            isize index = stable_array_insert(&stable, (void**) &at);
-            *at = (i32) i;
-            TEST(index == i);
-        }
-
-        ITERATE_STABLE_ARRAY_BEGIN(stable, i32*, ptr, isize, index)
-            LOG_INFO("TEST", "[%lld]: %lld", (lld) index, (lld)*ptr);
-        ITERATE_STABLE_ARRAY_END
-
-        for(isize i = 0; i < INSERT_COUNT; i++)
-        {
-            i32* at = stable_array_at(&stable, i);
-            TEST(*at == i);
-            TEST(stable_array_remove(&stable, i));
-        }
-
-        stable_array_deinit(&stable);
-    }
-
-    debug_allocator_deinit(&resources_alloc);
-}
 
 #include "render_world.h"
 #include "_test_stable_array.h"

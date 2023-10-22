@@ -1,4 +1,48 @@
-#pragma once
+#ifndef LIB_STABLE_ARRAY
+#define LIB_STABLE_ARRAY
+
+// This is a data structure that aims to be as closely performant as array while being "stable"
+// meaning that pointers to items remain valid even with additions and removals.
+// 
+// We achive this by storing unstable array of pointers to blocks of items. 
+// Acess is thus simply two pointer dereferences instead of one. This guarantees O(1) fast lookup.
+// 
+// Because we cannot swap any other item to a place of removed element we need to have some strategy
+// for keeping track of removed item slots and filling them with newly added items. 
+// We solve this by using bit fields where each bit indicates if the slot within block is used or empty. 
+// Additionally we keep a linked list of blocks that contain at least one empty slot so that we never 
+// have to scan through the entire array. This guarantees O(1) additions and removal.
+// 
+// Peformance consideration here is mainly the number of independent adresses we need to fetch before
+// doing operation of interest. We need: 
+//  1: The unstable ptr array as dense as possible so that it can  remain in the cache easily
+//  
+//  2: The bit field and next not empty link to be close enough to other things so that they never
+//     require additional memory fetch.
+// 
+//  3: The final item array to have no additional data inside it to gurrantee optimal traversal speed.
+// 
+//  4: The number of allocations needs to be kept low. It should be possible to allocate exponentially 
+//     bigger blocks at once.
+// 
+// Because of these three considerations the following design was chosen: 
+// In the unstable array we store Stable_Array_Block structs that contain ptr to the block, the mask
+// of used/empty elements and the link to next non empty. Because ptr is 8B we need to have both the link
+// and mask 4B (if mask was 8B the structure would get padded to 24B which is way too much for 1: ).
+// 
+// Additionally at the end of the unstable Stable_Array_Block array we store a bitfield of which blocks
+// have allocations. This enables us to allocate lets say 4 blocks at once add them to the unstable array
+// and leter recover the information that only the first of those blocks should be freed (and the size
+// can be calculated also).
+//
+// This structure can be used for implementing "tables" - SQL like collections of items with multiple
+// accelerating hashes. The main advantage over regular array is that we can skip the hash table lookup
+// by keeping the pointer and using it. We can additionally keep also the key and compare if it still matches
+// with the one currently there.
+//
+// The main feature missing from this data structure is a way of mapping ptr to index without having to
+// iterate all the blocks. This could be solved by aligning the pointer and then looking it up inside some 
+// hash table. This however requires a lot of item specific information (to be able to set the align properly)
 
 #include "allocator.h"
 
@@ -52,11 +96,14 @@ EXPORT void  stable_array_reserve(Stable_Array* stable, isize to);
                 
 #define ITERATE_STABLE_ARRAY_END }}}   
 
+#endif
+
+#if (defined(LIB_ALL_IMPL) || defined(LIB_STABLE_ARRAY_IMPL)) && !defined(LIB_STABLE_ARRAY_HAS_IMPL)
+#define LIB_STABLE_ARRAY_HAS_IMPL
+
 #define _STABLE_ARRAY_DO_CHECKS
 #define _STABLE_ARRAY_DO_SLOW_CHECKS
-#define _STABLE_ARRAY_DO_FFS
 #define _STABLE_ARRAY_BLOCKS_ARR_ALIGN      8 /* @TEMP! */
-#define _STABLE_ARRAY_MAGIC                 (u16) 0x5354 /* 'ST' in hex */
 
 typedef struct _Stable_Array_Lookup {
     isize block_i;
@@ -479,3 +526,5 @@ INTERNAL void _stable_array_check_invariants(const Stable_Array* stable)
 
     #undef IS_IN_RANGE
 }
+
+#endif
