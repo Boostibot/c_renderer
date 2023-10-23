@@ -245,6 +245,7 @@
     <ClInclude Include="perf.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="resources_template.h" />
     <ClInclude Include="resource_descriptions.h" />
     <ClInclude Include="resource_loading.h" />

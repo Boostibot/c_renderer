@@ -307,10 +307,7 @@ EXPORT bool stable_array_remove(Stable_Array* stable, isize index)
         Stable_Array_Block* block = lookup.block;
         u64 bit = (u64) 1 << lookup.item_i;
 
-        #ifdef DO_ASSERTS
-        memset(lookup.item, 0x55, stable->item_size);
-        #endif
-
+        memset(lookup.item, 0, stable->item_size);
         bool is_alive = !!(block->filled_mask & bit);
 
         //If is full
