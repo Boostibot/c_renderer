@@ -4,6 +4,7 @@
 #include "hash_index.h"
 #include "guid.h"
 #include "string.h"
+#include "hash_string.h"
 #include "log.h"
 #include "vformat.h"
 
@@ -40,7 +41,7 @@ typedef struct Resource_Info {
 typedef struct Resource_Ptr {
     Id id;
     Resource_Info* ptr;
-};
+} Resource_Ptr;
 
 DEFINE_ARRAY_TYPE(Resource_Ptr, Resource_Ptr_Array);
 
@@ -57,21 +58,14 @@ typedef struct Resource_Manager {
 
     Resource_Ptr_Array timed;
     Resource_Ptr_Array single_frame;
-    Resource_Ptr ephemeral[RESOURCE_EPHEMERAL_SIZE];
 
     Resource_Constructor constructor;
     Resource_Destructor destructor;
     Resource_Copy copy;
     void* context;
 
-    Allocator* allocator;
     const char* type_name;
     isize type_size;
-
-    i64 frame_num;
-    i64 last_frame_time;
-    i64 last_time_check;
-    f64 time_check_every_s;
 } Resource_Manager;
 
 EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, void* context, const char* type_name);
@@ -80,8 +74,8 @@ EXPORT void resource_manager_deinit(Resource_Manager* manager);
 EXPORT bool         resource_is_valid(Resource_Ptr resource);
 
 EXPORT Resource_Ptr resource_get(Resource_Manager* manager, Id id);
-EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, String name, isize* prev_found_and_finished_at);
-EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, String path, isize* prev_found_and_finished_at);
+EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at);
+EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at);
 
 EXPORT Resource_Ptr resource_insert_custom(Resource_Manager* manager, Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time);
 EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Id id, String name, String path);
@@ -98,7 +92,6 @@ EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr i
 
 EXPORT void resources_frame_cleanup(Resource_Manager* manager);
 EXPORT void resources_time_cleanup(Resource_Manager* manager);
-EXPORT void resources_end_frame(Resource_Manager* manager);
 
 // ========================================= IMPL =================================================
 
@@ -120,8 +113,6 @@ EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, i
     manager->context = context;
     manager->type_name = type_name;
     manager->type_size = item_size;
-    manager->allocator = alloc;
-    manager->time_check_every_s = RESOURCE_CHECK_LIFE_EVERY_MS / 1000;
 }
 
 EXPORT void resource_manager_deinit(Resource_Manager* manager)
@@ -162,31 +153,29 @@ EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_
     return out;
 }
 
-//@TODO: the reason why we have to have seperate internal and expot versions here is because we lack the concept of hashed string.
-//       Implment it.
-EXPORT Resource_Ptr _resource_get_by_name(Resource_Manager* manager, String name, u64 hashed, isize* prev_found_and_finished_at)
+EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     isize finished_at = 0;
     isize found = 0;
     if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_ptr_find_next(manager->name_hash, hashed, *prev_found_and_finished_at, &finished_at);
+        found = hash_ptr_find_next(manager->name_hash, name.hash, *prev_found_and_finished_at, &finished_at);
     else
-        found = hash_ptr_find(manager->name_hash, hashed);
+        found = hash_ptr_find(manager->name_hash, name.hash);
 
     while(found != -1)
     {
         Hash_Ptr_Entry entry = manager->name_hash.entries[found];
         Resource_Info* ptr = (Resource_Info*) hash_ptr_ptr_restore((void*) entry.value);
 
-        if(string_is_equal(string_from_builder(ptr->name), name))
+        if(string_is_equal(string_from_builder(ptr->name), string_from_hashed(name)))
         {
             out.id = ptr->id;
             out.ptr = ptr;
             break;
         }
 
-        found = hash_ptr_find_next(manager->name_hash, hashed, found, &finished_at);
+        found = hash_ptr_find_next(manager->name_hash, name.hash, found, &finished_at);
     }
 
     if(prev_found_and_finished_at)
@@ -195,30 +184,30 @@ EXPORT Resource_Ptr _resource_get_by_name(Resource_Manager* manager, String name
     return out;
 }
 
-EXPORT Resource_Ptr _resource_get_by_path(Resource_Manager* manager, String path, u64 hashed, isize* prev_found_and_finished_at)
+EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     
     isize finished_at = 0;
     isize found = 0;
     if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_ptr_find_next(manager->path_hash, hashed, *prev_found_and_finished_at, &finished_at);
+        found = hash_ptr_find_next(manager->path_hash, path.hash, *prev_found_and_finished_at, &finished_at);
     else
-        found = hash_ptr_find(manager->path_hash, hashed);
+        found = hash_ptr_find(manager->path_hash, path.hash);
 
     while(found != -1)
     {
         Hash_Ptr_Entry entry = manager->path_hash.entries[found];
         Resource_Info* ptr = (Resource_Info*) hash_ptr_ptr_restore((void*) entry.value);
 
-        if(string_is_equal(string_from_builder(ptr->path), path))
+        if(string_is_equal(string_from_builder(ptr->path), string_from_hashed(path)))
         {
             out.id = ptr->id;
             out.ptr = ptr;
             break;
         }
 
-        found = hash_ptr_find_next(manager->path_hash, hashed, found, &finished_at);
+        found = hash_ptr_find_next(manager->path_hash, path.hash, found, &finished_at);
     }
 
     if(prev_found_and_finished_at)
@@ -230,18 +219,6 @@ EXPORT Resource_Ptr _resource_get_by_path(Resource_Manager* manager, String path
 EXPORT Resource_Ptr resource_get(Resource_Manager* manager, Id id)
 {
     return _resource_get(manager, id, NULL);
-}
-
-EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, String name, isize* prev_found_and_finished_at)
-{
-    u64 hashed = hash64_murmur(name.data, name.size, 0);
-    return _resource_get_by_name(manager, name, hashed, prev_found_and_finished_at);
-}
-
-EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, String path, isize* prev_found_and_finished_at)
-{
-    u64 hashed = hash64_murmur(path.data, path.size, 0);
-    return _resource_get_by_name(manager, path, hashed, prev_found_and_finished_at);
 }
 
 INTERNAL Resource_Ptr _resource_insert_custom(Resource_Manager* manager, Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time, isize skip_count)
@@ -266,8 +243,9 @@ INTERNAL Resource_Ptr _resource_insert_custom(Resource_Manager* manager, Id id, 
     info->lifetime = lifetime;
     info->reference_count = 1;
     info->storage_index = index;
-    info->path = builder_from_string(path, manager->allocator);
-    info->name = builder_from_string(name, manager->allocator);
+    Allocator* alloc = manager->storage.allocator;
+    info->path = builder_from_string(path, alloc);
+    info->name = builder_from_string(name, alloc);
     platform_capture_call_stack(info->callstack.stack_frames, STATIC_ARRAY_SIZE(info->callstack.stack_frames), skip_count);
     info->creation_epoch_time = platform_universal_epoch_time();
     info->death_epoch_time = death_time;
@@ -324,11 +302,8 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
         else if(manager->destructor)
             manager->destructor(info, manager);
             
-        String name = string_from_builder(info->name);
-        String path = string_from_builder(info->name);
-
-        u64 name_hashed = hash64_murmur(path.data, path.size, 0);
-        u64 path_hashed = hash64_murmur(name.data, name.size, 0);
+        Hash_String name = hash_string_from_builder(info->name);
+        Hash_String path = hash_string_from_builder(info->name);
 
         isize id_found = -1;
         isize name_found = -1;
@@ -340,7 +315,7 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
 
         while(by_name.id != id)
         {
-            by_name = _resource_get_by_name(manager, name, name_hashed, &name_found);
+            by_name = resource_get_by_name(manager, name, &name_found);
             if(resource_is_valid(by_name) == false)
             {
                 ASSERT_MSG(false, "Must never happen");
@@ -350,7 +325,7 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
         
         while(by_path.id != id)
         {
-            by_path = _resource_get_by_path(manager, path, path_hashed, &path_found);
+            by_path = resource_get_by_path(manager, path, &path_found);
             if(resource_is_valid(by_path) == false)
             {
                 ASSERT_MSG(false, "Must never happen");
@@ -484,19 +459,4 @@ EXPORT void resources_time_cleanup(Resource_Manager* manager)
     }
 
     array_clear(&manager->single_frame);
-}
-
-EXPORT void resources_end_frame(Resource_Manager* manager)
-{
-    i64 now = platform_universal_epoch_time();
-    i64 check_every_us = manager->time_check_every_s * 1000*1000;
-    if(now - manager->last_time_check >= check_every_us)
-    {
-        resources_time_cleanup(manager);
-        manager->last_time_check = now;
-    }
-
-    resources_frame_cleanup(manager);
-    manager->last_frame_time = platform_universal_epoch_time();
-    manager->frame_num += 1;
 }

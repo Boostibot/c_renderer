@@ -2,6 +2,7 @@
 #define LIB_RESOURCES
 
 #include "resource_descriptions.h"
+//#include "resource.h"
 #include "file.h"
 
 #define RESOURCE_NAME_SIZE 64
