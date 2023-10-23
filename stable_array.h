@@ -83,7 +83,7 @@ EXPORT isize stable_array_insert(Stable_Array* stable, void** out);
 EXPORT bool  stable_array_remove(Stable_Array* stable, isize index);
 EXPORT void  stable_array_reserve(Stable_Array* stable, isize to);
 
-#define ITERATE_STABLE_ARRAY_BEGIN(stable, Ptr_Type, ptr, Index_Type, index)                    \
+#define ITERATE_STABLE_ARRAY_BEGIN(stable, Ptr_Type, ptr_name, Index_Type, index)                    \
     for(isize _block_i = 0; _block_i < (stable).blocks_size; _block_i++)                        \
     {                                                                                           \
         Stable_Array_Block* _block = &(stable).blocks[_block_i];                                \
@@ -91,7 +91,7 @@ EXPORT void  stable_array_reserve(Stable_Array* stable, isize to);
         {                                                                                       \
             if(_block->filled_mask & ((u64) 1 << _item_i))                                      \
             {                                                                                   \
-                Ptr_Type ptr = (Ptr_Type) ((u8*) _block->ptr + _item_i*(stable).item_size); (void) ptr;   \
+                Ptr_Type ptr_name = (Ptr_Type) ((u8*) _block->ptr + _item_i*(stable).item_size); (void) ptr_name;   \
                 Index_Type index = (Index_Type) (_item_i + _block_i * STABLE_ARRAY_BLOCK_SIZE); (void) index; \
                 
 #define ITERATE_STABLE_ARRAY_END }}}   
