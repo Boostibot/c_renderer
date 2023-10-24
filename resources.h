@@ -5,29 +5,6 @@
 #include "resource.h"
 #include "file.h"
 
-typedef enum Resource_Type {
-    RESOURCE_TYPE_SHAPE,
-    RESOURCE_TYPE_IMAGE,
-    RESOURCE_TYPE_MAP,
-    RESOURCE_TYPE_CUBEMAP,
-    RESOURCE_TYPE_MATERIAL,
-    RESOURCE_TYPE_TRIANGLE_MESH,
-    RESOURCE_TYPE_SHADER,
-
-    RESOURCE_TYPE_ENUM_COUNT
-} Resource_Type;
-
-typedef struct Resources {
-    Allocator* allocator;
-    f64 check_time_every;
-    i64 last_frame_etime;
-    i64 last_check_etime;
-    i64 frame_i;
-    Clock clock;
-    
-    Resource_Manager resources[RESOURCE_TYPE_ENUM_COUNT];
-} Resources;
-
 #define RESOURCE_NAME_SIZE 64
 
 typedef struct Name {
@@ -42,21 +19,39 @@ typedef struct Filename_List {
     String_Builder string;
 } Filename_List;
 
+typedef enum Resource_Type {
+    RESOURCE_TYPE_SHAPE,
+    RESOURCE_TYPE_IMAGE,
+    RESOURCE_TYPE_MAP,
+    RESOURCE_TYPE_CUBEMAP,
+    RESOURCE_TYPE_MATERIAL,
+    RESOURCE_TYPE_TRIANGLE_MESH,
+    RESOURCE_TYPE_SHADER,
 
-typedef enum Shader_Pass {
-    SHADER_PASS_VERTEX,
-    SHADER_PASS_GEOMETRY,
-    SHADER_PASS_FRAGMENT,
-    
-    SHADER_PASS_ENUM_COUNT,
-} Shader_Pass;
+    RESOURCE_TYPE_ENUM_COUNT
+} Resource_Type;
+
+DEFINE_ARRAY_TYPE(Id, Id_Array);
+
+typedef struct Resources {
+    Allocator* allocator;
+    f64 check_time_every;
+    i64 last_frame_etime;
+    i64 last_check_etime;
+    i64 frame_i;
+    Clock clock;
+
+    Resource_Manager resources[RESOURCE_TYPE_ENUM_COUNT];
+} Resources;
 
 typedef struct Shader {
-    String_Builder sources[SHADER_PASS_ENUM_COUNT];
+    String_Builder vertex_shader_source;
+    String_Builder fragment_shader_source;
+    String_Builder geometry_shader_source;
 } Shader;
 
 typedef struct Map {
-    Resource_Ptr image;
+    Id image;
     Map_Info info;
 } Map;
 
@@ -107,11 +102,11 @@ DEFINE_ARRAY_TYPE(Triangle_Mesh_Leaf_Group, Triangle_Mesh_Leaf_Group_Array);
 
 typedef struct Triangle_Mesh
 {
-    i32 fallback_material_i1;
-    Resource_Ptr shape;
+    Id material;
+    Id shape;
 
     Triangle_Mesh_Group_Array groups;
-    Resource_Ptr_Array materials;
+    Id_Array materials;
 } Triangle_Mesh;
 
 Resources* resources_get();
@@ -120,28 +115,29 @@ Allocator* resources_allocator();
 
 void resources_init(Resources* resources, Allocator* alloc);
 void resources_deinit(Resources* resources);
-void resources_frame_cleanup();
-void resources_time_cleanup();
+void resources_cleanup_framed();
+void resources_cleanup_timed();
 void resources_end_frame();
 void resources_check_reloads();
 
 String               string_from_name(const Name* name);
 void                 name_from_string(Name* name, String string);
 
+
 #define RESOURCE_FUNCTION_DECL(Type_Name, TYPE_ENUM, name)       \
-    EXPORT Type_Name*   name##_get(Resource_Ptr ptr); \
-    EXPORT Resource_Ptr name##_find(Id id); \
-    EXPORT Resource_Ptr name##_find_by_name(Hash_String name, isize* prev_found_and_finished_at); \
-    EXPORT Resource_Ptr name##_find_by_path(Hash_String path, isize* prev_found_and_finished_at); \
+    EXPORT Type_Name*   name##_get(Id ptr); \
+    EXPORT Type_Name*   name##_get_sure(Id id); \
+    EXPORT Type_Name*   name##_get_with_info(Id ptr, Resource_Info** info); \
+    EXPORT Id           name##_find_by_name(Hash_String name, isize* prev_found_and_finished_at); \
+    EXPORT Id           name##_find_by_path(Hash_String path, isize* prev_found_and_finished_at); \
                                                                 \
-    EXPORT Resource_Ptr name##_insert(String name, String path); \
-    EXPORT Resource_Ptr name##_insert_custom(Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time); \
-    EXPORT bool         name##_remove(Resource_Ptr resource); \
-    EXPORT bool         name##_force_remove(Resource_Ptr resource); \
+    EXPORT Id           name##_insert(Resource_Params params); \
+    EXPORT bool         name##_remove(Id resource); \
+    EXPORT bool         name##_force_remove(Id resource); \
                                                             \
-    EXPORT Resource_Ptr name##_share(Resource_Ptr resource); \
-    EXPORT Resource_Ptr name##_make_unique(Resource_Ptr info); \
-    EXPORT Resource_Ptr name##_duplicate(Resource_Ptr info); \
+    EXPORT Id           name##_make_shared(Id resource); \
+    EXPORT Id           name##_make_unique(Id info, Resource_Params params); \
+    EXPORT Id           name##_duplicate(Id info, Resource_Params params); \
 
 RESOURCE_FUNCTION_DECL(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
 RESOURCE_FUNCTION_DECL(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
@@ -150,6 +146,7 @@ RESOURCE_FUNCTION_DECL(Cubemap,         RESOURCE_TYPE_CUBEMAP,          cubemap)
 RESOURCE_FUNCTION_DECL(Material,        RESOURCE_TYPE_MATERIAL,         material)
 RESOURCE_FUNCTION_DECL(Triangle_Mesh,   RESOURCE_TYPE_TRIANGLE_MESH,    triangle_mesh)
 RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
+
 #endif
 
 
@@ -166,50 +163,6 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         return &_global_resources->resources[type];
     }
     
-    #define RESOURCE_FUNCTION_DEF(Type_Name, TYPE_ENUM, type_name)       \
-        EXPORT Type_Name*   name##_get(Resource_Ptr ptr) { \
-            ASSERT(resource_is_valid(ptr) && ptr.ptr->type_enum == TYPE_ENUM); \
-            return (Type_Name*) ptr.ptr->data; \
-        } \
-        EXPORT Resource_Ptr type_name##_find(Id id) { \
-            return resource_find(resources_get_type(TYPE_ENUM), id); \
-        } \
-        EXPORT Resource_Ptr type_name##_find_by_name(Hash_String name, isize* prev) { \
-            return resource_find_by_name(resources_get_type(TYPE_ENUM), name, prev); \
-        } \
-        EXPORT Resource_Ptr type_name##_find_by_path(Hash_String path, isize* prev) { \
-            return resource_find_by_path(resources_get_type(TYPE_ENUM), path, prev); \
-        } \
-        EXPORT Resource_Ptr type_name##_insert(String name, String path) { \
-            return resource_insert(resources_get_type(TYPE_ENUM), id_generate(), name, path); \
-        } \
-        EXPORT Resource_Ptr type_name##_insert_custom(Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time) { \
-            return resource_insert_custom(resources_get_type(TYPE_ENUM), id, name, path, lifetime, death_time); \
-        } \
-        EXPORT bool         type_name##_remove(Resource_Ptr resource) { \
-            return resource_remove(resources_get_type(TYPE_ENUM), resource); \
-        } \
-        EXPORT bool         type_name##_force_remove(Resource_Ptr resource) { \
-            return resource_force_remove(resources_get_type(TYPE_ENUM), resource); \
-        } \
-        EXPORT Resource_Ptr type_name##_share(Resource_Ptr resource) { \
-            return resource_share(resources_get_type(TYPE_ENUM), resource); \
-        } \
-        EXPORT Resource_Ptr type_name##_make_unique(Resource_Ptr resource) { \
-            return resource_make_unique(resources_get_type(TYPE_ENUM), resource); \
-        } \
-        EXPORT Resource_Ptr type_name##_duplicate(Resource_Ptr resource) { \
-            return resource_duplicate(resources_get_type(TYPE_ENUM), resource); \
-        } \
-        
-    RESOURCE_FUNCTION_DEF(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
-    RESOURCE_FUNCTION_DEF(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
-    RESOURCE_FUNCTION_DEF(Map,             RESOURCE_TYPE_MAP,              map)
-    RESOURCE_FUNCTION_DEF(Cubemap,         RESOURCE_TYPE_CUBEMAP,          cubemap)
-    RESOURCE_FUNCTION_DEF(Material,        RESOURCE_TYPE_MATERIAL,         material)
-    RESOURCE_FUNCTION_DEF(Triangle_Mesh,   RESOURCE_TYPE_TRIANGLE_MESH,    triangle_mesh)
-    RESOURCE_FUNCTION_DEF(Shader,          RESOURCE_TYPE_SHADER,           shader)
-
     Resources* resources_set(Resources* new_resources_ptr)
     {
         Resources* prev = _global_resources;
@@ -225,7 +178,62 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         else
             return NULL;
     }
-    
+
+    #define RESOURCE_FUNCTION_DEF(Type_Name, TYPE_ENUM, type_name)       \
+        EXPORT Type_Name* type_name##_get_with_info(Id id, Resource_Info** info) { \
+            Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), id); \
+            if(info) *info = found.ptr; \
+            ASSERT_MSG(resource_is_valid(found) == false || found.ptr->type_enum == TYPE_ENUM, "Inconsistent type!"); \
+            return (Type_Name*) (found.ptr ? found.ptr->data : NULL); \
+        } \
+        EXPORT Type_Name*   type_name##_get(Id id) { \
+            return type_name##_get_with_info(id, NULL); \
+        } \
+        EXPORT Type_Name* type_name##_get_sure(Id id) { \
+            Type_Name* gotten = type_name##_get(id); \
+            TEST_MSG(gotten != NULL, "Didnt find the resource with id %lld", (lld) id); \
+            return gotten; \
+        } \
+        EXPORT Id type_name##_find_by_name(Hash_String name, isize* prev) { \
+            return resource_get_by_name(resources_get_type(TYPE_ENUM), name, prev).id; \
+        } \
+        EXPORT Id type_name##_find_by_path(Hash_String path, isize* prev) { \
+            return resource_get_by_path(resources_get_type(TYPE_ENUM), path, prev).id; \
+        } \
+        EXPORT Id type_name##_insert(Resource_Params params) { \
+            return resource_insert(resources_get_type(TYPE_ENUM), params).id; \
+        } \
+        EXPORT bool type_name##_remove(Id resource) { \
+            Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
+            return resource_remove(resources_get_type(TYPE_ENUM), found);  \
+        } \
+        EXPORT bool type_name##_force_remove(Id resource) { \
+            Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
+            return resource_remove(resources_get_type(TYPE_ENUM), found); \
+        } \
+        EXPORT Id type_name##_make_shared(Id resource) { \
+            Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
+            return resource_share(resources_get_type(TYPE_ENUM), found).id; \
+        } \
+        EXPORT Id type_name##_make_unique(Id resource, Resource_Params params) { \
+            Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
+            return resource_make_unique(resources_get_type(TYPE_ENUM), found, params).id; \
+        } \
+        EXPORT Id type_name##_duplicate(Id resource, Resource_Params params) { \
+            Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
+            return resource_duplicate(resources_get_type(TYPE_ENUM), found, params).id; \
+        } \
+        
+    RESOURCE_FUNCTION_DEF(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
+    RESOURCE_FUNCTION_DEF(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
+    RESOURCE_FUNCTION_DEF(Map,             RESOURCE_TYPE_MAP,              map)
+    RESOURCE_FUNCTION_DEF(Cubemap,         RESOURCE_TYPE_CUBEMAP,          cubemap)
+    RESOURCE_FUNCTION_DEF(Material,        RESOURCE_TYPE_MATERIAL,         material)
+    RESOURCE_FUNCTION_DEF(Triangle_Mesh,   RESOURCE_TYPE_TRIANGLE_MESH,    triangle_mesh)
+    RESOURCE_FUNCTION_DEF(Shader,          RESOURCE_TYPE_SHADER,           shader)
+
+
+    //SHAPE
     void _shape_init(Shape_Assembly* out)
     {
         shape_assembly_init(out, resources_allocator());
@@ -266,8 +274,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     void _map_copy(Map* out, const Map* in)
     {
         out->info = in->info;
-        if(resource_is_valid(in->image))
-            out->image = image_share(in->image);
+        out->image = image_make_shared(in->image);
     }
 
     void _map_deinit(Map* out)
@@ -326,6 +333,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     void _triangle_mesh_deinit(Triangle_Mesh* item)
     {
         shape_remove(item->shape);
+        material_remove(item->material);
 
         for(isize i = 0; i < item->materials.size; i++)
             material_remove(item->materials.data[i]);
@@ -348,30 +356,33 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         array_resize(&out->materials, in->materials.size);
         
         for(isize i = 0; i < in->materials.size; i++)
-            out->materials.data[i] = material_share(in->materials.data[i]);
+            out->materials.data[i] = material_make_shared(in->materials.data[i]);
 
-        out->shape = shape_share(in->shape);
+        out->shape = shape_make_shared(in->shape);
     }
 
     //SHADER
     void _shader_init(Shader* out)
     {
-        for(isize i = 0; i < SHADER_PASS_ENUM_COUNT; i++)
-            array_init(&out->sources[i], resources_allocator());
+        array_init(&out->fragment_shader_source, resources_allocator());
+        array_init(&out->geometry_shader_source, resources_allocator());
+        array_init(&out->vertex_shader_source, resources_allocator());
     }
 
     void _shader_copy(Shader* out, const Shader* in)
     {
-        for(isize i = 0; i < SHADER_PASS_ENUM_COUNT; i++)
-            array_copy(&out->sources[i], in->sources[i]);
+        array_copy(&out->fragment_shader_source, in->fragment_shader_source);
+        array_copy(&out->geometry_shader_source, in->geometry_shader_source);
+        array_copy(&out->vertex_shader_source, in->vertex_shader_source);
     }
 
     void _shader_deinit(Shader* out)
     {
-        for(isize i = 0; i < SHADER_PASS_ENUM_COUNT; i++)
-            array_deinit(&out->sources[i]);
+        array_deinit(&out->fragment_shader_source);
+        array_deinit(&out->geometry_shader_source);
+        array_deinit(&out->vertex_shader_source);
     }
-
+    
     String string_from_name(const Name* name)
     {
         String out = {name->data, name->size};
@@ -384,14 +395,20 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         memcpy(name->data, trimmed.data, trimmed.size);
         name->size = trimmed.size;
     }
+                       
+    
+
+
 
 void resources_init(Resources* resources, Allocator* alloc)
 {
     resources_deinit(resources);
     resources->allocator = alloc;
-
+    
+    #pragma warning(disable:4191)
+    //@NOTE: safe function pointer cast here but visual studo complains
     #define RESOURCE_INIT(Type_Name, TYPE_ENUM, type_name)  \
-        resource_manager_init(&resources->resources[TYPE_ENUM], alloc, sizeof(Type_Name), (Resource_Constructor) _##type_name##_init, (Resource_Destructor) _##type_name##_deinit, (Resource_Copy) _##type_name##_copy, resources, #type_name, TYPE_ENUM);
+        resource_manager_init(&resources->resources[TYPE_ENUM], alloc, sizeof(Type_Name), (Resource_Constructor) _##type_name##_init, (Resource_Destructor) _##type_name##_deinit, (Resource_Copy) _##type_name##_copy, #type_name, TYPE_ENUM);
         
     RESOURCE_INIT(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
     RESOURCE_INIT(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
@@ -400,6 +417,7 @@ void resources_init(Resources* resources, Allocator* alloc)
     RESOURCE_INIT(Material,        RESOURCE_TYPE_MATERIAL,         material)
     RESOURCE_INIT(Triangle_Mesh,   RESOURCE_TYPE_TRIANGLE_MESH,    triangle_mesh)
     RESOURCE_INIT(Shader,          RESOURCE_TYPE_SHADER,           shader)
+    #pragma warning(default:4191)
 }
 
 void resources_frame_cleanup()

@@ -1,0 +1,69 @@
+# #  comment
+# {} collection
+# : line begin
+# , line continue
+# \ line end newline escape
+
+# we have collections denoted by {} symbols
+# each collection is ordered. 
+# some entries may have names
+# some entries may have type
+
+material {
+    #THIS IS NICE!
+    name n:       Wood_Base
+    reosultion i: 1024
+    albedo 3f:    1 1 1
+    roughness f:  0.59
+    metallic f:   0
+    ao f:         0
+    emissive f:   0
+    mra 3f:       0 0 0
+
+    shader_data SHADER_DATA {
+        :IOjzUyMpOQioxUzqPHg#
+        :PxiopUUyozhYTYqnz#
+    }
+}
+
+material {
+    name:       Wood
+    reosultion: 1024
+    albedo:     1 1 1
+    roughness:  0.59
+    metallic:   0
+    ao:         0
+    emissive:   0
+    mra:        0 0 0
+
+    albedo_map TEX { 
+        path   s: images/wood_albedo.bmp
+        tile   b: false
+        gamma  f: 2.2
+        gain   f: 1
+        bias   f: 0
+        offset 3f: 0 0 0
+        scale  3f: 1 1 1 
+    }
+    
+    roughness_map TEX { 
+        path   s: images/wood_roughness.bmp
+    }
+
+
+}
+
+s: String entry  
+#single C langauge (and most other langauges) id containing no whitespace.
+n:my_name 
+u:512    
+i:-1024      
+f:13.2
+b:true
+b:false
+b:1
+b:0
+c:g
+
+any:Any entry
+null:ignored

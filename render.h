@@ -85,6 +85,12 @@ typedef struct Blinn_Phong_Params
 } Blinn_Phong_Params;
 
 
+#define DEFINE_HANDLE_TYPES(Type)                           \
+    typedef struct { i32 index; u32 generation; } Type##_Handle;             \
+    typedef struct { i32 index; u32 generation; } Type##_Ref;                \
+    DEFINE_ARRAY_TYPE(Type##_Handle, Type##_Handle_Array);  \
+    DEFINE_ARRAY_TYPE(Type##_Ref, Type##_Ref_Array)         \
+
 DEFINE_HANDLE_TYPES(Render_Mesh);
 DEFINE_HANDLE_TYPES(Render_Image);
 DEFINE_HANDLE_TYPES(Render_Cubeimage);
@@ -192,8 +198,8 @@ typedef struct Render_Scene_Layer
 
 typedef struct Render_Command {
     Render_Environment* environment;
-    Triangle_Mesh_Ref mesh;
-    Shader_Ref shader;
+    //Triangle_Mesh_Ref mesh;
+    //Shader_Ref shader;
     Transform transform;
     Render_Mesh_Environment mesh_environment;
 } Render_Command;
@@ -1211,12 +1217,15 @@ void render_pbr_material_init(Render_Material* material, Render* render)
 Render_Map render_map_from_map(Map map, Render* render)
 {
     Render_Map out = {0};
-    String path = {0};
 
     out.info = map.info;
-    if(image_get_path(&path, (Image_Ref*) &map.image))
+    
+    Resource_Info* info = NULL;
+    Image_Builder* image = image_get_with_info(map.image, &info);
+
+    if(image)
     {
-        Image_Builder* image = image_get((Image_Ref*) &map.image);
+        String path = string_from_builder(info->path);
         Render_Image_Handle handle = {0};
 
         //Scan if we have this image already
@@ -1252,13 +1261,14 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Render* render)
     for(isize i = 0; i < 6; i++)
     {
         Map* map = &cubemap.maps.faces[i];
-        Image_Builder* image = image_get((Image_Ref*) &map->image);
+        Resource_Info* info = NULL;
+        Image_Builder* image = image_get_with_info(map->image, &info);
+
         if(image)
         {
             images[i] = image_from_builder(*image);
             had_at_least_one_side = true;
-            String path = {0};
-            image_get_path(&path, (Image_Ref*) &map->image);
+            String path = string_from_builder(info->path);;
             builder_append(&concatenated_paths, path);
         }
 
@@ -1281,10 +1291,10 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Render* render)
         if(had_at_least_one_side)
         {
             Render_Cubeimage render_image = {0};
-            String name = {0};
-            map_get_name(&name, (Map_Ref*) &cubemap.maps.faces[0]);
-            render_cubeimage_init(&render_image, images, name);
-            SWAP(&render_image.path, &concatenated_paths, String_Builder);
+            //String name = {0};
+            //map_get_name(&name, (Map_Ref*) &cubemap.maps.faces[0]);
+            //render_cubeimage_init(&render_image, images, name);
+            //SWAP(&render_image.path, &concatenated_paths, String_Builder);
 
             ASSERT_MSG(false, "@NOTE: something seems to be missing here!");
 
@@ -1307,16 +1317,15 @@ void render_map_unuse(Render_Map map)
 }
 
 
-void render_pbr_material_init_from_material(Render_Material* render_material, Render* render, Material_Ref material_ref)
+void render_pbr_material_init_from_material(Render_Material* render_material, Render* render, Id material_ref)
 {
     render_pbr_material_init(render_material, render);
-    Material* material = material_get(&material_ref);
+    Resource_Info* info = NULL;
+    Material* material = material_get_with_info(material_ref, &info);
     if(material)
     {
-        String path = {0};
-        String name = {0};
-        material_get_name(&name, &material_ref);
-        material_get_path(&name, &material_ref);
+        String path = string_from_builder(info->path);
+        String name = string_from_builder(info->name);
 
         builder_assign(&render_material->name, name);
         builder_assign(&render_material->path, path);
@@ -1362,19 +1371,19 @@ void render_object_init(Render_Object* render_object, Render* render)
     array_init(&render_object->leaf_groups, render->alloc);
 }
 
-void render_object_init_from_object(Render_Object* render_object, Render* render, const Triangle_Mesh_Ref* object_ref)
+void render_object_init_from_object(Render_Object* render_object, Render* render, Id object_ref)
 {
-    Triangle_Mesh* object = triangle_mesh_get(object_ref);
-    String name = {0};
-    String path = {0};
-    triangle_mesh_get_name(&name, object_ref);
-    triangle_mesh_get_path(&path, object_ref);
+    Resource_Info* info = NULL;
+    Triangle_Mesh* object = triangle_mesh_get_with_info(object_ref, &info);
 
     render_object_init(render_object, render);
 
     if(object)
     {
-        Shape_Assembly* shape_assembly = shape_get((Shape_Ref*) &object->shape);
+        String path = string_from_builder(info->path);
+        String name = string_from_builder(info->name);
+
+        Shape_Assembly* shape_assembly = shape_get(object->shape);
         ASSERT(shape_assembly);
         if(name.size == 0)
             name = STRING("default");
@@ -1396,14 +1405,12 @@ void render_object_init_from_object(Render_Object* render_object, Render* render
         for(isize i = 0; i < object->groups.size; i++)
         {
             Triangle_Mesh_Group* group = &object->groups.data[i];
-            LOG_INFO("RENDER", "Group %lld : %s", (lld) i, group->name.data);
-            log_group_push();
 
             ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
             if(group->material_i1)
             {
-                Material_Ref material_ref = *(Material_Ref*) &object->materials.data[group->material_i1 - 1];
-                Material* material = material_get(&material_ref);
+                Id material_ref = object->materials.data[group->material_i1 - 1];
+                Material* material = material_get(material_ref);
                 if(material)
                 {
                     Render_Object_Leaf_Group out_group = {0};
@@ -1414,8 +1421,7 @@ void render_object_init_from_object(Render_Object* render_object, Render* render
                     array_push(&render_object->leaf_groups, out_group);
                 }
             }
-
-            log_group_pop();
+            
         }
         log_group_pop();
     }
@@ -1426,7 +1432,6 @@ typedef struct Triangle_Sub_Range
     isize triangles_from;
     isize triangles_to;
 } Triangle_Sub_Range;
-
 
 typedef struct Render_Filled_Map
 {

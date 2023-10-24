@@ -167,9 +167,6 @@
     <ClInclude Include="handle_table.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resources.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="todo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -192,9 +189,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="clock.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="resources_template.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource_descriptions.h">
@@ -231,6 +225,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hash_string.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="resources.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

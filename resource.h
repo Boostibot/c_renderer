@@ -32,6 +32,7 @@ typedef enum Resource_Reload {
 
 typedef struct Resource_Info {
     Id id;
+
     String_Builder name;
     String_Builder path;
     Resource_Callstack callstack;
@@ -39,9 +40,15 @@ typedef struct Resource_Info {
     u32 storage_index;
     u32 type_enum; //some enum value used for debugging
 
-    i64 creation_epoch_time;
-    i64 death_epoch_time;
+    i64 creation_etime;
+    i64 death_etime;
+    i64 modified_etime;
+    i64 load_etime;
+    i64 file_modified_etime; 
+
     Resource_Lifetime lifetime;
+    Resource_Reload reload;
+
     void* data;
 } Resource_Info;
 
@@ -51,6 +58,21 @@ typedef struct Resource_Ptr {
 } Resource_Ptr;
 
 DEFINE_ARRAY_TYPE(Resource_Ptr, Resource_Ptr_Array);
+
+typedef struct Resource_Params {
+    Id id;  //if 0 generates a new one
+    String path;
+    String name;
+    Resource_Lifetime lifetime;
+    Resource_Reload reload;
+    i64 death_etime;
+    i64 file_modified_etime;
+
+    bool was_loaded;
+} Resource_Params;
+
+EXPORT Resource_Params resource_params_make_simple(String name, String path);
+
 
 typedef void(*Resource_Destructor)(void* item);
 typedef void(*Resource_Constructor)(void* item);
@@ -69,24 +91,23 @@ typedef struct Resource_Manager {
     Resource_Constructor constructor;
     Resource_Destructor destructor;
     Resource_Copy copy;
-    void* context;
 
     const char* type_name;
     i32 type_size;
     u32 type_enum;
 } Resource_Manager;
 
-EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, void* context, const char* type_name, u32 type_enum);
+EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, const char* type_name, u32 type_enum);
+
 EXPORT void resource_manager_deinit(Resource_Manager* manager);
 
 EXPORT bool         resource_is_valid(Resource_Ptr resource);
 
-EXPORT Resource_Ptr resource_find(Resource_Manager* manager, Id id);
-EXPORT Resource_Ptr resource_find_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at);
-EXPORT Resource_Ptr resource_find_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at);
+EXPORT Resource_Ptr resource_get(Resource_Manager* manager, Id id);
+EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at);
+EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at);
 
-EXPORT Resource_Ptr resource_insert_custom(Resource_Manager* manager, Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time);
-EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Id id, String name, String path);
+EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params);
 
 EXPORT bool         resource_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied);
 EXPORT bool         resource_remove(Resource_Manager* manager, Resource_Ptr resource);
@@ -95,15 +116,15 @@ EXPORT bool         resource_force_remove_custom(Resource_Manager* manager, Reso
 EXPORT bool         resource_force_remove(Resource_Manager* manager, Resource_Ptr resource);
 
 EXPORT Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resource);
-EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource);
-EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource);
+EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params);
+EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params);
 
 EXPORT void resource_manager_frame_cleanup(Resource_Manager* manager);
 EXPORT void resource_manager_time_cleanup(Resource_Manager* manager);
 
 // ========================================= IMPL =================================================
 
-EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, void* context, const char* type_name, u32 type_enum)
+EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, const char* type_name, u32 type_enum)
 {
     resource_manager_deinit(manager);
 
@@ -115,23 +136,24 @@ EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, i
     array_init(&manager->timed, alloc);
     array_init(&manager->single_frame, alloc);
     
+    manager->type_name = type_name;
+    manager->type_size = (i32) item_size;
+    manager->type_enum = type_enum;
+
     manager->constructor = constructor;
     manager->destructor = destructor;
     manager->copy = copy;
-    manager->context = context;
-    manager->type_name = type_name;
-    manager->type_size = item_size;
-    manager->type_enum = type_enum;
 }
 
 EXPORT void resource_manager_deinit(Resource_Manager* manager)
 {
-    if(manager->destructor)
-    {
-        ITERATE_STABLE_ARRAY_BEGIN(manager->storage, Resource_Info*, info, isize, index)
-                manager->destructor(info->data);
-        ITERATE_STABLE_ARRAY_END
-    }
+    ITERATE_STABLE_ARRAY_BEGIN(manager->storage, Resource_Info*, info, isize, index)
+        if(manager->destructor)
+            manager->destructor(info->data);
+            
+        array_deinit(&info->path);
+        array_deinit(&info->name);
+    ITERATE_STABLE_ARRAY_END
 
     stable_array_deinit(&manager->storage);
     hash_ptr_deinit(&manager->id_hash);
@@ -149,7 +171,7 @@ EXPORT bool         resource_is_valid(Resource_Ptr resource)
     return resource.ptr && resource.ptr->id == resource.id;
 }
 
-EXPORT Resource_Ptr _resource_find(Resource_Manager* manager, Id id, isize* prev_found_and_finished_at)
+EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     isize found = hash_ptr_find(manager->id_hash, (u64) id);
@@ -169,7 +191,7 @@ EXPORT Resource_Ptr _resource_find(Resource_Manager* manager, Id id, isize* prev
     return out;
 }
 
-EXPORT Resource_Ptr resource_find_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
+EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     isize finished_at = 0;
@@ -200,7 +222,7 @@ EXPORT Resource_Ptr resource_find_by_name(Resource_Manager* manager, Hash_String
     return out;
 }
 
-EXPORT Resource_Ptr resource_find_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
+EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     
@@ -232,78 +254,92 @@ EXPORT Resource_Ptr resource_find_by_path(Resource_Manager* manager, Hash_String
     return out;
 }
 
-EXPORT Resource_Ptr resource_find(Resource_Manager* manager, Id id)
+EXPORT Resource_Ptr resource_get(Resource_Manager* manager, Id id)
 {
-    return _resource_find(manager, id, NULL);
+    return _resource_get(manager, id, NULL);
 }
 
 void _resource_log_wrong_id(Resource_Ptr out)
 {
-    LOG_ERROR("RESOURCE", "Wrong id %lld used. \n"
-            "curr name: " STRING_FMT " path:" STRING_FMT "\n",
-            (lld) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
+    if(out.ptr != NULL)
+    {
+        if(out.ptr)
+            LOG_ERROR("RESOURCE", "Wrong id %lld used. \n"
+                    "curr name: " STRING_FMT " path:" STRING_FMT "\n",
+                    (lld) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
+        else
+            LOG_ERROR("RESOURCE", "Wrong id %lld used", (lld) out.id);
+
+        log_group_push();
+            log_callstack("RESOURCE", LOG_TYPE_ERROR, -1, 1);
+        log_group_pop();
+
+        ASSERT(false);
+    }
 }
 
-INTERNAL Resource_Ptr _resource_insert_custom(Resource_Manager* manager, Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time, isize skip_count)
+EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params)
 {
     Resource_Info* info = NULL;
-    Resource_Ptr out = resource_find(manager, id);
+    if(params.id == 0)
+        params.id = id_generate();
+
+    Resource_Ptr out = resource_get(manager, params.id);
     if(out.id != NULL)
     {
         LOG_ERROR("RESOURCE", "Duplicate id %lld added. \n"
             "Old name: " STRING_FMT " path:" STRING_FMT "\n"
-            "New name: " STRING_FMT " path:" STRING_FMT "\n", (lld) id, 
+            "New name: " STRING_FMT " path:" STRING_FMT "\n", 
+            (lld) params.id, 
             STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path), 
-            STRING_PRINT(name), STRING_PRINT(path));
+            STRING_PRINT(params.name), STRING_PRINT(params.path));
         
         return out;
     }
 
     isize index = stable_array_insert(&manager->storage, (void**) &info);
+    i64 now = platform_universal_epoch_time();
+
+    ASSERT(params.name.size != 0);
 
     info->data = info + 1;
-    info->id = id;
-    info->lifetime = lifetime;
+    info->id = params.id;
     info->reference_count = 1;
-    info->storage_index = index;
+    info->storage_index = (u32) index;
     Allocator* alloc = manager->storage.allocator;
-    info->path = builder_from_string(path, alloc);
-    info->name = builder_from_string(name, alloc);
-    platform_capture_call_stack(info->callstack.stack_frames, STATIC_ARRAY_SIZE(info->callstack.stack_frames), skip_count);
-    info->creation_epoch_time = platform_universal_epoch_time();
-    info->death_epoch_time = death_time;
+    info->path = builder_from_string(params.path, alloc);
+    info->name = builder_from_string(params.name, alloc);
+    platform_capture_call_stack(info->callstack.stack_frames, STATIC_ARRAY_SIZE(info->callstack.stack_frames), 1);
+    info->creation_etime = now;
+    info->modified_etime = now;
+    info->death_etime = params.death_etime;
     info->type_enum = manager->type_enum;
+    info->reload = params.reload;
+    info->lifetime = params.lifetime;
 
-    u64 name_hashed = hash64_murmur(path.data, path.size, 0);
-    u64 path_hashed = hash64_murmur(name.data, name.size, 0);
+    if(params.was_loaded)
+        info->load_etime = now;
 
-    hash_ptr_insert(&manager->id_hash, (u64) id, (u64) info);
-    hash_ptr_insert(&manager->name_hash, name_hashed, (u64) info);
-    hash_ptr_insert(&manager->path_hash, path_hashed, (u64) info);
+    Hash_String name_hashed = hash_string_from_string(params.name);
+    Hash_String path_hashed = hash_string_from_string(params.path);
+
+    hash_ptr_insert(&manager->id_hash, (u64) params.id, (u64) info);
+    hash_ptr_insert(&manager->name_hash, name_hashed.hash, (u64) info);
+    hash_ptr_insert(&manager->path_hash, path_hashed.hash, (u64) info);
     
-    out.id = id;
+    out.id = params.id;
     out.ptr = info;
+
+    if((params.lifetime & RESOURCE_LIFETIME_SINGLE_FRAME) || (params.lifetime & RESOURCE_LIFETIME_EPHEMERAL))
+        array_push(&manager->single_frame, out);
+        
+    if(params.lifetime & RESOURCE_LIFETIME_TIMED)
+        array_push(&manager->timed, out);
 
     if(manager->constructor)
         manager->constructor(info->data);
 
-
-    if((lifetime & RESOURCE_LIFETIME_SINGLE_FRAME) || (lifetime & RESOURCE_LIFETIME_EPHEMERAL))
-        array_push(&manager->single_frame, out);
-        
-    if(lifetime & RESOURCE_LIFETIME_TIMED)
-        array_push(&manager->timed, out);
-
     return out;
-}
-
-EXPORT Resource_Ptr resource_insert_custom(Resource_Manager* manager, Id id, String name, String path, Resource_Lifetime lifetime, i64 death_time)
-{
-    return _resource_insert_custom(manager, id, name, path, lifetime, death_time, 1);
-}
-EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Id id, String name, String path)
-{
-    return _resource_insert_custom(manager, id, name, path, RESOURCE_LIFETIME_REFERENCED, 0.0, 1);
 }
 
 EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
@@ -328,19 +364,19 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
             manager->destructor(info->data);
             
         Hash_String name = hash_string_from_builder(info->name);
-        Hash_String path = hash_string_from_builder(info->name);
+        Hash_String path = hash_string_from_builder(info->path);
 
         isize id_found = -1;
         isize name_found = -1;
         isize path_found = -1;
 
-        Resource_Ptr by_id = _resource_find(manager, id, &id_found);
+        Resource_Ptr by_id = _resource_get(manager, id, &id_found);
         Resource_Ptr by_name = {0};
         Resource_Ptr by_path = {0};
 
         while(by_name.id != id)
         {
-            by_name = resource_find_by_name(manager, name, &name_found);
+            by_name = resource_get_by_name(manager, name, &name_found);
             if(resource_is_valid(by_name) == false)
             {
                 ASSERT_MSG(false, "Must never happen");
@@ -350,7 +386,7 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
         
         while(by_path.id != id)
         {
-            by_path = resource_find_by_path(manager, path, &path_found);
+            by_path = resource_get_by_path(manager, path, &path_found);
             if(resource_is_valid(by_path) == false)
             {
                 ASSERT_MSG(false, "Must never happen");
@@ -394,17 +430,20 @@ EXPORT bool resource_remove_custom(Resource_Manager* manager, Resource_Ptr resou
     {
         Resource_Info* info = resource.ptr;
         if(info->reference_count <= 1 && (info->lifetime & RESOURCE_LIFETIME_PERSISTANT) == 0)
-            return resource_force_remove_custom(manager, resource, removed_data, removed_data_size, was_copied);
+            resource_force_remove_custom(manager, resource, removed_data, removed_data_size, was_copied);
         else
             info->reference_count -= 1;
+
+        return true;
     }
     else
         _resource_log_wrong_id(resource);
+
+    return false;
 }
 
 EXPORT bool resource_remove(Resource_Manager* manager, Resource_Ptr resource)
 {
-
     return resource_remove_custom(manager, resource, NULL, 0, NULL);
 }
 
@@ -422,7 +461,7 @@ EXPORT Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resou
 
     return out;
 }
-EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource)
+EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params)
 {
     Resource_Ptr out = {0};
     if(resource_is_valid(resource))
@@ -430,25 +469,23 @@ EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr
         if(resource.ptr->reference_count <= 1)
             out = resource;
         else
-            out = resource_duplicate(manager, resource);
+            out = resource_duplicate(manager, resource, params);
     }
     else
         _resource_log_wrong_id(resource);
 
     return out;
 }
-EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource)
+EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params)
 {
     Resource_Ptr out = {0};
     if(resource_is_valid(resource))
     {
         Resource_Info* info = resource.ptr;
-        out = resource_insert_custom(manager, id_generate(), string_from_builder(info->name), string_from_builder(info->path), info->lifetime, info->death_epoch_time);
-
+        out = resource_insert(manager, params);
+        
         if(manager->copy)
-            manager->copy(out.ptr->data, resource.ptr->data);
-        else
-            memmove(out.ptr->data, resource.ptr->data, manager->type_size);
+            manager->copy(out.ptr->data, info->data);
     }
     else
         _resource_log_wrong_id(resource);
@@ -477,7 +514,7 @@ EXPORT void resource_manager_time_cleanup(Resource_Manager* manager)
         bool remove = true;
         if(resource_is_valid(*curr))
         {
-            if(curr->ptr->death_epoch_time >= now)
+            if(curr->ptr->death_etime >= now)
                 resource_remove(manager, *curr);
             else
                 remove = false;

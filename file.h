@@ -30,6 +30,9 @@ EXPORT String path_get_executable_directory();
 EXPORT String path_get_current_working_directory();
 EXPORT String path_get_file_directory(String file_path);
 
+
+EXPORT String path_get_name_from_path(String path);
+
 // Represents the following:
 // //?//C:/Users/Program_Files/./../Dir/file.txt
 // <---><-><-------------------------->|<------>
@@ -84,6 +87,20 @@ EXPORT String path_get_part_filename(String path, Path_Info info);
 
 #include "log.h"
 #include "format.h"
+
+EXPORT String path_get_name_from_path(String path)
+{
+    if(path.size == 0)
+        return STRING("");
+
+    isize dot_pos = string_find_last_char(path, '.');
+    if(dot_pos == -1)
+        dot_pos = path.size;
+
+    isize dir_pos = string_find_last_char_from(path, '/', dot_pos - 1);
+    String name = string_range(path, dir_pos + 1, dot_pos);
+    return name;
+}
 
 EXPORT String path_get_executable()
 {

@@ -368,7 +368,7 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
     material->info = description.info;
 
     typedef struct Map_Or_Cubemap_Handles {
-        Map_Handle handle;
+        Id handle;
         Map_Description* description;
         bool is_cubemap;
         i32 map_or_cubemap_i; 
@@ -411,30 +411,32 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
 
         //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
         String full_item_path = path_get_full_ephemeral_from(item_path, dir_path);
-
         Error load_error = {0};
-        Image_Ref found_image = image_find_by_path(full_item_path, NULL);
-        Image_Handle map_image = {0};
         
+        Id found_image = image_find_by_path(hash_string_from_string(full_item_path), NULL);
+        Id map_image = NULL;
+
         Resource_Params params = {0};
         params.path = full_item_path;
+        params.name = path_get_name_from_path(params.path);
         params.was_loaded = true;
 
-        if(HANDLE_IS_VALID(found_image))
+        if(found_image != NULL)
         {
-            map_image = image_make_shared(&found_image, NULL);
+            LOG_INFO("ASSET", "load image found image \"%s\" in repository", full_item_path.data);
+            map_image = image_make_shared(found_image);
         }
         else
         {   
-            Image_Builder* loaded_image = NULL; 
-            map_image = image_add(params, &loaded_image);
+            map_image = image_insert(params);
+            Image_Builder* loaded_image = image_get(map_image); 
 
             load_error = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_FORMAT_U8, 0);
             if(error_is_ok(load_error) == false)
-                image_remove(&map_image);
+                image_remove(map_image);
         }
 
-        if(HANDLE_IS_NULL(map_image))
+        if(map_image == NULL)
             LOG_ERROR("ASSET", "Error rading image " STRING_FMT ": " ERROR_FMT, STRING_PRINT(full_item_path), ERROR_PRINT(load_error));
         else
         {
@@ -454,7 +456,7 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
 
 #define FLAT_ERRORS_COUNT 100
 
-EXPORT Error material_read_entire(Material_Handle_Array* materials, String path)
+EXPORT Error material_read_entire(Id_Array* materials, String path)
 {
     Malloc_Allocator arena = {0};
     malloc_allocator_init_use(&arena, 0);
@@ -483,20 +485,22 @@ EXPORT Error material_read_entire(Material_Handle_Array* materials, String path)
         bool was_found = false;
         bool is_outdated = false;
     
-        Material_Ref_Array found_materials = {0};
+        Id_Array found_materials = {0};
         array_init_backed(&found_materials, NULL, 16);
 
-        Material_Ref found_material = {0};
+        isize last = -1;
+        Id found_material = {0};
         while(true)
         {
-            found_material = material_find_by_path(string_from_builder(full_path), &found_material);
-            if(HANDLE_IS_NULL(found_material))
+            found_material = material_find_by_path(hash_string_from_builder(full_path), &last);
+            if(found_material == NULL)
                 break;
 
             if(error_is_ok(file_info_error))
             {
-                Resource_Info* material_info = material_get_info(&found_material);
-                if(material_info->last_load_epoch_time < file_info.last_write_epoch_time)
+                Resource_Info* material_info = NULL;
+                material_get_with_info(found_material, &material_info);
+                if(material_info->load_etime < file_info.last_write_epoch_time)
                 {
                     is_outdated = true;
                     break;
@@ -509,7 +513,7 @@ EXPORT Error material_read_entire(Material_Handle_Array* materials, String path)
         if(is_outdated == false)
         {
             for(isize i = 0; i < found_materials.size; i++)
-                array_push(materials, material_make_shared(&found_material, NULL););
+                array_push(materials, material_make_shared(found_material););
             
             was_found = found_materials.size > 0;
         }
@@ -536,12 +540,11 @@ EXPORT Error material_read_entire(Material_Handle_Array* materials, String path)
                     params.path = string_from_builder(material_desription.path);
                     params.was_loaded = true;
 
-                    Material* material = NULL;
-                    Material_Handle local_handle = material_add(params, &material);
+                    Id local_handle = material_insert(params);
+                    Material* material = material_get(local_handle);
                     material_load_images(material, material_desription);
                     
                     array_push(materials, local_handle);
-
                 }
             }
         }
@@ -555,12 +558,12 @@ EXPORT Error material_read_entire(Material_Handle_Array* materials, String path)
     return error;
 }
 
-EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handle, String path)
+EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
     Malloc_Allocator arena = {0};
     malloc_allocator_init_use(&arena, 0);
 
-    Triangle_Mesh_Handle out_handle = {0};
+    Id out_handle = {0};
     String_Builder full_path = {0};
     array_init_backed(&full_path, 0, 512);
     Error error = path_get_full(&full_path, path);
@@ -572,15 +575,16 @@ EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handl
         if(error_is_ok(file_info_error) == false)
             LOG_ERROR("ASSET", "Error getting info of object file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 
-        Triangle_Mesh_Ref found_mesh = triangle_mesh_find_by_path(string_from_builder(full_path), NULL);
-        if(HANDLE_IS_VALID(found_mesh))
+        Id found_mesh = triangle_mesh_find_by_path(hash_string_from_builder(full_path), NULL);
+        if(found_mesh != NULL)
         {
-            Resource_Info* resource_info = triangle_mesh_get_info(&found_mesh);
-            if(resource_info->last_load_epoch_time >= file_info.last_write_epoch_time)
-                out_handle = triangle_mesh_make_shared(&found_mesh, NULL);
+            Resource_Info* resource_info = NULL;
+            triangle_mesh_get_with_info(found_mesh, &resource_info);
+            if(resource_info->load_etime >= file_info.last_write_epoch_time)
+                out_handle = triangle_mesh_make_shared(found_mesh);
         }
 
-        if(HANDLE_IS_NULL(out_handle))
+        if(out_handle == NULL)
         {
             String_Builder file_content = {0};
             error = file_read_entire(string_from_builder(full_path), &file_content);
@@ -602,12 +606,14 @@ EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handl
 
                 Resource_Params params = {0};
                 params.path = string_from_builder(full_path);
+                params.name = path_get_name_from_path(params.path);
                 params.was_loaded = true;
 
-                Triangle_Mesh* triangle_mesh = NULL;
-                Shape_Assembly* out_assembly = NULL;
-                out_handle = triangle_mesh_add(params, &triangle_mesh);
-                triangle_mesh->shape = shape_add(params, &out_assembly);
+                out_handle = triangle_mesh_insert(params);
+                Triangle_Mesh* triangle_mesh = triangle_mesh_get(out_handle);
+
+                triangle_mesh->shape = shape_insert(params);
+                Shape_Assembly* out_assembly = shape_get(triangle_mesh->shape);
 
                 Triangle_Mesh_Description description = {0};
                 process_obj_triangle_mesh(out_assembly, &description, model);
@@ -623,10 +629,6 @@ EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handl
                     if(error_is_ok(major_material_error) == false)
                         LOG_ERROR("ASSET", "Failed to load material file %s while loading %s", mtl_path.data, full_path.data);
                 }
-                
-                //@TEMP - proper approach would be to find a material called default
-                if(triangle_mesh->materials.size > 0)
-                    triangle_mesh->fallback_material_i1 = 1;
 
                 for(isize i = 0; i < description.groups.size; i++)
                 {
@@ -635,11 +637,14 @@ EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handl
                     bool unable_to_find_group = true;
                     for(isize j = 0; j < triangle_mesh->materials.size; j++)
                     {
-                        Material_Handle material_handle = triangle_mesh->materials.data[j];
-                        String material_name = {0};
-                        if(material_get_name(&material_name, (Material_Ref*) &material_handle) == false)
+                        Id material_handle = triangle_mesh->materials.data[j];
+
+                        
+                        Resource_Info* material_info = NULL;
+                        if(material_get_with_info(material_handle, &material_info) == NULL)
                             continue;
 
+                        String material_name = string_from_builder(material_info->name);
                         if(string_is_equal(material_name, string_from_builder(group_desc->material_name)))
                         {
                             unable_to_find_group = false;
@@ -658,8 +663,12 @@ EXPORT Error triangle_mesh_read_entire(Triangle_Mesh_Handle* triangle_mesh_handl
 
                             array_push(&triangle_mesh->groups, group);
                         }
-                    }
 
+                        //find the default material
+                        if(triangle_mesh->material == NULL && string_is_equal(material_name, STRING("default")))
+                            triangle_mesh->material = material_make_shared(material_handle);
+                    }
+                    
                     if(unable_to_find_group)
                         LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
                 }

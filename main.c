@@ -780,10 +780,10 @@ const char* get_memory_unit(isize bytes, isize *unit_or_null)
         out = "MB";
         unit = MB;
     }
-    if(bytes > KB)
+    else if(bytes > KB)
     {
-        out = "MB";
-        unit = MB;
+        out = "KB";
+        unit = KB;
     }
     else
     {
@@ -798,12 +798,18 @@ const char* get_memory_unit(isize bytes, isize *unit_or_null)
 }
 
 
-void format_memory_unit_ephemeral(String_Builder* formatted, isize bytes)
+const char* format_memory_unit_ephemeral(isize bytes)
 {
     isize unit = 1;
+    static String_Builder formatted = {0};
+    if(formatted.allocator == NULL)
+        array_init(&formatted, allocator_get_static());
+
     const char* unit_text = get_memory_unit(bytes, &unit);
     f64 ratio = (f64) bytes / (f64) unit;
-    format_into(formatted, "%.1lf %s", ratio, unit_text);
+    format_into(&formatted, "%.1lf %s", ratio, unit_text);
+
+    return formatted.data;
 }
 
 void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_Stats stats)
@@ -811,10 +817,8 @@ void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_St
     String_Builder formatted = {0};
     array_init_backed(&formatted, NULL, 512);
 
-    format_memory_unit_ephemeral(&formatted, stats.bytes_allocated);
-    LOG(log_module, log_type, "bytes_allocated: "STRING_FMT, STRING_PRINT(formatted));
-    format_memory_unit_ephemeral(&formatted, stats.max_bytes_allocated);
-    LOG(log_module, log_type, "max_bytes_allocated: "STRING_FMT, STRING_PRINT(formatted));
+    LOG(log_module, log_type, "bytes_allocated: %s", format_memory_unit_ephemeral(stats.bytes_allocated));
+    LOG(log_module, log_type, "max_bytes_allocated: %s", format_memory_unit_ephemeral(stats.max_bytes_allocated));
     LOG(log_module, log_type, "allocation_count: %lld", (lld) stats.allocation_count);
     LOG(log_module, log_type, "deallocation_count: %lld", (lld) stats.deallocation_count);
     LOG(log_module, log_type, "reallocation_count: %lld", (lld) stats.reallocation_count);
@@ -957,10 +961,7 @@ void break_debug_allocator()
 
 void run_func(void* context)
 {
-    test_stable_array_benchmark(1.0);
-    log_perf_counters("APP", LOG_TYPE_INFO, true);
-    platform_abort();
-    test_stable_array();
+    //test_stable_array();
     //test_hash_index(3.0);
 
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
@@ -1019,7 +1020,7 @@ void run_func(void* context)
     
     Entity falcon = entity_generate(0);
 
-    Triangle_Mesh_Handle falcon_handle = {0};
+    Id falcon_handle = {0};
     Render_Object render_falcon = {0};
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
@@ -1193,11 +1194,11 @@ void run_func(void* context)
                 Transform transf = {0};
                 transf.translate = vec3(20, 0, 20);
                 transf.scale = vec3_of(0.1f);
-                render_compoment_add(&falcon, HANDLE_CAST(Triangle_Mesh_Ref, falcon_handle), transf, 0);
+                render_compoment_add(&falcon, falcon_handle, transf, 0);
 
                 //falcon_object = resources_object_get(&resources, falcon_handle);
                 //@TODO: add error returns here!
-                render_object_init_from_object(&render_falcon, &renderer, (Triangle_Mesh_Ref*) &falcon_handle);
+                render_object_init_from_object(&render_falcon, &renderer, falcon_handle);
             }
 
             Error error = {0};
@@ -1584,6 +1585,30 @@ void run_func(void* context)
             log_group_push();
                 log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
             log_group_pop();
+            
+            LOG_INFO("RESOURCES", "Resources repository memory usage stats:");
+            log_group_push();
+            
+                isize accumulated_total = 0;
+                for(isize i = 0; i < RESOURCE_TYPE_ENUM_COUNT; i++)
+                {
+                    Resource_Manager* manager = resources_get_type(i);
+                    isize type_alloced = stable_array_capacity(&manager->storage)*manager->type_size;
+                    isize hash_alloced = manager->id_hash.entries_count * sizeof(Hash_Ptr_Entry);
+
+                    LOG_INFO("RESOURCES", "%s", manager->type_name);
+                    log_group_push();
+                        LOG_INFO("RESOURCES", "type_alloced: %s", format_memory_unit_ephemeral(type_alloced));
+                        LOG_INFO("RESOURCES", "hashes:       %s", format_memory_unit_ephemeral(hash_alloced));
+                    log_group_pop();
+
+                    accumulated_total += type_alloced + hash_alloced;
+                }
+                
+
+                debug_allocator_print_alive_allocations(resources_alloc, 200);
+                LOG_INFO("RESOURCES", "total overhead:       %s", format_memory_unit_ephemeral(accumulated_total));
+            log_group_pop();
 
             glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
         }
@@ -1646,7 +1671,13 @@ void run_func(void* context)
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
     
     log_perf_counters("APP", LOG_TYPE_INFO, true);
-    
+    render_world_deinit();
+
+    LOG_INFO("RESOURCES", "Resources allocation stats:");
+    log_group_push();
+        log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
+    log_group_pop();
+
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);
     

@@ -238,6 +238,7 @@
     <ClInclude Include="format_lpf.h" />
     <ClInclude Include="format_netbpm.h" />
     <ClInclude Include="guid.h" />
+    <ClInclude Include="hash_string.h" />
     <ClInclude Include="hash_index_template.h" />
     <ClInclude Include="logger_file.h" />
     <ClInclude Include="logger_memory.h" />
@@ -246,7 +247,7 @@
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="resources_template.h" />
+    <ClInclude Include="resources.h" />
     <ClInclude Include="resource_descriptions.h" />
     <ClInclude Include="resource_loading.h" />
     <ClInclude Include="gl.h" />
@@ -265,7 +266,6 @@
     <ClInclude Include="profile.h" />
     <ClInclude Include="random.h" />
     <ClInclude Include="gl_shader_util.h" />
-    <ClInclude Include="resources.h" />
     <ClInclude Include="shapes.h" />
     <ClInclude Include="stable_array.h" />
     <ClInclude Include="string.h" />

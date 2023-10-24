@@ -46,6 +46,9 @@
 // the dead zones and header is checked for validty (invalidty would indicate overwrites). Only then
 // any allocation/deallocation takes place.
 
+//@TODO: make simpler!
+//@TODO: format size correctly
+//@TODO: use the sots order
 
 #include "allocator.h"
 #include "array.h"
@@ -63,7 +66,6 @@ typedef struct Debug_Allocator_Options  Debug_Allocator_Options;
 typedef enum Debug_Allocator_Panic_Reason Debug_Allocator_Panic_Reason;
 
 DEFINE_ARRAY_TYPE(Debug_Allocation, Debug_Allocation_Array);
-  
 
 
 typedef void (*Debug_Allocator_Panic)(Debug_Allocator* allocator, Debug_Allocator_Panic_Reason reason, Debug_Allocation allocation, isize penetration, Source_Info called_from, void* context);
@@ -105,6 +107,19 @@ typedef struct Debug_Allocator
     bool is_init; //prevents double init
 } Debug_Allocator;
 
+typedef enum Debug_Allocation_Sort_Criteria {
+    DEBUG_ALLOCATOR_SORT_RECENT_ALLOCATED_FIRST,
+    DEBUG_ALLOCATOR_SORT_RECENT_ALLOCATED_LAST,
+
+    DEBUG_ALLOCATOR_SORT_RECENT_DEALLOCATED_FIRST,
+    DEBUG_ALLOCATOR_SORT_RECENT_DEALLOCATED_LAST,
+    
+    DEBUG_ALLOCATOR_SORT_BIGGER_FIRST,
+    DEBUG_ALLOCATOR_SORT_BIGGER_LAST,
+    
+    DEBUG_ALLOCATOR_SORT_ALIGNED_FIRST,
+    DEBUG_ALLOCATOR_SORT_ALIGNED_LAST,
+} Debug_Allocation_Sort_Criteria;
 
 
 #define DEBUG_ALLOCATOR_CONTINUOUS          (u64) 1  /* do_contnual_checks = true */
@@ -313,7 +328,6 @@ EXPORT void debug_allocator_panic_func(Debug_Allocator* allocator, Debug_Allocat
     (void) context;
     (void) penetration;
     const char* reason_str = debug_allocator_panic_reason_to_string(reason);
-
 
     //log("MEMORY", LOG_TYPE_FATAL, SOURCE_INFO(), "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
     LOG_FATAL("MEMORY", "PANIC because of %s at pointer 0x%p " SOURCE_INFO_FMT "\n", reason_str, allocation.ptr, SOURCE_INFO_PRINT(called_from));
@@ -581,7 +595,7 @@ EXPORT Debug_Allocation_Array debug_allocator_get_alive_allocations(const Debug_
     if(count <= 0)
         count = hash->size;
         
-    if(count >= hash->size);
+    if(count >= hash->size)
         count = hash->size;
         
     Debug_Allocation_Array out = {allocator.parent};

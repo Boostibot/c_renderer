@@ -4,7 +4,7 @@
 #include "hash_index.h"
 #include "array.h"
 #include "entity.h"
-#include "stable_array3.h"
+#include "stable_array.h"
 #include "resources.h"
 #include "systems.h"
 
@@ -12,7 +12,7 @@
 
 typedef struct Redender_Compoment {
     Id entity;
-    Triangle_Mesh_Ref mesh;
+    Id mesh;
     Transform transform;
     i32 layer;
 } Redender_Compoment;
@@ -27,7 +27,7 @@ extern Render_World global_render_world;
 void render_world_init(Allocator* alloc);
 void render_world_deinit();
 Redender_Compoment* render_compoment_get_id(Id id);
-Redender_Compoment* render_compoment_add_id(Id id, Triangle_Mesh_Ref mesh, Transform transform, i32 layer);
+Redender_Compoment* render_compoment_add_id(Id id, Id mesh, Transform transform, i32 layer);
 bool render_compoment_remove_id(Id id);
 
 Render_World global_render_world;
@@ -35,7 +35,7 @@ Render_World global_render_world;
 void render_world_notify(Id id, bool added_if_true_removed_if_false, void* context)
 {
     (void) context;
-    Triangle_Mesh_Ref mesh = {0};
+    Id mesh = {0};
     Transform transf = {0};
     if(added_if_true_removed_if_false)
         render_compoment_add_id(id, mesh, transf, 0);
@@ -67,7 +67,7 @@ Redender_Compoment* render_compoment_get_id(Id id)
     return comp;
 }
 
-Redender_Compoment* render_compoment_add_id(Id id, Triangle_Mesh_Ref mesh, Transform transform, i32 layer)
+Redender_Compoment* render_compoment_add_id(Id id, Id mesh, Transform transform, i32 layer)
 {
     isize found = hash_ptr_find_or_insert(&global_render_world.hash, (u64) id, (u64) 0);
     Redender_Compoment* comp = NULL;
@@ -102,7 +102,7 @@ Redender_Compoment* render_compoment_get(Entity entity)
     return NULL;
 }
 
-Redender_Compoment* render_compoment_add(Entity* entity, Triangle_Mesh_Ref mesh, Transform transform, i32 layer)
+Redender_Compoment* render_compoment_add(Entity* entity, Id mesh, Transform transform, i32 layer)
 {
     entity->compoments |= compoment_bit(SYSTEM_RENDER);
     return render_compoment_add_id(entity->id, mesh, transform, layer);
