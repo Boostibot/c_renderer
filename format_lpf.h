@@ -14,9 +14,24 @@ typedef enum Lpf_Kind {
     LPF_KIND_CONTINUATION,
     LPF_KIND_ESCAPED_CONTINUATION,
     LPF_KIND_COMMENT,
-    LPF_KIND_ARRAY,
-    LPF_KIND_MAP,
+    LPF_KIND_COLLECTION_START,
+    LPF_KIND_COLLECTION_END,
 } Lpf_Kind;
+
+typedef enum Lpf_Error {
+    LPF_ERROR_NONE = 0,
+    LPF_ERROR_ENTRY_INVALID_CHAR_BEFORE_START,
+
+    LPF_ERROR_ENTRY_MISSING_START,
+    LPF_ERROR_ENTRY_MULTIPLE_TYPES,
+    LPF_ERROR_ENTRY_CONTINUNATION_WITHOUT_START,
+    LPF_ERROR_ENTRY_CONTINUNATION_HAS_LABEL,
+    
+    LPF_ERROR_COLLECTION_END_HAS_LABEL,
+    LPF_ERROR_COLLECTION_CONTENT_AFTER_START,
+    LPF_ERROR_COLLECTION_CONTENT_AFTER_END,
+    LPF_ERROR_COLLECTION_TOO_MANY_ENDS,
+} Lpf_Error;
 
 typedef struct Lpf_Range {
     lpf_size from;
@@ -24,40 +39,33 @@ typedef struct Lpf_Range {
 } Lpf_Range;
 
 typedef struct Lpf_Entry {
-    Lpf_Range value_text;
+    Lpf_Range label_text;
     Lpf_Range type_text;
+    Lpf_Range value_text;
+    Lpf_Range comment_text;
 
     lpf_size line_number;
-
+    lpf_size collection_i1;
     Lpf_Kind kind;
+    Lpf_Error error;
 } Lpf_Entry;
 
 typedef struct Lpf_Collection {
     Lpf_Range entries;
+    Lpf_Range label_text;
     Lpf_Range type_text;
 
     lpf_size parent_i1;
     lpf_size child_i1;
     lpf_size next_i1;
-
-    lpf_size depth;
-    lpf_size line_number;
     
-    Lpf_Kind kind;
+    lpf_size line_number;
+    lpf_size depth;
 } Lpf_Collection;
 
-typedef enum Lpf_Error_Type {
-    LPF_ERROR_NONE = 0,
-    LPF_ERROR_TOO_MANY_ARRAYS,
-    LPF_ERROR_TOO_MANY_MAPS,
-} Lpf_Error_Type;
-
-typedef struct Lpf_Error {
-    lpf_size at;
-    Lpf_Error_Type type;
-} Lpf_Error;
 
 typedef void*(*Lpf_Reallocate)(lpf_size new_size, void* old_ptr, lpf_size old_size, void* context);
+typedef bool(*Lpf_Log)(Lpf_Error error, lpf_size line, lpf_size line_index, lpf_size data_offset, const char* format, ...);
 
 typedef struct Lpf_File {
     Lpf_Entry* entries;
@@ -67,10 +75,6 @@ typedef struct Lpf_File {
     Lpf_Collection* collections;
     lpf_size collections_size;
     lpf_size collections_capacity;
-
-    Lpf_Error* errors;
-    lpf_size errors_size;
-    lpf_size errors_capacity;
 
     void* realloc_context;
     Lpf_Reallocate realloc_func; 
@@ -86,12 +90,22 @@ typedef struct Lpf_File {
 #define LPF_VERSION_MIN 0
 #define LPF_VERSION_MAX 0
 
-lpf_size lpf_parse(Lpf_File* into_or_null, const char* lpf_source, lpf_size source_size, lpf_size flags);
+lpf_size lpf_parse(Lpf_File* into, const char* lpf_source, lpf_size source_size, lpf_size flags, Lpf_Log log);
 
-
-lpf_size lpf_parse_line(Lpf_Collection* into_or_null, const char* lpf_source, lpf_size source_size, lpf_size flags)
+bool lpf_is_space(char c)
 {
-
+    switch(c)
+    {
+        case ' ':
+        case '\n':
+        case '\t':
+        case '\r':
+        case '\v':
+        case '\f':
+            return true;
+        default: 
+            return false;
+    }
 }
 
 bool lpf_is_alpha(char c)
@@ -126,7 +140,8 @@ void lpf_push(void** ptr, lpf_size* size, lpf_size* capacity, lpf_size item_size
     *size += 1;
 }
 
-lpf_size lpf_parse(Lpf_File* into, const char* lpf_source, lpf_size source_size, lpf_size flags)
+
+lpf_size lpf_parse(Lpf_File* into, const char* lpf_source, lpf_size source_size, lpf_size flags, Lpf_Log log)
 {
     typedef lpf_size isize;
 
@@ -138,158 +153,186 @@ lpf_size lpf_parse(Lpf_File* into, const char* lpf_source, lpf_size source_size,
     isize depth = 0;
     isize line_number = 0;
     isize line_i = 0;
-    bool next_is_escaped = false;
+    bool run = true;
     for(isize source_i = 0; source_i < source_size; source_i += line_i + 1)
     {
         line_number += 1;
-        Lpf_Range val_text = {-1, -1};
-        Lpf_Range type_text = {0, 0};
-        Lpf_Range type_text_collection = {0, 0};
-        Lpf_Error error = {0};
-        Lpf_Kind kind = LPF_KIND_ENTRY;
+        Lpf_Kind kind = (Lpf_Kind) -1;
+        Lpf_Entry entry = {0};
+        Lpf_Range word_range = {0};
 
-        bool is_continuation = false;
-        bool is_comment = false;
-
-        bool found_any_start_marker = false;
-
-        bool has_array_start = false;
-        bool has_array_end = false;
-        
-        bool has_map_start = false;
-        bool has_map_end = false;
-
-        bool set_next_escaped = false;
-
-        bool is_within_type = false;
 
         //parse line start
+        bool is_within_type = false;
         for(line_i = 0; line_i < source_size && lpf_source[line_i] != '\n'; line_i++)
         {
             char c = lpf_source[line_i];
-
-            //parse type. Only keeps the very last type
-            if(flags & LPF_FLAG_IGNORE_TYPES == 0)
+            if(lpf_is_space(c) == false)
             {
-                if(lpf_is_alpha(c) || lpf_is_digit(c) || (c == '_'))
+                if(is_within_type == false)
                 {
-                    if(is_within_type == false)
-                    {
-                        is_within_type = true;
-                        type_text.from = line_i;
-                    }
+                    is_within_type = true;
+                    word_range.from = line_i;
                 }
-                else
+            }
+            else
+            {
+                if(is_within_type)
                 {
-                    if(is_within_type)
-                    {
-                        is_within_type = false;
-                        type_text.to = line_i;
-                    }
+                    is_within_type = false;
+                    word_range.to = line_i;
                 }
             }
 
             switch(c)
             {
-                //starter kinds
-                case ':': val_text.from = line_i; break;
-                case ',': val_text.from = line_i; is_continuation = true; break;
-                case '#': val_text.from = line_i; is_comment = true; break;
-                    
-                //collection markers
-                    
-                case '{': 
-                    type_text_collection = type_text; 
-                    type_text = null_range;
-                    has_map_start = true; break;
-                case '}': 
-                    has_map_end = true; break;
+                case ':': kind = LPF_KIND_ENTRY; break;
+                case ';': kind = LPF_KIND_ESCAPED_CONTINUATION;  break;
+                case ',': kind = LPF_KIND_CONTINUATION;  break;
+                case '#': kind = LPF_KIND_COMMENT;  break;
+                case '{': kind = LPF_KIND_COLLECTION_START; break;
+                case '}': kind = LPF_KIND_COLLECTION_END; break;
             }
             
-            if(val_text.from > -1)
-                break;
-
-            if(c == '[' || c == '{')
+            if((kind != -1 && is_within_type) || word_range.to != 0)
             {
-                Lpf_Collection collection = {0};
-                collection.parent_i1 = collection_i1;
-                collection.depth = depth;
-                collection.line_number = line_number;
-                collection.type_text = type_text;
-                collection.kind = c == '[' ? LPF_KIND_ARRAY : LPF_KIND_MAP;
-                collection.entries.from = into->entries_size;
-                collection.entries.to = into->entries_size;
-
-                lpf_push(
-                    (void**) &into->collections, &into->collections_size, &into->collections_capacity, 
-                    sizeof collection, into->realloc_func, into->realloc_context);
-
-                into->collections[into->collections_size - 1] = collection;
-
-                depth += 1;
-                type_text = null_range;
-                collection_i1 = into->collections_size;
-            }
-
-            if()
-        }
-
-        //If does not have any starter assume the whole line is a comment.
-        if(val_text.from == -1)
-        {
-            val_text.from = 0;
-            val_text.to = 0;
-            is_comment = true;
-        }
-        //Else find the end of the line parsing it
-        else
-        {
-            //https://graphics.stanford.edu/~seander/bithacks.html#ValueInWord
-            #define haszero(v)          (((int64_t)(v) - 0x0101010101010101ULL) & ~(int64_t)(v) & 0x8080808080808080ULL)
-            #define broadcast_byte(c)   0x0101010101010101ULL * (int64_t)(c)
-            const int64_t new_line_mask = broadcast_byte('\n');
-
-            isize furthest_comment_i = -1;
-            isize furthest_escape_i = -1;
-            for(; line_i < source_size && lpf_source[line_i] != '\n'; line_i++)
-            {
-                char c = lpf_source[line_i];
-                if(c == '\\')
+                word_range.to = line_i;
+                if(entry.label_text.to == 0)
+                    entry.label_text = word_range;
+                else if (entry.type_text.to == 0)
+                    entry.type_text = word_range;
+                else
                 {
-                    set_next_escaped = true;
-                    furthest_escape_i = line_i;
+                    if(log) run = log(LPF_ERROR_ENTRY_MULTIPLE_TYPES, line_number, line_i, source_i, "@TODO");
+                    goto had_error;
                 }
-                if(c == '#')
-                    furthest_comment_i = line_i;
+
+                word_range.to = 0;
             }
 
-            val_text.to = furthest_comment_i > furthest_escape_i ? furthest_comment_i : furthest_escape_i;
-            if(val_text.to == -1)
-               val_text.to = line_i; 
+            if(kind != -1)
+                break;
         }
         
-        if(is_comment)
-            kind = LPF_KIND_COMMENT;   
-        else if(is_continuation)
+        //Missing start
+        if(kind == (Lpf_Kind) -1)
         {
-            if(next_is_escaped)
-                kind = LPF_KIND_ESCAPED_CONTINUATION;
-            else
-                kind = LPF_KIND_CONTINUATION;
+            if(log) run = log(LPF_ERROR_ENTRY_MISSING_START, line_number, line_i, source_i, "@TODO");
+            goto had_error;
         }
-        else
-        {
-            kind = LPF_KIND_ENTRY;
-        }
-
-        Lpf_Entry entry = {0};
-        entry.value_text = val_text;
-        entry.type_text = type_text;
+        
         entry.kind = kind;
-        entry.line_number = line_number;
+        switch(kind)
+        {
+            case LPF_KIND_ENTRY:
+            case LPF_KIND_CONTINUATION:
+            case LPF_KIND_ESCAPED_CONTINUATION: {
+                
+                //Else find the end of the line parsing it
+                entry.value_text.from = line_i;
+                isize furthest_comment_i = -1;
+                for(; line_i < source_size && lpf_source[line_i] != '\n'; line_i++)
+                {
+                    char c = lpf_source[line_i];
+                    if(c == '#')
+                        furthest_comment_i = line_i;
+                }
+
+                if(furthest_comment_i == -1)
+                   entry.value_text.to = line_i;
+                else
+                {
+                    entry.value_text.to = furthest_comment_i;
+                    entry.comment_text.from = furthest_comment_i + 1;
+                    entry.comment_text.to = line_i + 1;
+                }
+            }
+            break;
+
+            case LPF_KIND_COMMENT: {
+                if(entry.label_text.to != 0 || entry.type_text.to != 0)
+                {
+                    if(log) run = log(LPF_ERROR_COLLECTION_END_HAS_LABEL, line_number, line_i, source_i, "@TODO");
+                    goto had_error;
+                }
+                
+                entry.comment_text.from = line_i;
+                for(; line_i < source_size && lpf_source[line_i] != '\n'; line_i++);
+                entry.comment_text.to = line_i; 
+            }
+            break;
+
+            case LPF_KIND_COLLECTION_START: 
+            case LPF_KIND_COLLECTION_END: {
+                if(kind == LPF_ERROR_COLLECTION_END_HAS_LABEL)
+                {
+                    if(entry.label_text.to != 0 || entry.type_text.to != 0)
+                    {
+                        if(log) run = log(LPF_ERROR_COLLECTION_END_HAS_LABEL, line_number, line_i, source_i, "@TODO");
+                        goto had_error;
+                    }
+                }
+
+                line_i += 1;
+                for(; line_i < source_size && lpf_source[line_i] != '\n'; line_i++)
+                {
+                    char c = lpf_source[line_i];
+                    if(lpf_is_space(c) == false)
+                    {
+                        Lpf_Error error = kind == LPF_KIND_COLLECTION_END ? LPF_ERROR_COLLECTION_CONTENT_AFTER_END : LPF_ERROR_COLLECTION_CONTENT_AFTER_START;
+                        if(log) run = log(error, line_number, line_i, source_i, "@TODO");
+                        goto had_error;
+                    }
+                }
+
+                if(kind == LPF_KIND_COLLECTION_START)
+                {
+                    assert(into->collections_size > 0);
+                    Lpf_Collection* prev_collection = &into->collections[collection_i1 - 1];
+
+                    Lpf_Collection collection = {0};
+                    collection.parent_i1 = collection_parrent_i1;
+                    collection.depth = depth;
+                    collection.line_number = line_number;
+                    collection.type_text = entry.type_text;
+                    collection.label_text = entry.label_text;
+                    collection.entries.from = into->entries_size;
+                    collection.entries.to = -1;
+
+                    lpf_push((void**) &into->collections, &into->collections_size, &into->collections_capacity, 
+                        sizeof collection, into->realloc_func, into->realloc_context);
+                    into->collections[into->collections_size - 1] = collection;
+
+                    depth += 1;
+                    prev_collection->next_i1 = into->collections_size;
+                    collection_parrent_i1 = into->collections_size;
+                }
+                else
+                {
+                    if(into->collections_size <= 0)
+                    {
+                        if(log) run = log(LPF_ERROR_COLLECTION_END_HAS_LABEL, line_number, line_i, source_i, "@TODO");
+                        goto had_error;
+                    }
+                    Lpf_Collection* prev_collection = &into->collections[into->collections_size - 1];
+                    prev_collection->entries.to = into->entries_size;
+                    collection_parrent_i1 = prev_collection->parent_i1;
+                    depth -= 1;
+                }
+            }
+            break;
+            
+            default: assert(false);
+        }
 
 
+        lpf_push((void**) &into->entries, &into->entries_size, &into->entries_capacity, 
+            sizeof entry, into->realloc_func, into->realloc_context);
+        into->entries[into->entries_size - 1] = entry;
+        continue;
 
-        next_is_escaped = set_next_escaped;
+        had_error:
+        if(run == false)
+            break;
     }
 }

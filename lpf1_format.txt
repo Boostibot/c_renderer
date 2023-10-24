@@ -2,6 +2,7 @@
 # {} collection
 # : line begin
 # , line continue
+# ; line continue
 # \ line end newline escape
 
 # we have collections denoted by {} symbols
