@@ -30,6 +30,19 @@ material {
 }
 
 material {
+
+    #this is a comment for the name
+    name n          :Wood_Base  #short comments
+    #tis is a comment for value
+    value f         :10         #here also!
+    texture TEX { 
+                #this is a comment for the texture
+                #
+
+
+    }
+}
+material {
     name:       Wood
     reosultion: 1024
     albedo:     1 1 1

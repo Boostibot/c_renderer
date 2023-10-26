@@ -3,7 +3,7 @@
 #include "lpf_parser.h"
 #include "string.h"
 
-void* lpf_allocator_realloc(lpf_size new_size, void* old_ptr, lpf_size old_size, void* context)
+void* lpf_allocator_realloc(isize new_size, void* old_ptr, isize old_size, void* context)
 {
     return allocator_reallocate((Allocator*) context, new_size, old_ptr, old_size, DEF_ALIGN, SOURCE_INFO());
 }
@@ -19,7 +19,7 @@ typedef struct Lpf_Test_Entry {
     Lpf_Error error;
 } Lpf_Test_Entry;
 
-void test_single_format_lpf(const char* ctext, const Lpf_Test_Entry* entries, lpf_size entries_size)
+void lpf_test_single_parse(const char* ctext, const Lpf_Test_Entry* entries, isize entries_size)
 {
     Lpf_File file = {0};
     file.realloc_func = lpf_allocator_realloc;
@@ -27,7 +27,7 @@ void test_single_format_lpf(const char* ctext, const Lpf_Test_Entry* entries, lp
     file.log_func = lpf_default_log;
 
     String text = string_make(ctext);
-    isize finished_at = lpf_parse(&file, text.data, (lpf_size) text.size, LPF_FLAG_KEEP_COMMENTS | LPF_FLAG_KEEP_ERRORS);
+    isize finished_at = lpf_parse(&file, text.data, (isize) text.size, LPF_FLAG_KEEP_COMMENTS | LPF_FLAG_KEEP_ERRORS);
 
     TEST(finished_at == text.size);
 
@@ -37,18 +37,13 @@ void test_single_format_lpf(const char* ctext, const Lpf_Test_Entry* entries, lp
         Lpf_Entry entry = file.entries[i];
         Lpf_Test_Entry test_entry = entries[i];
 
-        String label = string_range(text, entry.label_text.from, entry.label_text.to);
-        String type = string_range(text, entry.type_text.from, entry.type_text.to);
-        String value = string_range(text, entry.value_text.from, entry.value_text.to);
-        String comment = string_range(text, entry.comment_text.from, entry.comment_text.to);
-
         TEST(entry.error == test_entry.error);
         if(entry.error == LPF_ERROR_NONE)
         {
-            TEST(string_is_equal(label, string_make(test_entry.label)));
-            TEST(string_is_equal(type, string_make(test_entry.type)));
-            TEST(string_is_equal(value, string_make(test_entry.value)));
-            TEST(string_is_equal(comment, string_make(test_entry.comment)));
+            TEST(string_is_equal(entry.label,   string_make(test_entry.label)));
+            TEST(string_is_equal(entry.type,    string_make(test_entry.type)));
+            TEST(string_is_equal(entry.value,   string_make(test_entry.value)));
+            TEST(string_is_equal(entry.comment, string_make(test_entry.comment)));
         }
     }
 
@@ -56,36 +51,36 @@ void test_single_format_lpf(const char* ctext, const Lpf_Test_Entry* entries, lp
     lpf_file_deinit(&file);
 }
 
-void test_format_lpf()
+void lpf_test_parse()
 {
     {
         const char* text = ":hello world!";
         Lpf_Test_Entry entries[] = {{LPF_KIND_ENTRY, "", "", "hello world!", ""}};
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
     }
     
     {
         const char* text = "label:...value...\n";
         Lpf_Test_Entry entries[] = {{LPF_KIND_ENTRY, "label", "", "...value...", ""}};
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
     }
 
     {
         const char* text = "label type:...value...#comment";
         Lpf_Test_Entry entries[] = {{LPF_KIND_ENTRY, "label", "type", "...value...", "comment"}};
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
     }
     
     {
         const char* text = "label t";
         Lpf_Test_Entry entries[] = {{LPF_KIND_BLANK, "", "", "", "", LPF_ERROR_ENTRY_MISSING_START}};
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
     }
     
     {
         const char* text = ",hello world!";
         Lpf_Test_Entry entries[] = {{LPF_KIND_CONTINUATION, "", "", "", "", LPF_ERROR_ENTRY_CONTINUNATION_WITHOUT_START}};
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
     }
 
     {
@@ -99,7 +94,7 @@ void test_format_lpf()
             {LPF_KIND_CONTINUATION,         "", "", "continuation", ""},
             {LPF_KIND_ESCAPED_CONTINUATION, "", "", "continuation without line break", ""}
         };
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
     }
 
     
@@ -120,6 +115,151 @@ void test_format_lpf()
             {LPF_KIND_BLANK,                "", "", "", ""},
             {LPF_KIND_COLLECTION_END,       "", "", "", " end "}
         };
-        test_single_format_lpf(text, entries, STATIC_ARRAY_SIZE(entries));
+        lpf_test_single_parse(text, entries, STATIC_ARRAY_SIZE(entries));
+    }
+}
+
+
+void lpf_test_single_write(const char* ctext, Lpf_Test_Entry test_entry, Lpf_Write_Options options)
+{
+    String_Builder into = {allocator_get_scratch()};
+
+    Lpf_Entry entry = {0};
+    entry.label = string_make(test_entry.label);
+    entry.type = string_make(test_entry.type);
+    entry.value = string_make(test_entry.value);
+    entry.comment = string_make(test_entry.comment);
+    entry.kind = test_entry.kind;
+
+    lpf_write_line_custom(&into, entry, &options);
+
+    String expected = string_make(ctext);
+    String obtained = string_from_builder(into);
+    TEST_MSG(string_is_equal(expected, obtained), 
+        "expected: '\n"STRING_FMT"\n'\n"
+        "obtained: '\n"STRING_FMT"\n'", 
+        STRING_PRINT(expected),
+        STRING_PRINT(obtained)
+    );
+
+    array_deinit(&into);
+}
+
+
+void test_format_lpf()
+{
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_ENTRY, "label", "type", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        const char* text = "label type:val#comment\n";
+        lpf_test_single_write(text, entry, options);
+    }
+    
+
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_CONTINUATION, "label", "type", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        const char* text = "        ,val #comment\n";
+        options.put_space_before_comment = true;
+        options.line_indentation = 3;
+        options.pad_prefix_to = 5;
+
+        lpf_test_single_write(text, entry, options);
+    }
+    
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_ENTRY, "lab#:", "t pe", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        const char* text = "lab__ t_pe:val#comment\n";
+        lpf_test_single_write(text, entry, options);
+    }
+
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_ENTRY, "label", "type", "val1\nval2\nval3", "comment"};
+        Lpf_Write_Options options = {0};
+        const char* text = 
+            "label type:val1\n"
+            ",val2\n"
+            ",val3#comment\n"
+            ;
+        lpf_test_single_write(text, entry, options);
+    }
+
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_ENTRY, "label", "type", "val1\nval2\nval3", "comment#"};
+        Lpf_Write_Options options = {0};
+        options.pad_continuations = true;
+        options.line_indentation = 3;
+        const char* text = 
+            "   label type:val1\n"
+            "             ,val2\n"
+            "             ,val3\n"
+            "             #comment#\n"
+            ;
+        lpf_test_single_write(text, entry, options);
+    }
+
+    
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_ENTRY, "label", "type", "val1long\nval2\nval3long", "comment#"};
+        Lpf_Write_Options options = {0};
+        options.pad_continuations = true;
+        options.line_indentation = 3;
+        options.max_line_size = 4;
+        const char* text = 
+            "   label type:val1\n"
+            "             ;long\n"
+            "             ,val2\n"
+            "             ,val3\n"
+            "             ;long\n"
+            "             #comm\n"
+            "             #ent#\n"
+            ;
+        lpf_test_single_write(text, entry, options);
+    }
+    
+    {
+        const char* text = 
+            "label type:val\n"
+            "          #comment\n";
+        Lpf_Test_Entry entry = {LPF_KIND_ENTRY, "label", "type", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        options.max_line_size = 7;
+        options.pad_continuations = true;
+        lpf_test_single_write(text, entry, options);
+    }
+    
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_COMMENT, "label", "type", "val", "comment##"};
+        Lpf_Write_Options options = {0};
+        const char* text = "#comment##\n";
+        lpf_test_single_write(text, entry, options);
+    }
+    
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_COLLECTION_START, "label", "type", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        const char* text = "label type{#comment\n";
+        lpf_test_single_write(text, entry, options);
+    }
+    
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_COLLECTION_START, "label", "type", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        options.put_space_before_comment = true;
+        options.put_space_before_marker = true;
+        options.put_space_before_value = true;
+        const char* text = "label type { #comment\n";
+        lpf_test_single_write(text, entry, options);
+    }
+    
+    {
+        Lpf_Test_Entry entry = {LPF_KIND_COLLECTION_END, "label", "type", "val", "comment"};
+        Lpf_Write_Options options = {0};
+        options.put_space_before_comment = true;
+        options.put_space_before_marker = true;
+        options.put_space_before_value = true;
+        const char* text = "} #comment\n";
+        lpf_test_single_write(text, entry, options);
     }
 }
