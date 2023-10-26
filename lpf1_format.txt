@@ -1,15 +1,17 @@
 # #  comment
 # {} collection
-# : line begin
-# , line continue
-# ; line continue
-# \ line end newline escape
+# : entry begin
+# , entry continue with newline
+# ; entry continue with escaped newline 
 
 # we have collections denoted by {} symbols
 # each collection is ordered. 
 # some entries may have names
 # some entries may have type
 
+# how do we do types without names?
+
+    
 material {
     #THIS IS NICE!
     name n:       Wood_Base
@@ -23,7 +25,7 @@ material {
 
     shader_data SHADER_DATA {
         :IOjzUyMpOQioxUzqPHg#
-        :PxiopUUyozhYTYqnz#
+        ;PxiopUUyozhYTYqnz#
     }
 }
 

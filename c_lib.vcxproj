@@ -243,6 +243,7 @@
     <ClInclude Include="logger_file.h" />
     <ClInclude Include="logger_memory.h" />
     <ClInclude Include="callstack.h" />
+    <ClInclude Include="lpf_parser.h" />
     <ClInclude Include="perf.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />
@@ -282,6 +283,7 @@
     <ClInclude Include="_test_hash_table.h" />
     <ClInclude Include="_test_image.h" />
     <ClInclude Include="_test_log.h" />
+    <ClInclude Include="_test_lpf.h" />
     <ClInclude Include="_test_math.h" />
     <ClInclude Include="_test_random.h" />
     <ClInclude Include="_test_stable_array.h" />

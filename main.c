@@ -958,9 +958,13 @@ void break_debug_allocator()
 
 #include "render_world.h"
 #include "_test_stable_array.h"
+#include "_test_lpf.h"
 
 void run_func(void* context)
 {
+    test_format_lpf();
+    platform_abort();
+
     //test_stable_array();
     //test_hash_index(3.0);
 
