@@ -243,7 +243,6 @@
     <ClInclude Include="logger_file.h" />
     <ClInclude Include="logger_memory.h" />
     <ClInclude Include="callstack.h" />
-    <ClInclude Include="lpf_parser.h" />
     <ClInclude Include="perf.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />

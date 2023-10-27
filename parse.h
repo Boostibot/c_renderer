@@ -49,6 +49,7 @@ typedef struct Line_Iterator {
 
 //use like so for(Line_Iterator it = {0}; line_iterator_get_line(&it, string); ) {...}
 EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string);
+EXPORT bool line_iterator_get_separated_by(Line_Iterator* iterator, String string, char c);
 
 EXPORT String string_trim_prefix_whitespace(String s);
 EXPORT String string_trim_postfix_whitespace(String s);
@@ -350,9 +351,9 @@ EXPORT bool match_decimal_f32(String str, isize* index, f32* out)
     return true;
 }
 
-EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string)
+
+EXPORT bool line_iterator_get_separated_by(Line_Iterator* iterator, String string, char c)
 {
-    
     isize line_from = 0;
     if(iterator->line_to != 0)
         line_from = iterator->line_to + 1;
@@ -360,7 +361,7 @@ EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string)
     if(line_from >= string.size)
         return false;
 
-    isize line_to = string_find_first_char(string, '\n', line_from);
+    isize line_to = string_find_first_char(string, c, line_from);
         
     if(line_to == -1)
         line_to = string.size;
@@ -371,6 +372,11 @@ EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string)
     iterator->line = string_range(string, line_from, line_to);
 
     return true;
+}
+
+EXPORT bool line_iterator_get_line(Line_Iterator* iterator, String string)
+{
+    return line_iterator_get_separated_by(iterator, string, '\n');
 }
 
 EXPORT String string_trim_prefix_whitespace(String s)
