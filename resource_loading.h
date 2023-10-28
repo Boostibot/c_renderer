@@ -205,7 +205,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
                         case INVALID_UV_INDEX: error_string = "invalid uv-coordinate index"; break;
                     }
 
-                    LOG_ERROR("ASSET", "Error processing obj file: %s with index %lld on index number %lld ", error_string, (lld) error_index, (lld) i);
+                    LOG_ERROR("ASSET", "Error processing obj file: %s with index %lli on index number %lli ", error_string, (lli) error_index, (lli) i);
                 }
 
                 u32 final_index = shape_assembly_add_vertex_custom(&shape_assembly->vertices_hash, &shape_assembly->vertices, composed_vertex);

@@ -669,14 +669,14 @@ EXPORT void debug_allocator_print_alive_allocations(const Debug_Allocator alloca
     if(print_max > 0)
         ASSERT(alive.size <= print_max);
 
-    LOG_INFO("MEMORY", "printing ALIVE allocations (%lld) below:\n", (lld)alive.size);
+    LOG_INFO("MEMORY", "printing ALIVE allocations (%lli) below:\n", (lli)alive.size);
     log_group_push();
 
     for(isize i = 0; i < alive.size; i++)
     {
         Debug_Allocation curr = alive.data[i];
-        LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld" SOURCE_INFO_FMT "\n",
-            (lld) i, (lld) curr.size, curr.ptr, (lld) curr.align, SOURCE_INFO_PRINT(curr.allocation_source));
+        LOG_INFO("MEMORY", "%-3lli - size %-8lli ptr: 0x%p align: %-2lli" SOURCE_INFO_FMT "\n",
+            (lli) i, (lli) curr.size, curr.ptr, (lli) curr.align, SOURCE_INFO_PRINT(curr.allocation_source));
      
         if(allocator.captured_callstack_size > 0)
         {
@@ -698,7 +698,7 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
     if(print_max > 0)
         ASSERT(dead.size <= print_max);
 
-    LOG_INFO("MEMORY", "printing DEAD allocations (%lld) below:\n", (lld)dead.size);
+    LOG_INFO("MEMORY", "printing DEAD allocations (%lli) below:\n", (lli)dead.size);
     
     for(isize i = 0; i < dead.size; i++)
     {
@@ -711,27 +711,27 @@ EXPORT void debug_allocator_print_dead_allocations(const Debug_Allocator allocat
 
         if(files_match)
         {
-            LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld (%s : %3lld -> %3lld)\n",
-                (lld) i, (lld) curr.size, curr.ptr, curr.align,
-                to_source.file, (lld) from_source.line, (lld) to_source.line);
+            LOG_INFO("MEMORY", "%-3lli - size %-8lli ptr: 0x%p align: %-2lli (%s : %3lli -> %3lli)\n",
+                (lli) i, (lli) curr.size, curr.ptr, curr.align,
+                to_source.file, (lli) from_source.line, (lli) to_source.line);
         }
         else
         {
-            LOG_INFO("MEMORY", "%-3lld - size %-8lld ptr: 0x%p align: %-2lld\n",
-                "[%-3lld] " SOURCE_INFO_FMT " -> " SOURCE_INFO_FMT"\n",
-                (lld) i, (lld) curr.size, curr.ptr, curr.align,
+            LOG_INFO("MEMORY", "%-3lli - size %-8lli ptr: 0x%p align: %-2lli\n",
+                "[%-3lli] " SOURCE_INFO_FMT " -> " SOURCE_INFO_FMT"\n",
+                (lli) i, (lli) curr.size, curr.ptr, curr.align,
                 i, SOURCE_INFO_PRINT(from_source), SOURCE_INFO_PRINT(to_source));
         }
         
         if(allocator.captured_callstack_size > 0)
         {
             log_group_push();
-                LOG_TRACE("MEMORY", "allocation callstack (%lld):", (lld) curr.allocation_trace.size);
+                LOG_TRACE("MEMORY", "allocation callstack (%lli):", (lli) curr.allocation_trace.size);
                 log_group_push();
                 log_captured_callstack("MEMORY", LOG_TYPE_TRACE, curr.allocation_trace.data, curr.allocation_trace.size);
                 log_group_pop();
 
-                LOG_TRACE("MEMORY", "deallocation callstack (%lld):", (lld) curr.deallocation_trace.size);
+                LOG_TRACE("MEMORY", "deallocation callstack (%lli):", (lli) curr.deallocation_trace.size);
                 log_group_push();
                 log_captured_callstack("MEMORY", LOG_TYPE_TRACE, curr.deallocation_trace.data, curr.deallocation_trace.size);
                 log_group_pop();
@@ -771,12 +771,12 @@ void print_pre(Debug_Allocation_Pre_Block pre, const char* c)
         LOG_TRACE("DEBUG", "user_ptr:           %p", pre.user_ptr);
         LOG_TRACE("DEBUG", "call_stack:         %p", pre.call_stack);
         LOG_TRACE("DEBUG", "dead_zone:          %p", pre.dead_zone);
-        LOG_TRACE("DEBUG", "dead_zone_size:     %lld", (lld) pre.dead_zone_size);
-        LOG_TRACE("DEBUG", "call_stack_size:    %lld", (lld) pre.call_stack_size);
+        LOG_TRACE("DEBUG", "dead_zone_size:     %lli", (lli) pre.dead_zone_size);
+        LOG_TRACE("DEBUG", "call_stack_size:    %lli", (lli) pre.call_stack_size);
         log_group_push();
-        LOG_TRACE("DEBUG", "header.size:                %lld", (lld) pre.header->size);
-        LOG_TRACE("DEBUG", "header.align:               %lld", (lld) pre.header->align);
-        LOG_TRACE("DEBUG", "header.block_start_offset:  %lld", (lld) pre.header->block_start_offset);
+        LOG_TRACE("DEBUG", "header.size:                %lli", (lli) pre.header->size);
+        LOG_TRACE("DEBUG", "header.align:               %lli", (lli) pre.header->align);
+        LOG_TRACE("DEBUG", "header.block_start_offset:  %lli", (lli) pre.header->block_start_offset);
         LOG_TRACE("DEBUG", "header.allocation_time_s:   %lf", pre.header->allocation_time_s);
         log_group_pop();
 
@@ -931,8 +931,8 @@ EXPORT void* debug_allocator_allocate(Allocator* self_, isize new_size, void* ol
     
     if(self->do_printing)
     {
-        LOG_INFO("MEMORY", "size %6lld -> %-6lld ptr: 0x%p -> 0x%p align: %lld " SOURCE_INFO_FMT "\n",
-            (lld) old_size, (lld) new_size, old_ptr, new_ptr, (lld) align, SOURCE_INFO_PRINT(called_from));
+        LOG_INFO("MEMORY", "size %6lli -> %-6lli ptr: 0x%p -> 0x%p align: %lli " SOURCE_INFO_FMT "\n",
+            (lli) old_size, (lli) new_size, old_ptr, new_ptr, (lli) align, SOURCE_INFO_PRINT(called_from));
     }
 
     if(old_ptr == NULL)

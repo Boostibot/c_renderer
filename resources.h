@@ -191,7 +191,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         } \
         EXPORT Type_Name* type_name##_get_sure(Id id) { \
             Type_Name* gotten = type_name##_get(id); \
-            TEST_MSG(gotten != NULL, "Didnt find the resource with id %lld", (lld) id); \
+            TEST_MSG(gotten != NULL, "Didnt find the resource with id %lli", (lli) id); \
             return gotten; \
         } \
         EXPORT Id type_name##_find_by_name(Hash_String name, isize* prev) { \

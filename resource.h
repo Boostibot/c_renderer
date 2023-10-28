@@ -264,11 +264,11 @@ void _resource_log_wrong_id(Resource_Ptr out)
     if(out.ptr != NULL)
     {
         if(out.ptr)
-            LOG_ERROR("RESOURCE", "Wrong id %lld used. \n"
+            LOG_ERROR("RESOURCE", "Wrong id %lli used. \n"
                     "curr name: " STRING_FMT " path:" STRING_FMT "\n",
-                    (lld) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
+                    (lli) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
         else
-            LOG_ERROR("RESOURCE", "Wrong id %lld used", (lld) out.id);
+            LOG_ERROR("RESOURCE", "Wrong id %lli used", (lli) out.id);
 
         log_group_push();
             log_callstack("RESOURCE", LOG_TYPE_ERROR, -1, 1);
@@ -287,10 +287,10 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     Resource_Ptr out = resource_get(manager, params.id);
     if(out.id != NULL)
     {
-        LOG_ERROR("RESOURCE", "Duplicate id %lld added. \n"
+        LOG_ERROR("RESOURCE", "Duplicate id %lli added. \n"
             "Old name: " STRING_FMT " path:" STRING_FMT "\n"
             "New name: " STRING_FMT " path:" STRING_FMT "\n", 
-            (lld) params.id, 
+            (lli) params.id, 
             STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path), 
             STRING_PRINT(params.name), STRING_PRINT(params.path));
         
@@ -345,7 +345,7 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
 EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
 {
     if(removed_data)
-        ASSERT_MSG(removed_data_size == manager->type_size, "Incorrect size %lld submitted. Expected %lld", removed_data_size, manager->type_size);
+        ASSERT_MSG(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", removed_data_size, manager->type_size);
 
     //@TODO: This adding and especially removing from hashes is kinda a big deal. Can we make it more compact? 
     //       Can we have like a bloom filter or something? -> NO THAT ONLY MAKES THINGS WORSE!

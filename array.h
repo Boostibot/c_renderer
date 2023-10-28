@@ -280,10 +280,13 @@ EXPORT void _array_set_capacity(void* array, isize item_size, isize capacity, So
 
     isize old_byte_size = item_size * base->capacity;
     isize new_byte_size = item_size * capacity;
-    if(base->allocator == NULL)
-        base->allocator = allocator_get_default();
-        
     Allocator* alloc = _set_allocator_bits(base->allocator, false);
+    if(alloc == NULL)
+    {
+        base->allocator = allocator_get_default();
+        alloc = base->allocator;
+    }
+        
     if(_array_is_backed(array, item_size))
     {
         isize copy_size = old_byte_size;

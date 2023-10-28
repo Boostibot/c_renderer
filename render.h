@@ -1239,7 +1239,7 @@ Render_Map render_map_from_map(Map map, Render* render)
 
         if(HANDLE_IS_NULL(handle))
         {
-            LOG_INFO("RENDER", "Created map "STRING_FMT" (%lld channels)", STRING_PRINT(path), image_builder_channel_count(*image));
+            LOG_INFO("RENDER", "Created map "STRING_FMT" (%lli channels)", STRING_PRINT(path), image_builder_channel_count(*image));
             Render_Image render_image = {0};
             render_image_init(&render_image, image_from_builder(*image), STRING("@TEMP"), 0);
             builder_assign(&render_image.path, path);
@@ -1400,7 +1400,7 @@ void render_object_init_from_object(Render_Object* render_object, Render* render
             render_object->mesh = render_mesh_add(render, &out_mesh);
         }
 
-        LOG_INFO("RENDER", "Creating render object from obect at "STRING_FMT". (%lld groups)", STRING_PRINT(path), (lld) object->groups.size);
+        LOG_INFO("RENDER", "Creating render object from obect at "STRING_FMT". (%lli groups)", STRING_PRINT(path), (lli) object->groups.size);
         log_group_push();
         for(isize i = 0; i < object->groups.size; i++)
         {

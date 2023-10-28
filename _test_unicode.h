@@ -89,7 +89,7 @@ void test_unicode(double max_time)
 #define TEST_MSG(a, msg, ...) (!(a) ? printf((msg), ##__VA_ARGS__), assert((a) && (msg)) : (void) 0)
 #endif // !TEST_MSG
 
-typedef long long lld;
+typedef long long lli;
 
 typedef struct Test_Unicode_Fail_At
 {
@@ -231,8 +231,8 @@ void test_unicode_single_utf8_to_utf16(Test_Unicode_Compare compare, const char*
     TEST_MSG(suceeded == fail_at.should_succeed, "The parsing should fail excatly when we want it to fail!");
     if(!suceeded)
     {
-        TEST_MSG(reading_finished_at == fail_at.read_fail_at, "reading finished: %lld should have %lld", (lld) reading_finished_at, (lld) fail_at.read_fail_at);
-        TEST_MSG(writing_finished_at == fail_at.write_fail_at, "writing finished: %lld should have %lld", (lld) writing_finished_at, (lld) fail_at.write_fail_at);
+        TEST_MSG(reading_finished_at == fail_at.read_fail_at, "reading finished: %lli should have %lli", (lli) reading_finished_at, (lli) fail_at.read_fail_at);
+        TEST_MSG(writing_finished_at == fail_at.write_fail_at, "writing finished: %lli should have %lli", (lli) writing_finished_at, (lli) fail_at.write_fail_at);
     }
 
     TEST_MSG(writing_finished_at >= 0 && reading_finished_at >= 0, "should always be possitive");
@@ -243,8 +243,8 @@ void test_unicode_single_utf8_to_utf16(Test_Unicode_Compare compare, const char*
     
     isize new_reading_finished_at = 0;
     isize new_writing_finished_at = unicode_utf8_to_utf16((utf16_t*) converted, converted_len, (const utf8_t*) input, input_len, &new_reading_finished_at, replacement);
-    TEST_MSG(reading_finished_at == new_reading_finished_at, "the 'fake run' (%lld) reading size should match the 'writing run' reading size (%lld)", (lld) reading_finished_at, (lld) new_reading_finished_at);
-    TEST_MSG(writing_finished_at == new_writing_finished_at, "the 'fake run' (%lld) writing size should match the 'writing run' writing size (%lld)", (lld) writing_finished_at, (lld) new_writing_finished_at);
+    TEST_MSG(reading_finished_at == new_reading_finished_at, "the 'fake run' (%lli) reading size should match the 'writing run' reading size (%lli)", (lli) reading_finished_at, (lli) new_reading_finished_at);
+    TEST_MSG(writing_finished_at == new_writing_finished_at, "the 'fake run' (%lli) writing size should match the 'writing run' writing size (%lli)", (lli) writing_finished_at, (lli) new_writing_finished_at);
 
     bool new_suceeded = new_reading_finished_at == input_len;
     TEST_MSG(new_suceeded == fail_at.should_succeed, "The 'write run' should fail exactly the same way as the 'fake run'!");
@@ -284,8 +284,8 @@ void test_unicode_single_utf16_to_utf8(Test_Unicode_Compare compare, const wchar
     TEST_MSG(suceeded == fail_at.should_succeed, "The parsing should fail excatly when we want it to fail!");
     if(!suceeded)
     {
-        TEST_MSG(reading_finished_at == fail_at.read_fail_at, "reading finished: %lld should have %lld", (lld) reading_finished_at, (lld) fail_at.read_fail_at);
-        TEST_MSG(writing_finished_at == fail_at.write_fail_at, "writing finished: %lld should have %lld", (lld) writing_finished_at, (lld) fail_at.write_fail_at);
+        TEST_MSG(reading_finished_at == fail_at.read_fail_at, "reading finished: %lli should have %lli", (lli) reading_finished_at, (lli) fail_at.read_fail_at);
+        TEST_MSG(writing_finished_at == fail_at.write_fail_at, "writing finished: %lli should have %lli", (lli) writing_finished_at, (lli) fail_at.write_fail_at);
     }
 
     TEST_MSG(writing_finished_at >= 0 && reading_finished_at >= 0, "should always be possitive");
@@ -296,8 +296,8 @@ void test_unicode_single_utf16_to_utf8(Test_Unicode_Compare compare, const wchar
     
     isize new_reading_finished_at = 0;
     isize new_writing_finished_at = unicode_utf16_to_utf8((utf8_t*) converted, converted_len, (const utf16_t*) input, input_len, &new_reading_finished_at, replacement);
-    TEST_MSG(reading_finished_at == new_reading_finished_at, "the 'fake run' (%lld) reading size should match the 'writing run' reading size (%lld)", (lld) reading_finished_at, (lld) new_reading_finished_at);
-    TEST_MSG(writing_finished_at == new_writing_finished_at, "the 'fake run' (%lld) writing size should match the 'writing run' writing size (%lld)", (lld) writing_finished_at, (lld) new_writing_finished_at);
+    TEST_MSG(reading_finished_at == new_reading_finished_at, "the 'fake run' (%lli) reading size should match the 'writing run' reading size (%lli)", (lli) reading_finished_at, (lli) new_reading_finished_at);
+    TEST_MSG(writing_finished_at == new_writing_finished_at, "the 'fake run' (%lli) writing size should match the 'writing run' writing size (%lli)", (lli) writing_finished_at, (lli) new_writing_finished_at);
 
     bool new_suceeded = new_reading_finished_at == input_len;
     TEST_MSG(new_suceeded == fail_at.should_succeed, "The 'write run' should fail exactly the same way as the 'fake run'!");

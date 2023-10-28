@@ -17,15 +17,18 @@ EXPORT void vformat_into_sized(String_Builder* into, String format, va_list args
 EXPORT void format_into(String_Builder* into, const char* format, ...);
 EXPORT void format_into_sized(String_Builder* into, String format, ...);
 
+EXPORT String format_ephemeral(const char* format, ...);
+
 #define CSTRING_ESCAPE(s) (s) == NULL ? "" : (s)
 
 #define STRING_FMT "%.*s"
 #define STRING_PRINT(string) (string).size, (string).data
 
-#define SOURCE_INFO_FMT "( %s : %lld )"
+#define SOURCE_INFO_FMT "( %s : %lli )"
 #define SOURCE_INFO_PRINT(source_info) cstring_escape((source_info).file), (source_info).line
 
-typedef long long int lld;
+typedef long long int lli;
+typedef unsigned long long llu;
 #endif // !LIB_VFORMAT
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_VFORMAT_IMPL)) && !defined(LIB_VFORMAT_HAS_IMPL)
@@ -117,5 +120,33 @@ typedef long long int lld;
         vformat_into_sized(into, format, args);
         va_end(args);
     }
+    
+    EXPORT String format_ephemeral(const char* format, ...)
+    {
+        enum {EPHEMERAL_SLOTS = 4, RESET_EVERY = 32, KEPT_SIZE = 256};
 
+        static String_Builder ephemeral_strings[EPHEMERAL_SLOTS] = {0};
+        static isize slot = 0;
+
+        String_Builder* curr = &ephemeral_strings[slot % EPHEMERAL_SLOTS];
+        
+        //We periodacally shrink the strinks so that we can use this
+        //function regulary for small and big strings without fearing that we will
+        //use too much memory
+        if(slot % RESET_EVERY < EPHEMERAL_SLOTS)
+        {
+            if(curr->capacity > KEPT_SIZE)
+                array_init(ephemeral_strings, allocator_get_static());
+        }
+        
+        va_list args;
+        va_start(args, format);
+        vformat_into(curr, format, args);
+        va_end(args);
+
+        slot += 1;
+
+        String out = string_from_builder(*curr);
+        return out;
+    }
 #endif

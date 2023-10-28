@@ -666,7 +666,7 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
     else
         qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_total_time_func);
     
-    LOG(log_module, log_type, "Logging perf counters (still running %lld):", (lld) profile_get_total_running_counters_count());
+    LOG(log_module, log_type, "Logging perf counters (still running %lli):", (lli) profile_get_total_running_counters_count());
     log_group_push();
     for(isize i = 0; i < counters.size; i++)
     {
@@ -675,27 +675,27 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
 
         if(counter.is_detailed)
         {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %12.8lf runs: %-8lld σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lld %s \"%s\"", 
+		    LOG(log_module, log_type, "total: %15.8lf avg: %12.8lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lli %s \"%s\"", 
 			    stats.total_s*1000,
 			    stats.average_s*1000,
-                (lld) stats.runs,
+                (lli) stats.runs,
                 stats.normalized_standard_deviation_s,
 			    stats.min_s*1000,
 			    stats.max_s*1000,
                 counter.file + common_prefix.size,
-			    (lld) counter.line,
+			    (lli) counter.line,
 			    counter.function,
 			    counter.name
 		    );
         }
         else
         {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %13.6lf runs: %-8lld (ms) from %20s %-4lld %s \"%s\"", 
+		    LOG(log_module, log_type, "total: %15.8lf avg: %13.6lf runs: %-8lli (ms) from %20s %-4lli %s \"%s\"", 
 			    stats.total_s*1000,
 			    stats.average_s*1000,
-                (lld) stats.runs,
+                (lli) stats.runs,
                 counter.file + common_prefix.size,
-			    (lld) counter.line,
+			    (lli) counter.line,
 			    counter.function,
 			    counter.name
 		    );
@@ -703,7 +703,7 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
         if(counter.concurrent_running_counters > 0)
         {
             log_group_push();
-            LOG(log_module, log_type, "COUNTER LEAKS! Still running %lld", (lld) counter.concurrent_running_counters);
+            LOG(log_module, log_type, "COUNTER LEAKS! Still running %lli", (lli) counter.concurrent_running_counters);
             log_group_pop();
         }
     }
@@ -737,7 +737,7 @@ void log_todos(const char* log_module, Log_Type log_type, const char* marker)
         }
     }
     
-    LOG(log_module, log_type, "Logging TODOs (%lld):", (lld) todos.size);
+    LOG(log_module, log_type, "Logging TODOs (%lli):", (lli) todos.size);
     log_group_push();
     for(isize i = 0; i < todos.size; i++)
     {
@@ -748,9 +748,9 @@ void log_todos(const char* log_module, Log_Type log_type, const char* marker)
             path = string_safe_tail(path, common_path_prefix.size);
 
         if(todo.signature.size > 0)
-            LOG(log_module, log_type, "%-20s %4lld %s(%s) %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
+            LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
         else
-            LOG(log_module, log_type, "%-20s %4lld %s %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
+            LOG(log_module, log_type, "%-20s %4lli %s %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
     }
     log_group_pop();
     
@@ -819,9 +819,9 @@ void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_St
 
     LOG(log_module, log_type, "bytes_allocated: %s", format_memory_unit_ephemeral(stats.bytes_allocated));
     LOG(log_module, log_type, "max_bytes_allocated: %s", format_memory_unit_ephemeral(stats.max_bytes_allocated));
-    LOG(log_module, log_type, "allocation_count: %lld", (lld) stats.allocation_count);
-    LOG(log_module, log_type, "deallocation_count: %lld", (lld) stats.deallocation_count);
-    LOG(log_module, log_type, "reallocation_count: %lld", (lld) stats.reallocation_count);
+    LOG(log_module, log_type, "allocation_count: %lli", (lli) stats.allocation_count);
+    LOG(log_module, log_type, "deallocation_count: %lli", (lli) stats.deallocation_count);
+    LOG(log_module, log_type, "reallocation_count: %lli", (lli) stats.reallocation_count);
 
     array_deinit(&formatted);
 }
@@ -870,17 +870,17 @@ EXPORT void allocator_out_of_memory(
 
     LOG_FATAL("MEMORY", 
         "Allocator %s %s ran out of memory\n"
-        "new_size:    %lld B\n"
+        "new_size:    %lli B\n"
         "old_ptr:     %p\n"
-        "old_size:    %lld B\n"
-        "align:       %lld B\n"
+        "old_size:    %lli B\n"
+        "align:       %lli B\n"
         "called from: " SOURCE_INFO_FMT "\n"
         "user message:\n%s",
         stats.type_name, stats.name, 
-        (lld) new_size, 
+        (lli) new_size, 
         old_ptr,
-        (lld) old_size,
-        (lld) align,
+        (lli) old_size,
+        (lli) align,
         SOURCE_INFO_PRINT(called_from),
         cstring_from_builder(user_message)
     );
