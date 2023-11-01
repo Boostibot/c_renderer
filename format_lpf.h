@@ -42,41 +42,48 @@ enum {
     LPF_FLAG_WHITESPACE_SENSITIVE = 1,  //All whitespace matters
     LPF_FLAG_WHITESPACE_PREFIX_AGNOSTIC = 2, //prefix whitespace including newlines does not matter
     LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC = 4, //postfix whitespace including newlines does not matter. Allows space betweem value and comment
-    LPF_FLAG_WHITESPACE_AGNOSTIC = 8 | LPF_FLAG_WHITESPACE_PREFIX_AGNOSTIC | LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC, //whitespace and newlines dont matter (as long as there is at least one)
+    LPF_FLAG_NEWLINE_AGNOSTIC = 8, //newlines are treated as whitespace (dont need escaping)
+    LPF_FLAG_WHITESPACE_AGNOSTIC = LPF_FLAG_NEWLINE_AGNOSTIC | LPF_FLAG_WHITESPACE_PREFIX_AGNOSTIC | LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC, //whitespace and newlines dont matter (as long as there is at least one)
+    LPF_FLAG_DONT_WRITE = 16,
 };
+
+typedef struct Lpf_Dyn_Entry Lpf_Dyn_Entry; 
 
 typedef struct Lpf_Entry {
     Lpf_Kind kind;
     Lpf_Error error;
+    u16 format_flags;
+    isize line_number;
+    isize depth;
 
     String label;
     String type;
     String value;
     String comment;
 
-    isize line_number;
-    isize depth;
+    Lpf_Dyn_Entry* children;
+    isize children_size;
+    isize children_capacity;
 } Lpf_Entry;
 
-typedef struct Lpf_Dyn_Entry Lpf_Dyn_Entry; 
-
-DEFINE_ARRAY_TYPE(Lpf_Dyn_Entry, Lpf_Dyn_Entry_Array);
-DEFINE_ARRAY_TYPE(Lpf_Entry, Lpf_Entry_Array);
-
 typedef struct Lpf_Dyn_Entry {
-    Lpf_Kind kind;
-    Lpf_Error error;
+    i8  kind;
+    i8  error;
+    u16 format_flags;
+    u32 depth;
+    i64 line_number;
 
-    String_Builder label;
-    String_Builder type;
-    String_Builder value;
-    String_Builder comment;
+    Allocator* allocator;
+    char* text_parts;
 
-    Lpf_Dyn_Entry_Array children;
-    Lpf_Dyn_Entry* parent;
-    
-    isize depth;
-    isize line_number;
+    isize comment_size;
+    isize label_size;
+    isize type_size;
+    isize value_size;
+
+    Lpf_Dyn_Entry* children;
+    u32 children_size;
+    u32 children_capacity;
 } Lpf_Dyn_Entry;
 
 typedef struct Lpf_Write_Options {
@@ -91,9 +98,7 @@ typedef struct Lpf_Write_Options {
     bool comment_terminate_value;
 } Lpf_Write_Options;
 
-typedef struct Lpf_Writer {
-    String_Builder* builder;
-    
+typedef struct Lpf_Format_Options {
     isize max_value_size;
     isize max_comment_size;
     i32 pad_prefix_to;
@@ -104,44 +109,82 @@ typedef struct Lpf_Writer {
     i32 line_indentation_offset;
     i32 comment_indentation_offset;
 
-    i32 line_indentation;
-    i32 comment_indentation;
-    
     String hash_escape;
     bool pad_continuations;
+    bool put_space_before_marker;
 
     bool skip_comments;
     bool skip_inline_comments;
     bool skip_blanks;
     bool skip_scopes;
+    bool skip_scope_ends;
     bool skip_types;
-    
-    //@TODO: SKIP ERRORS!
-    //@TODO: log errors
-    
-    i32 written_entries;
+    bool skip_errors;
+    bool log_errors;
+
+    bool correct_errors;
+    bool stop_on_error;
+} Lpf_Format_Options;
+
+typedef struct Lpf_Writer {
+    isize depth;
+    isize line_number;
 } Lpf_Writer;
 
 typedef struct Lpf_Reader {
-    bool skip_comments;
-    bool skip_inline_comments;
-    bool skip_blanks;
-    bool skip_scopes;
-    bool skip_types;
-    bool skip_errors;
+    bool            has_last_entry;
+    Lpf_Entry       last_entry;
+    String_Builder  last_value;
+    String_Builder  last_comment;
 
-    bool log_errors;
-    bool correct_errors;
-    bool stop_on_error;
-
-    String source;
-    isize source_i;
-
-    Lpf_Error last_error;
-    Lpf_Dyn_Entry* parent;
+    ptr_Array scopes;
     isize depth;
     isize line_number;
 } Lpf_Reader;
+
+
+const char*         lpf_error_to_string(Lpf_Error error);
+Lpf_Format_Options  lpf_make_default_format_options();
+
+Lpf_Dyn_Entry       lpf_dyn_entry_from_entry(Lpf_Entry entry, Allocator* alloc);
+Lpf_Entry           lpf_entry_from_dyn_entry(Lpf_Dyn_Entry dyn);
+
+isize               lpf_lowlevel_read_entry(String source, isize from, Lpf_Entry* parsed);
+isize               lpf_lowlevel_write_entry_unescaped(String_Builder* source, Lpf_Entry entry, Lpf_Write_Options options);
+void                lpf_lowlevel_write_entry(String_Builder* source, Lpf_Entry entry, const Lpf_Write_Options* options_or_null);
+
+void                lpf_write_entry(Lpf_Writer* writer, String_Builder* into, Lpf_Entry entry, const Lpf_Format_Options* format);
+Lpf_Error           lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry* into, Lpf_Entry entry, const Lpf_Format_Options* options);
+
+void                lpf_reader_deinit(Lpf_Reader* reader);
+void                lpf_reader_reset(Lpf_Reader* reader);
+void                lpf_reader_commit_entries(Lpf_Reader* reader);
+
+void                lpf_dyn_entry_deinit(Lpf_Dyn_Entry* dyn);
+void                lpf_dyn_entry_push_dyn(Lpf_Dyn_Entry* dyn, Lpf_Dyn_Entry pushed);
+void                lpf_dyn_entry_push(Lpf_Dyn_Entry* dyn, Lpf_Entry pushed);
+void                lpf_dyn_entry_map(Lpf_Dyn_Entry* dyn, void(*preorder_func)(Lpf_Dyn_Entry* dyn, void* context), void(*postorder_func)(Lpf_Dyn_Entry* dyn, void* context), void* context);
+
+Lpf_Error           lpf_read_custom(String source, Lpf_Dyn_Entry* root, const Lpf_Format_Options* options);
+void                lpf_write_custom(String_Builder* source, Lpf_Dyn_Entry root, const Lpf_Format_Options* options);
+
+Lpf_Dyn_Entry*      lpf_find(Lpf_Dyn_Entry in_children_of, Lpf_Kind kind, const char* label, const char* type);
+isize               lpf_find_index(Lpf_Dyn_Entry in_children_of, Lpf_Kind kind, String label, String type, isize from);
+
+
+Lpf_Format_Options lpf_make_default_format_options()
+{
+    Lpf_Format_Options options = {0};
+    options.max_value_size = 200;
+    options.max_comment_size = 200;
+    options.line_identation_per_level = 4;
+    options.comment_identation_per_level = 2;
+    options.pad_continuations = true;
+    options.put_space_before_marker = true;
+    options.hash_escape = STRING(":hashtag:");
+
+    return options;
+}
 
 const char* lpf_error_to_string(Lpf_Error error)
 {
@@ -181,8 +224,10 @@ isize lpf_parse_inline_comment(String source, isize line_size, String* comment)
     return value_to;
 }
 
-isize lpf_read_lowlevel_entry(String source, Lpf_Entry* parsed)
+isize lpf_lowlevel_read_entry(String source_, isize from, Lpf_Entry* parsed)
 {
+    String source = string_tail(source_, from);
+
     isize source_i = 0;
     Lpf_Entry entry = {LPF_KIND_BLANK};
     struct {
@@ -356,7 +401,7 @@ isize lpf_read_lowlevel_entry(String source, Lpf_Entry* parsed)
     line_end:
 
     *parsed = entry;
-    return line_end;
+    return from + line_end;
 }
 
 void builder_pad_to(String_Builder* builder, isize to_size, char with)
@@ -366,9 +411,6 @@ void builder_pad_to(String_Builder* builder, isize to_size, char with)
 
     isize size_before = array_resize(builder, to_size);
     memset(builder->data + size_before, with, builder->size - size_before);
-
-    //for(isize i = size_before; i < builder->size; i++)
-        //builder->data[i] = with;
 }
 
 bool lpf_is_prefix_allowed_char(char c)
@@ -382,23 +424,31 @@ bool lpf_is_prefix_allowed_char(char c)
     return true;
 }
 
-isize lpf_write_entry_unescaped(String_Builder* builder, Lpf_Entry entry, Lpf_Write_Options options)
+isize lpf_lowlevel_write_entry_unescaped(String_Builder* builder, Lpf_Entry entry, Lpf_Write_Options options)
 {
     array_grow(builder, builder->size + 30 + entry.value.size + entry.comment.size + entry.type.size + entry.label.size);
 
-    #ifdef DO_ASSERTS
+    #ifdef DO_ASSERTS_SLOW
         for(isize i = 0; i < entry.label.size; i++)
-            ASSERT_MSG(lpf_is_prefix_allowed_char(entry.label.data[i]), 
+            ASSERT_SLOW_MSG(lpf_is_prefix_allowed_char(entry.label.data[i]), 
                 "label must contain only valid data! Label: " STRING_FMT, STRING_PRINT(entry.label));
 
         for(isize i = 0; i < entry.type.size; i++)
-            ASSERT_MSG(lpf_is_prefix_allowed_char(entry.type.data[i]),
+            ASSERT_SLOW_MSG(lpf_is_prefix_allowed_char(entry.type.data[i]),
                 "type must contain only valid data! Label: " STRING_FMT, STRING_PRINT(entry.type));
 
-        ASSERT_MSG(string_find_first_char(entry.value, '\n', 0) == -1, "value must not contain newlines. Value: \""STRING_FMT"\"", STRING_PRINT(entry.value));
-        ASSERT_MSG(string_find_first_char(entry.comment, '\n', 0) == -1, "comment must not contain newlines. Value: \""STRING_FMT"\"", STRING_PRINT(entry.comment));
+        isize newline_pos = string_find_first_char(entry.value, '\n', 0);
+        isize tag_pos = string_find_first_char(entry.value, '#', 0);
+        isize comment_newline_pos = string_find_first_char(entry.comment, '\n', 0);
+        isize comment_tag_pos = string_find_first_char(entry.comment, '#', 0);
+
+        ASSERT_SLOW_MSG(newline_pos == -1, "value must not contain newlines. Value: \""STRING_FMT"\"", STRING_PRINT(entry.value));
+        ASSERT_SLOW_MSG(comment_newline_pos == -1, "comment must not contain newlines. Value: \""STRING_FMT"\"", STRING_PRINT(entry.comment));
+        if(tag_pos != -1)
+            ASSERT_SLOW_MSG(options.comment_terminate_value, "If the value contains # it must be comment terminated!");
+
         if(entry.kind != LPF_KIND_COMMENT)
-            ASSERT_MSG(string_find_first_char(entry.comment, '\n', 0) == -1, "comment must not contain #. Value: \""STRING_FMT"\"", STRING_PRINT(entry.comment));
+            ASSERT_SLOW_MSG(comment_tag_pos == -1, "comment must not contain #. Value: \""STRING_FMT"\"", STRING_PRINT(entry.comment));
     #endif
 
     char marker_char = '?';
@@ -466,7 +516,6 @@ isize lpf_write_entry_unescaped(String_Builder* builder, Lpf_Entry entry, Lpf_Wr
     return prefix_size;
 }
 
-
 String lpf_escape_label_or_type(String_Builder* into, String label_or_line)
 {
     for(isize i = 0; i < label_or_line.size; i++)
@@ -493,7 +542,7 @@ String lpf_trim_escape(String value, char c1, char c2)
     return escaped;
 }
 
-isize _lpf_write_lowlevel_entry(String_Builder* builder, Lpf_Entry entry, const Lpf_Write_Options* options_or_null)
+isize _lpf_lowlevel_write_entry(String_Builder* builder, Lpf_Entry entry, const Lpf_Write_Options* options_or_null)
 {
     Lpf_Write_Options options = {0};
     Lpf_Entry escaped = {entry.kind};
@@ -585,7 +634,7 @@ isize _lpf_write_lowlevel_entry(String_Builder* builder, Lpf_Entry entry, const 
     if(escaped.type.size > 0 && escaped.label.size == 0)
         escaped.label = STRING("_");
     
-    isize prefix_size = lpf_write_entry_unescaped(builder, escaped, options);
+    isize prefix_size = lpf_lowlevel_write_entry_unescaped(builder, escaped, options);
     
     array_deinit(&escaped_label_builder);
     array_deinit(&escaped_type_builder);
@@ -593,9 +642,9 @@ isize _lpf_write_lowlevel_entry(String_Builder* builder, Lpf_Entry entry, const 
     return prefix_size;
 }
 
-void lpf_write_lowlevel_entry(String_Builder* builder, Lpf_Entry entry, const Lpf_Write_Options* options_or_null)
+void lpf_lowlevel_write_entry(String_Builder* builder, Lpf_Entry entry, const Lpf_Write_Options* options_or_null)
 {
-    _lpf_write_lowlevel_entry(builder, entry, options_or_null);
+    _lpf_lowlevel_write_entry(builder, entry, options_or_null);
 }
 
 typedef struct Lpf_Segment {
@@ -637,22 +686,7 @@ bool lpf_split_into_segments(Lpf_Segment_Array* segemnts, String value, isize ma
     return had_too_log;
 }
 
-Lpf_Writer lpf_writer_make(String_Builder* builder)
-{
-    Lpf_Writer writer = {0};
-    writer.builder = builder;
-    writer.line_identation_per_level = 4;
-    writer.comment_identation_per_level = 2;
-    writer.comment_indentation_offset = 0;
-    writer.pad_continuations = true;
-    writer.max_value_size = INT64_MAX;
-    writer.max_comment_size = INT64_MAX;
-    writer.hash_escape = STRING(":hashtag:");
-
-    return writer;
-}
-
-void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
+void lpf_write_entry(Lpf_Writer* writer, String_Builder* builder, Lpf_Entry entry, const Lpf_Format_Options* format)
 {
     Lpf_Kind kind = entry.kind;
     String label = entry.label;
@@ -660,28 +694,32 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
     String value = entry.value;
     String comment = entry.comment;
     
-    if(writer->skip_blanks && kind == LPF_KIND_BLANK)
+    if(format->skip_errors && entry.error != LPF_ERROR_NONE)
         return;
-    if(writer->skip_scopes && (kind == LPF_KIND_SCOPE_START || kind == LPF_KIND_SCOPE_END))
+    if(format->skip_blanks && kind == LPF_KIND_BLANK)
         return;
-    if(writer->skip_comments && kind == LPF_KIND_COMMENT)
+    if(format->skip_scopes && (kind == LPF_KIND_SCOPE_START || kind == LPF_KIND_SCOPE_END))
+        return;
+    if(format->skip_comments && kind == LPF_KIND_COMMENT)
+        return;
+    if(entry.format_flags & LPF_FLAG_DONT_WRITE)
         return;
 
     if(kind == LPF_KIND_BLANK)
     {
-        if(writer->skip_blanks == false)
+        if(format->skip_blanks == false)
         {
             Lpf_Write_Options options = {0};
-            lpf_write_entry_unescaped(writer->builder, entry, options);
+            lpf_lowlevel_write_entry_unescaped(builder, entry, options);
         }
 
         return;
     }
 
-    if(writer->skip_types)
+    if(format->skip_types)
         type = STRING("");
 
-    if(writer->skip_inline_comments && kind != LPF_KIND_COMMENT)
+    if(format->skip_inline_comments && kind != LPF_KIND_COMMENT)
         comment = STRING("");
 
     enum {LOCAL_BUFF = 256, SEGMENTS = 8};
@@ -696,17 +734,16 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
     array_init_backed(&comment_segments, scratch, SEGMENTS);
     
     Lpf_Write_Options options = {0};
-    options.comment_indentation = writer->comment_identation_per_level*writer->comment_indentation + writer->comment_indentation_offset;
-    options.line_indentation = writer->line_identation_per_level*writer->line_indentation + writer->line_indentation_offset;
-    options.pad_prefix_to = writer->pad_prefix_to;
-    options.put_space_before_marker = true;
-    options.put_space_before_comment = !!(flags & LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC);
-    options.comment_terminate_value = !!(flags & LPF_FLAG_WHITESPACE_SENSITIVE);
+    options.line_indentation = format->line_identation_per_level*writer->depth + format->line_indentation_offset;
+    options.pad_prefix_to = format->pad_prefix_to;
+    options.put_space_before_marker = format->put_space_before_marker;
+    options.put_space_before_comment = !!(entry.format_flags & LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC);
+    options.comment_terminate_value = !!(entry.format_flags & LPF_FLAG_WHITESPACE_SENSITIVE);
     
-    if(flags & LPF_FLAG_WHITESPACE_PREFIX_AGNOSTIC)
+    if(entry.format_flags & LPF_FLAG_WHITESPACE_PREFIX_AGNOSTIC)
         value = string_trim_prefix_whitespace(value); 
                     
-    if(flags & LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC)
+    if(entry.format_flags & LPF_FLAG_WHITESPACE_POSTFIX_AGNOSTIC)
         value = string_trim_postfix_whitespace(value);
 
     //Escape the inline comment:
@@ -734,7 +771,7 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
                     next_i = line.size;
                 
                 if(i != 0)
-                    builder_append(&escaped_inline_comment, writer->hash_escape);
+                    builder_append(&escaped_inline_comment, format->hash_escape);
 
                 String current_range = string_range(line, i, next_i);
                 builder_append(&escaped_inline_comment, current_range);
@@ -753,9 +790,12 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
     {
         if(entry.kind == LPF_KIND_SCOPE_END)
         {
-            options.line_indentation -= writer->line_identation_per_level;
-            writer->line_indentation -= 1;
+            options.line_indentation -= format->line_identation_per_level;
+            writer->depth = MAX(writer->depth - 1, 0);
         }
+        
+        if(entry.kind == LPF_KIND_SCOPE_START)
+            writer->depth += 1;
 
         Lpf_Entry continuation = {kind};
         continuation.type = type;
@@ -763,10 +803,7 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
         continuation.comment = comment;
 
         options.put_space_before_comment = true;
-        lpf_write_lowlevel_entry(writer->builder, continuation, &options);
-        
-        if(entry.kind == LPF_KIND_SCOPE_START)
-            writer->line_indentation += 1;
+        lpf_lowlevel_write_entry(builder, continuation, &options);
     }
 
     //Writes comment:
@@ -781,13 +818,13 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
     else if(entry.kind == LPF_KIND_COMMENT)
     {
         //Split comment into segments (by lines and so that its shorter then max_value_size)
-        lpf_split_into_segments(&comment_segments, comment, writer->max_comment_size);
+        lpf_split_into_segments(&comment_segments, comment, format->max_comment_size);
         for(isize i = 0; i < comment_segments.size; i++)
         {
             Lpf_Segment seg = comment_segments.data[i];
             Lpf_Entry continuation = {LPF_KIND_COMMENT};
             continuation.comment = seg.string;
-            lpf_write_lowlevel_entry(writer->builder, continuation, &options);
+            lpf_lowlevel_write_entry(builder, continuation, &options);
         }
     }
     
@@ -813,10 +850,10 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
         //Split value into segments (by lines and so that its shorter then max_value_size)
         bool had_too_long = false;
         if(value.size > 0)
-            had_too_long = lpf_split_into_segments(&value_segments, value, writer->max_value_size);
+            had_too_long = lpf_split_into_segments(&value_segments, value, format->max_value_size);
             
         if(value_segments.size > 1)
-            if((flags & LPF_FLAG_WHITESPACE_AGNOSTIC) == 0)
+            if((entry.format_flags & LPF_FLAG_WHITESPACE_AGNOSTIC) == 0)
                 options.comment_terminate_value = true;
 
         if(had_too_long)
@@ -843,8 +880,8 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
                 continuation.comment = comment;
             }
         
-            isize padded_prefix = _lpf_write_lowlevel_entry(writer->builder, continuation, &options);
-            if(writer->pad_continuations)
+            isize padded_prefix = _lpf_lowlevel_write_entry(builder, continuation, &options);
+            if(format->pad_continuations)
                 options.pad_prefix_to = padded_prefix;
         }
     }
@@ -854,302 +891,503 @@ void lpf_write_entry_custom(Lpf_Writer* writer, Lpf_Entry entry, i64 flags)
     array_deinit(&comment_segments);
 }
 
-
-
-
-Lpf_Reader lpf_reader_make(String source)
+void lpf_reader_deinit(Lpf_Reader* reader)
 {
-    Lpf_Reader reader = {0};
-    reader.source = source;
-    reader.skip_errors = true;
-    reader.skip_blanks = true;
-    reader.log_errors = true;
-    reader.correct_errors = true;
-
-    return reader;
+    lpf_reader_commit_entries(reader);
+    array_deinit(&reader->scopes);
+    array_deinit(&reader->last_value);
+    array_deinit(&reader->last_comment);
+    memset(reader, 0, sizeof *reader);
 }
 
-//void scope_read_write_texture(Scope* scope, const char* label ,Texture* tex, Serialize_Read_Write rw)
-//{
-//  Scope* sub_scope = NULL
-//  scope_read_write_scope(scope, label, "TEX", &sub_scope, rw);
-//  {
-//      scope_read_write_vec4(sub_scope,    "offset",   &tex->offset, vec4(0,0,0,0), rw);
-//      scope_read_write_string(sub_scope,  "path",     &tex->path, STRING(""), rw);
-//      scope_read_write_name(sub_scope,    "name",     &tex->path, STRING(""), rw);
-//      bool has_id = scope_read_write_id(sub_scope,      "id",       &tex->offset, id_generate(), rw);
-// 
-//      if(has_id == false)
-//      {
-//          LOG_ERROR("", "texture does not have ID!");
-//      }
-//  }
-//}
-
-void lpf_dyn_entry_from_entry(Lpf_Dyn_Entry* dyn, const Lpf_Entry* entry);
-
-void lpf_entry_from_dyn_entry(Lpf_Entry* entry, const Lpf_Dyn_Entry* dyn)
+void lpf_reader_reset(Lpf_Reader* reader)
 {
-    entry->label = string_from_builder(dyn->label);
-    entry->type = string_from_builder(dyn->type);
-    entry->value = string_from_builder(dyn->value);
-    entry->comment = string_from_builder(dyn->comment);
+    lpf_reader_commit_entries(reader);
+    array_clear(&reader->scopes);
+    array_clear(&reader->last_value);
+    array_clear(&reader->last_comment);
+}
+
+void _lpf_dyn_entry_deinit_self_only(Lpf_Dyn_Entry* dyn, void* context)
+{
+    (void) context;
+    if(dyn->text_parts != NULL)
+    {
+        isize combined_size = dyn->label_size + dyn->type_size + dyn->comment_size + dyn->value_size;
+        isize allocated_size = combined_size + 4;
+
+        allocator_deallocate(dyn->allocator, dyn->text_parts, allocated_size, DEF_ALIGN, SOURCE_INFO());
+        dyn->text_parts = NULL;
+    }
     
-    entry->kind = dyn->kind;
-    entry->error = dyn->error;
-    entry->line_number = dyn->line_number;
-    entry->depth = dyn->depth;
+    if(dyn->children != NULL)
+    {
+        allocator_deallocate(dyn->allocator, dyn->children, dyn->children_capacity*sizeof(Lpf_Dyn_Entry), DEF_ALIGN, SOURCE_INFO());
+    }
 }
 
-void lpf_reader_push_child(Lpf_Reader* reader, Lpf_Dyn_Entry_Array* into, Lpf_Entry entry)
+void lpf_dyn_entry_map(Lpf_Dyn_Entry* dyn, void(*preorder_func)(Lpf_Dyn_Entry* dyn, void* context), void(*postorder_func)(Lpf_Dyn_Entry* dyn, void* context), void* context)
 {
-    if(entry.kind != LPF_KIND_COMMENT && reader->skip_inline_comments)
-        entry.comment = STRING("");
+    if(dyn->children_size > 0)
+    {
+        typedef struct Iterator {
+            Lpf_Dyn_Entry* scope;
+            isize i;
+        } Iterator;
 
-    if(reader->skip_types)
-        entry.type = STRING("");
+        DEFINE_ARRAY_TYPE(Iterator, Iterator_Array);
         
-    Allocator* alloc = allocator_get_default();
-    String_Builder null_builder = {alloc};
+        Iterator_Array iterators = {0};
+        array_init_backed(&iterators, allocator_get_scratch(), 32);
+        
+        Iterator top_level_it = {dyn, 0};
+        array_push(&iterators, top_level_it);
 
-    String label = entry.label;
-    String type = entry.type;
-    String value = entry.value;
-    String comment = entry.comment;
+        while(iterators.size > 0)
+        {
+            Iterator* it = array_last(iterators);
+            bool going_deeper = false;
 
+            for(; it->i < it->scope->children_size; it->i++)
+            {
+                Lpf_Dyn_Entry* child = &it->scope->children[it->i];
+                if(preorder_func)
+                    preorder_func(child, context);
+
+                if(child->children != NULL)
+                {
+                    Iterator child_level_it = {child, 0};
+                    array_push(&iterators, child_level_it);
+                    going_deeper = true;
+                }
+                else
+                {
+                    if(postorder_func)
+                        postorder_func(child, context);
+                }
+            }
+
+            if(going_deeper == false)
+            {
+                if(postorder_func)
+                    postorder_func(it->scope, context);
+
+                array_pop(&iterators);
+            }
+        }
+    }
+    else
+    {
+        if(preorder_func)
+            preorder_func(dyn, context);
+            
+        if(postorder_func)
+            postorder_func(dyn, context);
+    }
+}
+
+void lpf_dyn_entry_deinit(Lpf_Dyn_Entry* dyn)
+{
+    if(dyn->children != NULL)
+        lpf_dyn_entry_map(dyn, NULL, _lpf_dyn_entry_deinit_self_only, NULL);
+    else
+        _lpf_dyn_entry_deinit_self_only(dyn, NULL);
+    memset(dyn, 0, sizeof *dyn);
+}
+
+
+isize lpf_find_index(Lpf_Dyn_Entry in_children_of, Lpf_Kind kind, String label, String type, isize from)
+{
+    for(isize i = from; i < in_children_of.children_size; i++)
+    {
+        Lpf_Dyn_Entry* child = &in_children_of.children[i];
+        if(child->kind != kind)
+            continue;
+
+        Lpf_Entry child_e = lpf_entry_from_dyn_entry(*child);
+        if(label.size > 0 && string_is_equal(child_e.label, label) == false)
+            continue;
+            
+        if(type.size > 0 && string_is_equal(child_e.type, type) == false)
+            continue;
+
+        return i;
+    }
+
+    return -1;
+}
+
+
+Lpf_Dyn_Entry* lpf_find(Lpf_Dyn_Entry in_children_of, Lpf_Kind kind, const char* label, const char* type)
+{
+    String label_str = string_make(label);
+    String type_str = string_make(type);
+    isize found = lpf_find_index(in_children_of, kind, label_str, type_str, 0);
+    if(found == -1)
+        return NULL;
+    else
+        return &in_children_of.children[found];
+}
+
+void lpf_dyn_entry_push_dyn(Lpf_Dyn_Entry* dyn, Lpf_Dyn_Entry push)
+{
+    if(dyn->children_size + 1 > dyn->children_capacity)
+    {
+        isize new_capacity = 2;
+        while(new_capacity <= dyn->children_capacity)
+            new_capacity *= 2;
+
+        if(dyn->allocator == NULL)
+            dyn->allocator = allocator_get_default();
+        dyn->children = (Lpf_Dyn_Entry*) allocator_reallocate(dyn->allocator, new_capacity*sizeof(Lpf_Dyn_Entry), dyn->children, dyn->children_capacity*sizeof(Lpf_Dyn_Entry), DEF_ALIGN, SOURCE_INFO());
+        dyn->children_capacity = (u32) new_capacity;
+    }
+        
+    dyn->children[dyn->children_size++] = push;
+}
+
+void lpf_dyn_entry_push(Lpf_Dyn_Entry* dyn, Lpf_Entry push)
+{
+    Lpf_Dyn_Entry pushed = lpf_dyn_entry_from_entry(push, dyn->allocator);
+    lpf_dyn_entry_push_dyn(dyn, pushed);
+}
+
+Lpf_Dyn_Entry lpf_dyn_entry_from_entry(Lpf_Entry entry, Allocator* alloc)
+{
     Lpf_Dyn_Entry dyn = {0};
-    dyn.label      = label.size == 0   ? null_builder : builder_from_string(label, alloc);
-    dyn.type       = type.size == 0    ? null_builder : builder_from_string(type, alloc);
-    dyn.value      = value.size == 0   ? null_builder : builder_from_string(value, alloc);
-    dyn.comment    = comment.size == 0 ? null_builder : builder_from_string(comment, alloc);
-    array_init(&dyn.children, alloc);
+    dyn.allocator = alloc;
+    if(dyn.allocator == NULL)
+        dyn.allocator = allocator_get_default();
 
     dyn.kind = entry.kind;
     dyn.error = entry.error;
     dyn.line_number = entry.line_number;
-    dyn.depth = entry.depth;
-           
-    dyn.parent = reader->parent;
-    array_push(into, dyn);
-}
-    
-Lpf_Error lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry_Array* into, Lpf_Dyn_Entry* first_level_parent)
-{
-    if(reader->last_error != LPF_ERROR_NONE && reader->stop_on_error)
-        return reader->last_error;
+    dyn.depth = (u32) entry.depth;
+    dyn.format_flags = entry.format_flags;
 
-    if(reader->source_i >= reader->source.size)
-        return LPF_ERROR_NONE;
-
-    Lpf_Dyn_Entry_Array* parent_children = into;
-    if(reader->parent != NULL)
-        parent_children = &reader->parent->children;
-    else
-        reader->parent = first_level_parent;
-
-    Lpf_Dyn_Entry* last_entry = NULL;
-    if(parent_children->size > 0)
+    isize combined_size = entry.label.size + entry.type.size + entry.comment.size + entry.value.size;
+    if(combined_size > 0)
     {
-        last_entry = array_last(*parent_children);
+        isize allocated_size = combined_size + 4;
+        u8* data = allocator_allocate(dyn.allocator, allocated_size, DEF_ALIGN, SOURCE_INFO());
+        dyn.text_parts = (char*) data;
 
-        //If had something in between its not a proper last entry
-        if(last_entry->line_number != reader->line_number)
-            last_entry = NULL;
+        isize curr_pos = 0;
+
+        dyn.label_size = entry.label.size;
+        memcpy(data + curr_pos, entry.label.data, entry.label.size);
+        curr_pos += dyn.label_size;
+        data[curr_pos ++] = 0;
+        
+        dyn.type_size = entry.type.size;
+        memcpy(data + curr_pos, entry.type.data, entry.type.size);
+        curr_pos += dyn.type_size;
+        data[curr_pos ++] = 0;
+        
+        dyn.comment_size = entry.comment.size;
+        memcpy(data + curr_pos, entry.comment.data, entry.comment.size);
+        curr_pos += dyn.comment_size;
+        data[curr_pos ++] = 0;
+        
+        dyn.value_size = entry.value.size;
+        memcpy(data + curr_pos, entry.value.data, entry.value.size);
+        curr_pos += dyn.value_size;
+        data[curr_pos ++] = 0;
+
+        ASSERT(curr_pos == allocated_size);
     }
 
-    Lpf_Entry entry = {0}; 
-    isize line_i = reader->source_i;
-    String source_rest = string_tail(reader->source, line_i);
-    isize next_line_i = lpf_read_lowlevel_entry(source_rest, &entry);
-    reader->line_number += 1;
-    reader->source_i += next_line_i;
+    //We dont copy fake children.
+    //dyn.children = entry->children;
+    //dyn.children_size = entry->children_size;
+    //dyn.children_capacity = entry->children_capacity;
 
+    return dyn;
+}
+
+Lpf_Entry lpf_entry_from_dyn_entry(Lpf_Dyn_Entry dyn)
+{
+    Lpf_Entry entry = {0};
+
+    entry.kind = dyn.kind;
+    entry.error = dyn.error;
+    entry.line_number = dyn.line_number;
+    entry.depth = dyn.depth;
+    entry.format_flags = dyn.format_flags;
+
+    entry.children = dyn.children;
+    entry.children_size = dyn.children_size;
+    entry.children_capacity = dyn.children_capacity;
+
+    if(dyn.text_parts != NULL)
+    {
+        isize label_from = 0;
+        isize label_to = dyn.label_size;
+
+        isize type_from = label_to + 1;
+        isize type_to = type_from + dyn.type_size;
+
+        isize comment_from = type_to + 1;
+        isize comment_to = comment_from + dyn.comment_size;
+                
+        isize value_from = comment_to + 1;
+        isize value_to = value_from + dyn.value_size;
+
+        isize comnined_size = dyn.label_size + dyn.type_size + dyn.comment_size + dyn.value_size;
+        String whole_text = {dyn.text_parts, comnined_size + 4};
+
+        entry.label = string_range(whole_text, label_from, label_to);
+        entry.type = string_range(whole_text, type_from, type_to);
+        entry.value = string_range(whole_text, value_from, value_to);
+        entry.comment = string_range(whole_text, comment_from, comment_to);
+    }
+
+    return entry;
+}
+
+void lpf_reader_commit_entries(Lpf_Reader* reader)
+{
+    if(reader->has_last_entry)
+    {
+        Lpf_Entry last = reader->last_entry;
+        last.value = string_from_builder(reader->last_value);
+        last.comment = string_from_builder(reader->last_comment);
+
+        Lpf_Dyn_Entry* parent = (Lpf_Dyn_Entry*) *array_last(reader->scopes);
+        lpf_dyn_entry_push(parent, last);
+        
+        Lpf_Entry null_entry = {0};
+        reader->last_entry = null_entry;
+        array_clear(&reader->last_comment);
+        array_clear(&reader->last_value);
+    }
+    reader->has_last_entry = false;
+}
+
+void lpf_reader_queue_entry(Lpf_Reader* reader, Lpf_Entry entry, const Lpf_Format_Options* options)
+{
+    lpf_reader_commit_entries(reader);
+
+    if(entry.kind != LPF_KIND_COMMENT && options->skip_inline_comments)
+        entry.comment = STRING("");
+
+    if(options->skip_types)
+        entry.type = STRING("");
+
+    reader->has_last_entry = true;
+    reader->last_entry = entry;
+    builder_append(&reader->last_comment, entry.comment);
+    builder_append(&reader->last_value, entry.value);
+}
+    
+Lpf_Error lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry* into, Lpf_Entry entry, const Lpf_Format_Options* options)
+{
+    if(reader->scopes.size == 0)
+        array_push(&reader->scopes, into);
+
+    Lpf_Kind last_kind = reader->last_entry.kind;
+
+    reader->line_number += 1;
     entry.line_number = reader->line_number;
     entry.depth = reader->depth;
 
     if(entry.error != LPF_ERROR_NONE)
     {
-        if(reader->skip_errors)
+        if(options->skip_errors)
             goto function_end;
     }
-
     switch(entry.kind)
     {
         case LPF_KIND_BLANK: {
-            if(reader->skip_blanks)
-                goto function_end;
-
-            if(last_entry && last_entry->kind == LPF_KIND_BLANK)
-            {
-                //builder_append(&reader->last_entry_data, entry.value);
-            }
+            if(options->skip_blanks)
+                lpf_reader_commit_entries(reader);
             else
             {
-                lpf_reader_push_child(reader, parent_children, entry);
+                if(reader->has_last_entry && last_kind == LPF_KIND_BLANK)
+                {
+                    //** nothing **
+                }
+                else
+                {
+                    lpf_reader_queue_entry(reader, entry, options);
+                }
             }
         } break;
 
         case LPF_KIND_COMMENT: {
-            if(reader->skip_comments)
-                goto function_end;
-
-            if(last_entry && last_entry->kind == LPF_KIND_COMMENT)
-            {
-                builder_append(&last_entry->comment, entry.value);
-            }
+            if(options->skip_comments)
+                lpf_reader_commit_entries(reader);
             else
             {
-                lpf_reader_push_child(reader, parent_children, entry);
+                if(reader->has_last_entry && last_kind == LPF_KIND_COMMENT)
+                {
+                    builder_append(&reader->last_comment, entry.value);
+                    builder_append(&reader->last_comment, STRING("\n"));
+                }
+                else
+                {
+                    lpf_reader_queue_entry(reader, entry, options);
+                }
             }
         } break;
             
         case LPF_KIND_ENTRY: {
-            lpf_reader_push_child(reader, parent_children, entry);
+            lpf_reader_queue_entry(reader, entry, options);
         } break;
 
         case LPF_KIND_CONTINUATION:
         case LPF_KIND_ESCAPED_CONTINUATION: {
-            bool was_last_proper_continaution = last_entry 
-                &&  (last_entry->kind == LPF_KIND_ENTRY 
-                    || last_entry->kind == LPF_KIND_CONTINUATION 
-                    || last_entry->kind == LPF_KIND_ESCAPED_CONTINUATION);
+            bool was_last_proper_continaution = reader->has_last_entry 
+                &&  (last_kind == LPF_KIND_ENTRY 
+                    || last_kind == LPF_KIND_CONTINUATION 
+                    || last_kind == LPF_KIND_ESCAPED_CONTINUATION);
 
             if(was_last_proper_continaution)
             {
                 if(entry.kind == LPF_KIND_CONTINUATION)
-                    builder_append(&last_entry->value, STRING("\n"));
-                builder_append(&last_entry->value, entry.value);
+                    builder_append(&reader->last_value, STRING("\n"));
+                builder_append(&reader->last_value, entry.value);
+
+                if(entry.comment.size > 0)
+                {
+                    builder_append(&reader->last_comment, entry.value);
+                    builder_append(&reader->last_comment, STRING("\n"));
+                }
             }
             else
             {
-                entry.error = LPF_ERROR_ENTRY_CONTINUNATION_WITHOUT_START;
-                if(reader->correct_errors)
+                if(options->correct_errors)
                     entry.kind = LPF_KIND_ENTRY;
-                else if(reader->skip_errors)
+                else if(options->skip_errors)
                     goto function_end;
-
-                lpf_reader_push_child(reader, parent_children, entry);
+                else
+                    entry.error = LPF_ERROR_ENTRY_CONTINUNATION_WITHOUT_START;
+                    
+                lpf_reader_queue_entry(reader, entry, options);
             }
         } break;
 
         case LPF_KIND_SCOPE_START: {
-            if(reader->skip_scopes)
-                goto function_end;
-
-            lpf_reader_push_child(reader, parent_children, entry);
-
-            reader->parent = array_last(*parent_children);
             reader->depth += 1;
-
-            ASSERT(reader->parent->depth == entry.depth);
-            ASSERT(reader->parent->line_number == entry.line_number);
+            
+            lpf_reader_commit_entries(reader);
+            if(options->skip_scopes == false)
+            {
+                lpf_reader_queue_entry(reader, entry, options);
+                lpf_reader_commit_entries(reader);
+            
+                Lpf_Dyn_Entry* parent = (Lpf_Dyn_Entry*) *array_last(reader->scopes); 
+                Lpf_Dyn_Entry* pushed_scope = &parent->children[parent->children_size - 1];
+                array_push(&reader->scopes, pushed_scope);
+                ASSERT(pushed_scope->depth == entry.depth);
+                ASSERT(pushed_scope->line_number == entry.line_number);
+            }
         } break;
 
         case LPF_KIND_SCOPE_END: {
-            if(reader->skip_scopes)
-                goto function_end;
-
-            if(reader->parent == NULL || reader->depth < 0)
+            lpf_reader_commit_entries(reader);
+            if(options->skip_scopes == false)
             {
+                if(options->skip_scope_ends == false)
+                {
+                    lpf_reader_queue_entry(reader, entry, options);
+                    lpf_reader_commit_entries(reader);
+                }
+
+                if(reader->scopes.size >= 1)
+                    array_pop(&reader->scopes);
+            }
+            
+
+            if(reader->depth <= 0)
                 entry.error = LPF_ERROR_SCOPE_TOO_MANY_ENDS;
-
-                reader->parent = first_level_parent;
-                reader->depth = 0;
-            }
-            else
-            {
-                Lpf_Dyn_Entry* grandparent = reader->parent->parent;
-                reader->parent = grandparent;
-                reader->depth -= 1;
-            }
+            reader->depth = MAX(reader->depth - 1, 0);
         } break;
     }
 
     function_end:
-
-    if(entry.error != LPF_ERROR_NONE)
-        reader->last_error = entry.error;
-
-    if(entry.error != LPF_ERROR_NONE && reader->log_errors)
-    {
-        String line = string_range(reader->source, line_i, line_i + next_line_i);
-        LOG_ERROR("LPF", "Error %s reading lpf file on line %lli depth %lli", lpf_error_to_string(entry.error), (lli) entry.line_number, (lli) entry.depth);
-        log_group_push();
-            LOG_ERROR("LPF", STRING_FMT, STRING_PRINT(line));
-        log_group_pop();
-    }
-
     return entry.error;
 }
 
-Lpf_Error lpf_read_custom(Lpf_Reader* reader, Lpf_Dyn_Entry_Array* into, Lpf_Dyn_Entry* first_level_parent)
-{
-    isize last_source_i = -1;
-    while(reader->source_i < reader->source.size && reader->source_i != last_source_i)
-    {
-        lpf_read_entry(reader, into, first_level_parent);
-    }
-
-    return reader->last_error;
-}
-
-Lpf_Error lpf_read_all(Lpf_Dyn_Entry_Array* into, String source)
+Lpf_Error lpf_read_custom(String source, Lpf_Dyn_Entry* into, const Lpf_Format_Options* options)
 {
     Lpf_Reader reader = {0};
-    reader.log_errors = true;
-    reader.source = source;
-    return lpf_read_custom(&reader, into, NULL);
+    isize last_source_i = 0;
+    Lpf_Error last_error = LPF_ERROR_NONE;
+    while(true)
+    {
+        Lpf_Entry entry = {0};
+        isize next_source_i = lpf_lowlevel_read_entry(source, last_source_i, &entry);
+        if(last_source_i == next_source_i)
+            break;
+
+        Lpf_Error error = lpf_read_entry(&reader, into, entry, options);
+        if(error != LPF_ERROR_NONE)
+        {
+            last_error = error;
+            if(options->log_errors)
+            {
+                String line = string_range(source, last_source_i, next_source_i);
+                LOG_ERROR("LPF", "Error %s reading lpf file on line %lli depth %lli", lpf_error_to_string(entry.error), (lli) entry.line_number, (lli) entry.depth);
+                log_group_push();
+                    LOG_ERROR("LPF", STRING_FMT, STRING_PRINT(line));
+                log_group_pop();
+            }
+
+            if(options->stop_on_error)
+                break;
+        }
+
+        last_source_i = next_source_i;
+    }
+
+    lpf_reader_commit_entries(&reader);
+    lpf_reader_deinit(&reader);
+
+    return last_error;
 }
 
-
-Lpf_Error lpf_read_meaningful(Lpf_Dyn_Entry_Array* into, String source)
-{
-    Lpf_Reader reader = lpf_reader_make(source);
-    reader.skip_comments = true;
-    reader.skip_inline_comments = true;
-    return lpf_read_custom(&reader, into, NULL);
-}
-
-Lpf_Error lpf_read(Lpf_Dyn_Entry_Array* into, String source)
-{
-    Lpf_Reader reader = lpf_reader_make(source);
-    return lpf_read_custom(&reader, into, NULL);
-}
-
-void lpf_write_custom(Lpf_Writer* writer, const Lpf_Dyn_Entry_Array* entries)
+void lpf_write_custom(String_Builder* source, Lpf_Dyn_Entry root, const Lpf_Format_Options* options)
 {
     typedef struct Iterator {
-        const Lpf_Dyn_Entry_Array* arr;
+        const Lpf_Dyn_Entry* scope;
         isize i;
     } Iterator;
 
     DEFINE_ARRAY_TYPE(Iterator, Iterator_Array);
 
+    Lpf_Writer writer = {0};
     Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
     
     Iterator_Array iterators = {0};
     array_init_backed(&iterators, NULL, 32);
 
-    Iterator top_level_it = {entries, 0};
+    Iterator top_level_it = {&root, 0};
     array_push(&iterators, top_level_it);
 
     while(iterators.size > 0)
     {
         bool going_deeper = false;
+        bool had_explicit_ending = false;
+
         Iterator* it = array_last(iterators);
-        for(; it->i < it->arr->size; )
+        for(; it->i < it->scope->children_size; )
         {
-            const Lpf_Dyn_Entry* dyn = &it->arr->data[it->i];
-            Lpf_Entry entry = {0};
-            lpf_entry_from_dyn_entry(&entry, dyn);
-            lpf_write_entry_custom(writer, entry, 0);
+            const Lpf_Dyn_Entry* dyn = &it->scope->children[it->i];
+            Lpf_Entry entry = lpf_entry_from_dyn_entry(*dyn);
+            lpf_write_entry(&writer, source, entry, options);
 
             it->i += 1;
             if(entry.kind == LPF_KIND_SCOPE_START)
             {
-                Iterator child_level_it = {&dyn->children, 0};
+                Iterator child_level_it = {dyn, 0};
                 array_push(&iterators, child_level_it);
                 going_deeper = true;
+                break;
+            }
+            if(entry.kind == LPF_KIND_SCOPE_END)
+            {
+                had_explicit_ending = true;
                 break;
             }
         }
@@ -1157,10 +1395,10 @@ void lpf_write_custom(Lpf_Writer* writer, const Lpf_Dyn_Entry_Array* entries)
         if(going_deeper == false)
         {
             array_pop(&iterators);
-            if(iterators.size > 0)
+            if(had_explicit_ending == false && iterators.size > 0)
             {
                 Lpf_Entry entry = {LPF_KIND_SCOPE_END};
-                lpf_write_entry_custom(writer, entry, 0);
+                lpf_write_entry(&writer, source, entry, options);
             }
         }
     }
@@ -1169,17 +1407,45 @@ void lpf_write_custom(Lpf_Writer* writer, const Lpf_Dyn_Entry_Array* entries)
     allocator_set(prev_allocs);
 }
 
-void lpf_write(String_Builder* builder, const Lpf_Dyn_Entry_Array* entries)
+Lpf_Error lpf_read_all(String source, Lpf_Dyn_Entry* root)
 {
-    Lpf_Writer writer = lpf_writer_make(builder);
-    lpf_write_custom(&writer, entries);
+    Lpf_Format_Options options = lpf_make_default_format_options();
+    return lpf_read_custom(source, root, &options);
 }
 
-void lpf_write_meaningful(String_Builder* builder, const Lpf_Dyn_Entry_Array* entries)
+Lpf_Error lpf_read_meaningful(String source, Lpf_Dyn_Entry* root)
 {
-    Lpf_Writer writer = lpf_writer_make(builder);
-    writer.skip_blanks = true;
-    writer.skip_comments = true;
-    writer.skip_inline_comments = true;
-    lpf_write_custom(&writer, entries);
+    Lpf_Format_Options options = lpf_make_default_format_options();
+    options.skip_blanks = true;
+    options.skip_comments = true;
+    options.skip_inline_comments = true;
+    options.skip_errors = true;
+    options.skip_scope_ends = true;
+    options.correct_errors = true;
+    return lpf_read_custom(source, root, &options);
+}
+
+Lpf_Error lpf_read(String source, Lpf_Dyn_Entry* root)
+{
+    Lpf_Format_Options options = lpf_make_default_format_options();
+    options.correct_errors = true;
+    options.skip_blanks = true;
+    options.skip_scope_ends = true;
+    return lpf_read_custom(source, root, &options);
+}
+
+void lpf_write(String_Builder* builder, Lpf_Dyn_Entry root)
+{
+    Lpf_Format_Options options = lpf_make_default_format_options();
+    lpf_write_custom(builder, root, &options);
+}
+
+void lpf_write_meaningful(String_Builder* builder, Lpf_Dyn_Entry root)
+{
+    Lpf_Format_Options options = lpf_make_default_format_options();
+    options.skip_blanks = true;
+    options.skip_comments = true;
+    options.skip_inline_comments = true;
+    options.skip_errors = true;
+    lpf_write_custom(builder, root, &options);
 }

@@ -30,7 +30,7 @@ void lpf_test_lowlevel_read(const char* ctext, Lpf_Test_Entry test_entry)
 {
     String text = string_make(ctext);
     Lpf_Entry entry = {0};
-    isize finished_at = lpf_read_lowlevel_entry(text, &entry);
+    isize finished_at = lpf_lowlevel_read_entry(text, 0, &entry);
     (void) finished_at;
 
     //TEST(finished_at == text.size);
@@ -55,7 +55,7 @@ void lpf_test_lowlevel_write(Lpf_Write_Options options, Lpf_Test_Entry test_entr
     entry.comment = string_make(test_entry.comment);
     entry.kind = test_entry.kind;
 
-    lpf_write_lowlevel_entry(&into, entry, &options);
+    lpf_lowlevel_write_entry(&into, entry, &options);
 
     String expected = string_make(ctext);
     String obtained = string_from_builder(into);
@@ -285,63 +285,61 @@ void lpf_test_write_lowlevel_entry()
 
 void test_format_lpf()
 {
-    //@TODO: make the functions for reading writing all common types
     //@TODO: Rethink the lowlevel interface
-    //@TODO: make truly loseless with trailing inline comments
     //@TODO: simplify writing code
-    //@TODO: rename stuff
     //@TODO: renew the tests
     //@TODO: make a few large functionality tests
-    //@TODO: make error handling consistant
-    //@TODO: remove the pushing to part of readers / writers
-    //@TODO: init deinit + allocator stuff
     //@TODO: put the escaping back into non low level
     //@TODO: measure perf
 
-    Lpf_Dyn_Entry_Array read = {0};
-    Lpf_Dyn_Entry_Array read_all = {0};
-    Lpf_Dyn_Entry_Array read_meaningful = {0};
+    Lpf_Dyn_Entry read = {0};
+    Lpf_Dyn_Entry read_all = {0};
+    Lpf_Dyn_Entry read_meaningful = {0};
 
     String_Builder written = {0};
 
     String text = STRING(
         "#this is a texture!\n"
         "\n"
-        "res i: 256\n"
+        "before i: 256\n"
         "texture TEX { #inline\n"
-        "   \n"
-        "   res i: 256\n"
         "   offset 6f: 0 0 0\n"
         "            , 1 1 1\n"
+        "   \n"
+        "   offset 6f: 0 0 0\n"
+        "   \n"
+        "            , 1 1 1\n"
+        "   inside i: 256\n"
         "   scale: 0 0 0\n"
         "} #end comment \n"
         //",error continuation \n"
         "#hello after"
         );
 
-    Lpf_Error error = lpf_read(&read, text);
-    lpf_write(&written, &read);
+    lpf_read(text, &read);
+    lpf_write(&written, read);
     LOG_INFO("LPF", STRING_FMT, STRING_PRINT(written));
     array_clear(&written);
     
-    Lpf_Error error_all = lpf_read_all(&read_all, text);
-    lpf_write(&written, &read_all);
+    lpf_read_all(text, &read_all);
+    lpf_write(&written, read_all);
     LOG_INFO("LPF", STRING_FMT, STRING_PRINT(written));
     array_clear(&written);
     
-    Lpf_Error error_meaningfull = lpf_read_meaningful(&read_meaningful, text);
-    lpf_write(&written, &read_meaningful);
+    lpf_read_meaningful(text, &read_meaningful);
+    lpf_write(&written, read_meaningful);
     LOG_INFO("LPF", STRING_FMT, STRING_PRINT(written));
     array_clear(&written);
     
-    lpf_write_meaningful(&written, &read_all);
+    lpf_write_meaningful(&written, read_all);
     LOG_INFO("LPF", STRING_FMT, STRING_PRINT(written));
     array_clear(&written);
-
-    ASSERT(error == LPF_ERROR_NONE);
-    ASSERT(error_all == LPF_ERROR_NONE);
-    ASSERT(error_meaningfull == LPF_ERROR_NONE);
 
     lpf_test_write_lowlevel_entry();
     lpf_test_read_lowlevel_entry();
+
+    lpf_dyn_entry_deinit(&read);
+    //lpf_dyn_entry_deinit(&read_all);
+    //lpf_dyn_entry_deinit(&read_meaningful);
+    array_deinit(&written);
 }
