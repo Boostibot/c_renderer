@@ -612,7 +612,7 @@ EXPORT Debug_Allocation_Array debug_allocator_get_alive_allocations(const Debug_
     
     qsort(out.data, out.size, sizeof *out.data, _debug_allocation_alloc_time_compare);
 
-    ASSERT(out.size <= count);
+    //ASSERT(out.size <= count);
     array_resize(&out, count);
 
     return out;

@@ -35,10 +35,11 @@ EXPORT bool match_whitespace_separated(String str, isize* index, isize* from, is
 //starts with _, [a-z], [A-Z] then is followed by any number of [0-9], _, [a-z], [A-Z]
 EXPORT bool match_id(String str, isize* index); 
 
-EXPORT bool match_decimal_u64(String str, isize* index, i64* out); //"00113000" -> 113000
+EXPORT bool match_decimal_u64(String str, isize* index, u64* out); //"00113000" -> 113000
 EXPORT bool match_decimal_i64(String str, isize* index, i64* out); //"-00113000" -> -113000
 EXPORT bool match_decimal_i32(String str, isize* index, i32* out); //"-00113000" -> -113000
 EXPORT bool match_decimal_f32(String str, isize* index, f32* out); //"-0011.0300" -> -11.03000
+EXPORT bool match_decimal_f64(String str, isize* index, f64* out);
 
 typedef struct Line_Iterator {
     String line;
@@ -241,7 +242,7 @@ EXPORT bool match_id(String str, isize* index)
 }
 
 //matches a sequence of digits in decimal: "00113000" -> 113000
-EXPORT bool match_decimal_u64(String str, isize* index, i64* out)
+EXPORT bool match_decimal_u64(String str, isize* index, u64* out)
 {
     u64 parsed = 0;
     isize i = *index;
@@ -254,10 +255,9 @@ EXPORT bool match_decimal_u64(String str, isize* index, i64* out)
         u64 new_parsed = parsed*10 + digit_value;
 
         //Correctly handle overflow. This is correct because unsigned numbers
-        //have defined overflow. We still however limit the number on INT64_MAX
-        //to make our life easier when we eventually use signed.
+        //have defined overflow
         if(new_parsed < parsed)
-            parsed = INT64_MAX;
+            parsed = UINT64_MAX;
         else
             parsed = new_parsed;
 
@@ -266,7 +266,7 @@ EXPORT bool match_decimal_u64(String str, isize* index, i64* out)
     bool matched = i != *index;
     *index = i;
 
-    ASSERT(parsed <= INT64_MAX);
+    ASSERT(parsed <= UINT64_MAX);
     *out = (i64) parsed;
     return matched;
 }
@@ -275,8 +275,9 @@ EXPORT bool match_decimal_u64(String str, isize* index, i64* out)
 EXPORT bool match_decimal_i64(String str, isize* index, i64* out)
 {
     bool has_minus = match_char(str, index, '-');
-    i64 uout = 0;
+    u64 uout = 0;
     bool matched_number = match_decimal_u64(str, index, &uout);
+    uout = MIN(uout, INT64_MAX);
     if(has_minus)
         *out = -uout;
     else
@@ -351,6 +352,31 @@ EXPORT bool match_decimal_f32(String str, isize* index, f32* out)
     return true;
 }
 
+
+EXPORT bool match_decimal_f64(String str, isize* index, f64* out)
+{
+    i64 before_dot = 0;
+    i64 after_dot = 0;
+    
+    bool has_minus = match_char(str, index, '-');
+    bool matched_before_dot = match_decimal_u64(str, index, &before_dot);
+    if(!matched_before_dot)
+        return false;
+
+    match_char(str, index, '.');
+
+    isize decimal_index = *index;
+    match_decimal_u64(str, index, &after_dot);
+
+    isize decimal_size = *index - decimal_index;
+    f64 decimal_pow = _quick_pow10lf(decimal_size);
+    f64 result = (f64) before_dot + (f64) after_dot / decimal_pow;
+    if(has_minus)
+        result = -result;
+
+    *out = result;
+    return true;
+}
 
 EXPORT bool line_iterator_get_separated_by(Line_Iterator* iterator, String string, char c)
 {

@@ -70,43 +70,15 @@ material {
 
 }
 
-
-#didnt produce any too longs => okay
 matrix 16f  :1 0 0 0 
             ,0 1 0 0
             ,0 0 1 0
             ,0 0 0 1
-            
-# "hello\nworld\n this is a string\"
-# ->
-
-what options do we have:
-    1) whitespace sensitive => comment terminate always                          - ALWAYS
-    2) mixed                => comment terminate if newline 
-    4) whitespace agnostic  => dont comment terminate unless split artificially  - NEVER
-    3) postfix whitespace agnostic => trim and allow spaced comments
-
-// WHITESPACE_SENSITIVE
-// WHITESPACE_PREFIX_AGNOSTIC
-// WHITESPACE_POSTFIX_AGNOSTIC
-// NEWLINE_AGNOSTIC
-
-// -> int: whitespace agnostic - NEWLINE_AGNOSTIC 
-// -> string: post/prefix agnostic - WHITESPACE_PREFIX_AGNOSTIC | WHITESPACE_POSTFIX_AGNOSTIC
-// -> raw: whitespace sensitive - NEVER
-
-string s    :hello#
-            :world#
-            :this is a string#
 
 
-matrix 16f  :1 0 0 0 
-            ,0 1 0 0
-            ,0 0 1 0
-            ,0 0 0 1
 
 material {
-    name       :Wood
+    name       :Wood   
     reosultion :1024
     albedo     :1 1 1
     roughness  :0.59
@@ -115,8 +87,8 @@ material {
     emissive   :0
     mra        :0 0 0
 
-    # this is a long comment
-    # with multiple lines
+    #this is a long comment
+    #with multiple lines
     albedo_map TEX { #comment
         path s      :images/wood_albedo.bmp
         tile b      :false

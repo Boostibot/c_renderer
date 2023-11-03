@@ -292,7 +292,7 @@ void test_format_lpf()
     //@TODO: put the escaping back into non low level
     //@TODO: measure perf
 
-    Lpf_Dyn_Entry read = {0};
+    //Lpf_Dyn_Entry read = {0};
     Lpf_Dyn_Entry read_all = {0};
     Lpf_Dyn_Entry read_meaningful = {0};
 
@@ -301,7 +301,8 @@ void test_format_lpf()
     String text = STRING(
         "#this is a texture!\n"
         "\n"
-        "before i: 256\n"
+        "\n"
+        "before i: 256#\n"
         "texture TEX { #inline\n"
         "   offset 6f: 0 0 0\n"
         "            , 1 1 1\n"
@@ -316,10 +317,10 @@ void test_format_lpf()
         "#hello after"
         );
 
-    lpf_read(text, &read);
-    lpf_write(&written, read);
-    LOG_INFO("LPF", STRING_FMT, STRING_PRINT(written));
-    array_clear(&written);
+    //lpf_read(text, &read);
+    //lpf_write(&written, read);
+    //LOG_INFO("LPF", STRING_FMT, STRING_PRINT(written));
+    //array_clear(&written);
     
     lpf_read_all(text, &read_all);
     lpf_write(&written, read_all);
@@ -338,7 +339,7 @@ void test_format_lpf()
     lpf_test_write_lowlevel_entry();
     lpf_test_read_lowlevel_entry();
 
-    lpf_dyn_entry_deinit(&read);
+    //lpf_dyn_entry_deinit(&read);
     //lpf_dyn_entry_deinit(&read_all);
     //lpf_dyn_entry_deinit(&read_meaningful);
     array_deinit(&written);

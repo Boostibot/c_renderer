@@ -116,6 +116,7 @@ typedef struct Lpf_Format_Options {
     bool skip_comments;
     bool skip_inline_comments;
     bool skip_blanks;
+    bool skip_connecting_blanks;
     bool skip_scopes;
     bool skip_scope_ends;
     bool skip_types;
@@ -132,6 +133,7 @@ typedef struct Lpf_Writer {
 } Lpf_Writer;
 
 typedef struct Lpf_Reader {
+    bool            had_continuation;
     bool            has_last_entry;
     Lpf_Entry       last_entry;
     String_Builder  last_value;
@@ -218,7 +220,8 @@ isize lpf_parse_inline_comment(String source, isize line_size, String* comment)
     }
     else
     {
-        *comment = STRING("");
+        String null = {0};
+        *comment = null;
     }
 
     return value_to;
@@ -341,6 +344,9 @@ isize lpf_lowlevel_read_entry(String source_, isize from, Lpf_Entry* parsed)
             isize value_from = source_i;
             isize value_to = lpf_parse_inline_comment(source, line_size, &entry.comment);
             entry.value = string_range(source, value_from, value_to);
+
+            if(entry.comment.data != NULL)
+                entry.format_flags |= LPF_FLAG_WHITESPACE_SENSITIVE;
         }
         break;
 
@@ -1152,16 +1158,25 @@ void lpf_reader_commit_entries(Lpf_Reader* reader)
         Lpf_Entry last = reader->last_entry;
         last.value = string_from_builder(reader->last_value);
         last.comment = string_from_builder(reader->last_comment);
+        
+        //if this is a value entry that had multiple lines but none of them were comment terminated
+        // nor had comments then is (probably) newline agnostic
+        if(reader->had_continuation && last.kind == LPF_KIND_ENTRY)
+        {
+            if((last.format_flags & LPF_FLAG_WHITESPACE_SENSITIVE) == 0)
+                last.format_flags |= LPF_FLAG_NEWLINE_AGNOSTIC;
+        }
 
         Lpf_Dyn_Entry* parent = (Lpf_Dyn_Entry*) *array_last(reader->scopes);
         lpf_dyn_entry_push(parent, last);
-        
+
         Lpf_Entry null_entry = {0};
         reader->last_entry = null_entry;
         array_clear(&reader->last_comment);
         array_clear(&reader->last_value);
     }
     reader->has_last_entry = false;
+    reader->had_continuation = false;
 }
 
 void lpf_reader_queue_entry(Lpf_Reader* reader, Lpf_Entry entry, const Lpf_Format_Options* options)
@@ -1203,7 +1218,7 @@ Lpf_Error lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry* into, Lpf_Entry entr
                 lpf_reader_commit_entries(reader);
             else
             {
-                if(reader->has_last_entry && last_kind == LPF_KIND_BLANK)
+                if(options->skip_connecting_blanks && reader->has_last_entry && last_kind == LPF_KIND_BLANK)
                 {
                     //** nothing **
                 }
@@ -1221,8 +1236,11 @@ Lpf_Error lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry* into, Lpf_Entry entr
             {
                 if(reader->has_last_entry && last_kind == LPF_KIND_COMMENT)
                 {
+                    reader->had_continuation = true;
                     builder_append(&reader->last_comment, entry.value);
                     builder_append(&reader->last_comment, STRING("\n"));
+
+                    reader->last_entry.format_flags |= entry.format_flags;
                 }
                 else
                 {
@@ -1244,6 +1262,7 @@ Lpf_Error lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry* into, Lpf_Entry entr
 
             if(was_last_proper_continaution)
             {
+                reader->had_continuation = true;
                 if(entry.kind == LPF_KIND_CONTINUATION)
                     builder_append(&reader->last_value, STRING("\n"));
                 builder_append(&reader->last_value, entry.value);
@@ -1253,6 +1272,8 @@ Lpf_Error lpf_read_entry(Lpf_Reader* reader, Lpf_Dyn_Entry* into, Lpf_Entry entr
                     builder_append(&reader->last_comment, entry.value);
                     builder_append(&reader->last_comment, STRING("\n"));
                 }
+
+                reader->last_entry.format_flags |= entry.format_flags;
             }
             else
             {
