@@ -5,6 +5,7 @@
 #include "defines.h"
 #include "assert.h"
 #include "perf.h"
+#include "platform.h"
 
 // This file provides a simple and performant API
 // for tracking running time across the whole aplication.
@@ -130,16 +131,17 @@ EXPORT f64 profile_get_counter_average_running_time_s(Global_Perf_Counter counte
 	#define _IF_NOT_PERF_START_DO_PERF_COUNTERS(name) Global_Perf_Counter_Running name = {0}
 	#define _IF_NOT_PERF_START_(name) \
 		ALIGNED(64) static Global_Perf_Counter _##name = {0}; \
-		Global_Perf_Counter_Running name = global_perf_counter_start(&_##name, __LINE__, __FILE__, __FUNCTION__, #name)
+		Global_Perf_Counter_Running name = global_perf_counter_start(&_##name, __LINE__, __FILE__, __FUNCTION__, #name); \
+		platform_memory_fence()
 
 	#define _IF_NOT_PERF_END_DO_PERF_COUNTERS(name) (void) (name)
-	#define _IF_NOT_PERF_END_(name) global_perf_counter_end(&(name))
+	#define _IF_NOT_PERF_END_(name) platform_memory_fence(), global_perf_counter_end(&(name))
 	
 	#define _IF_NOT_PERF_END_DETAILED_DO_PERF_COUNTERS(name) (void) (name)
-	#define _IF_NOT_PERF_END_DETAILED_(name) global_perf_counter_end_detailed(&(name))
+	#define _IF_NOT_PERF_END_DETAILED_(name) platform_memory_fence(), global_perf_counter_end_detailed(&(name))
 
 	#define _IF_NOT_PERF_END_DISCARD_DO_PERF_COUNTERS(name, fake_run) (void) (name), (void) (fake_run)
-	#define _IF_NOT_PERF_END_DISCARD_(name, fake_run) (fake_run) ? global_perf_counter_end_discard(&(name)) : global_perf_counter_end_detailed(&(name))
+	#define _IF_NOT_PERF_END_DISCARD_(name, fake_run) platform_memory_fence(), (fake_run) ? global_perf_counter_end_discard(&(name)) : global_perf_counter_end_detailed(&(name))
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_PROFILE_IMPL)) && !defined(LIB_PROFILE_HAS_IMPL)

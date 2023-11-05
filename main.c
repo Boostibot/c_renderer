@@ -624,7 +624,13 @@ int perf_counter_compare_file_func(const void* a_, const void* b_)
     Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
     Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
     
-    return strcmp(a->file, b->file);
+    int res = strcmp(a->file, b->file);
+    if(res == 0)
+        res = strcmp(a->function, b->function);
+    if(res == 0)
+        res = strcmp(a->name, b->name);
+
+    return res;
 }
 
 //void log_perf_counter(const char* log_module, Log_Type log_type)
@@ -960,6 +966,8 @@ void break_debug_allocator()
 #include "_test_stable_array.h"
 #include "_test_lpf.h"
 
+
+
 void run_func(void* context)
 {
     test_format_lpf();
@@ -967,6 +975,7 @@ void run_func(void* context)
 
     //test_stable_array();
     //test_hash_index(3.0);
+    //test_stable_array();
 
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
@@ -1577,7 +1586,7 @@ void run_func(void* context)
                 &capture_buffers, &shader_brdf_lut, render_quad);
             PERF_COUNTER_END(art_counter_brdf_lut);
             }
-            
+
             log_perf_counters("APP", LOG_TYPE_INFO, true);
 
             LOG_INFO("RENDER", "Render allocation stats:");

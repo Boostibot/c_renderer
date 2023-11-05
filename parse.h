@@ -33,7 +33,8 @@ EXPORT bool match_whitespace(String str, isize* index);
 EXPORT bool match_whitespace_separated(String str, isize* index, isize* from, isize* to); 
 
 //starts with _, [a-z], [A-Z] then is followed by any number of [0-9], _, [a-z], [A-Z]
-EXPORT bool match_id(String str, isize* index); 
+EXPORT bool match_name(String str, isize* index); 
+EXPORT bool match_name_chars(String str, isize* index);
 
 EXPORT bool match_decimal_u64(String str, isize* index, u64* out); //"00113000" -> 113000
 EXPORT bool match_decimal_i64(String str, isize* index, i64* out); //"-00113000" -> -113000
@@ -206,7 +207,7 @@ EXPORT bool match_whitespace_separated(String str, isize* index, isize* from, is
     return matched;
 }
 
-EXPORT bool match_id_chars(String str, isize* index)
+EXPORT bool match_name_chars(String str, isize* index)
 {
     isize i = *index;
     for(; i < str.size; i++)
@@ -221,7 +222,7 @@ EXPORT bool match_id_chars(String str, isize* index)
 }
 
 //starts with _, [a-z], [A-Z] or _ then is followed by any number of [0-9], _, [a-z], [A-Z]
-EXPORT bool match_id(String str, isize* index)
+EXPORT bool match_name(String str, isize* index)
 {
     if(*index < str.size)
     {
@@ -279,9 +280,9 @@ EXPORT bool match_decimal_i64(String str, isize* index, i64* out)
     bool matched_number = match_decimal_u64(str, index, &uout);
     uout = MIN(uout, INT64_MAX);
     if(has_minus)
-        *out = -uout;
+        *out = - (i64) uout;
     else
-        *out = uout;
+        *out = (i64) uout;
 
     return matched_number;
 }
@@ -289,10 +290,10 @@ EXPORT bool match_decimal_i64(String str, isize* index, i64* out)
 EXPORT bool match_decimal_i32(String str, isize* index, i32* out)
 {
     bool has_minus = match_char(str, index, '-');
-    i64 uout = 0;
+    u64 uout = 0;
     bool matched_number = match_decimal_u64(str, index, &uout);
     if(has_minus)
-        *out = (i32) -uout;
+        *out = - (i32) uout;
     else
         *out = (i32) uout;
 
@@ -329,8 +330,8 @@ INTERNAL f64 _quick_pow10lf(isize power)
 
 EXPORT bool match_decimal_f32(String str, isize* index, f32* out)
 {
-    i64 before_dot = 0;
-    i64 after_dot = 0;
+    u64 before_dot = 0;
+    u64 after_dot = 0;
     
     bool has_minus = match_char(str, index, '-');
     bool matched_before_dot = match_decimal_u64(str, index, &before_dot);
@@ -352,11 +353,11 @@ EXPORT bool match_decimal_f32(String str, isize* index, f32* out)
     return true;
 }
 
-
+//@TODO: do we need this?
 EXPORT bool match_decimal_f64(String str, isize* index, f64* out)
 {
-    i64 before_dot = 0;
-    i64 after_dot = 0;
+    u64 before_dot = 0;
+    u64 after_dot = 0;
     
     bool has_minus = match_char(str, index, '-');
     bool matched_before_dot = match_decimal_u64(str, index, &before_dot);

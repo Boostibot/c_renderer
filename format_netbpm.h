@@ -430,7 +430,7 @@ EXPORT Error netbpm_format_pam_read_into(Image_Builder* image, String ppm)
             line_end = ppm.size;
 
         String line = string_range(ppm, file_pos, line_end);
-        i64 read = 0;
+        u64 read = 0;
         isize line_index = 0;
         if(line_index = 0, 
             match_sequence(line, &line_index, STRING("#")))

@@ -90,19 +90,26 @@ extern const uint8_t BASE64_DECODING_TABLE_UNIVERSAL[BASE64_DECODING_TABLE_SIZE]
 
 //Common encodings and decodings
 //Url/filesystem safe encoding. We use this for everything. Formally RFC 4648 / Base64URL
-extern const Base64_Encoding BASE64_ENCODING_URL = {BASE64_ENCODING_TABLE_URL, '=', true};
-extern const Base64_Encoding BASE64_ENCODING_URL_NO_PAD = {BASE64_ENCODING_TABLE_URL, '=', false};
+extern const Base64_Encoding BASE64_ENCODING_URL;
+extern const Base64_Encoding BASE64_ENCODING_URL_NO_PAD;
 
 //common internet encoding
-extern const Base64_Encoding BASE64_ENCODING_UTF8 = {BASE64_ENCODING_TABLE_UTF8, '=', true};
+extern const Base64_Encoding BASE64_ENCODING_UTF8;
 
 //Common decoding that should work for *most* base64 encodings.
-extern const Base64_Decoding BASE64_DECODING_UNIVERSAL = {BASE64_DECODING_TABLE_UNIVERSAL, '=', true, false};
+extern const Base64_Decoding BASE64_DECODING_UNIVERSAL;
 
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_BASE64_IMPL)) && !defined(LIB_BASE64_HAS_IMPL)
 #define LIB_BASE64_HAS_IMPL
+
+
+extern const Base64_Encoding BASE64_ENCODING_URL = {BASE64_ENCODING_TABLE_URL, '=', true};
+extern const Base64_Encoding BASE64_ENCODING_URL_NO_PAD = {BASE64_ENCODING_TABLE_URL, '=', false};
+extern const Base64_Encoding BASE64_ENCODING_UTF8 = {BASE64_ENCODING_TABLE_UTF8, '=', true};
+
+extern const Base64_Decoding BASE64_DECODING_UNIVERSAL = {BASE64_DECODING_TABLE_UNIVERSAL, '=', true, false};
 
 EXPORT int64_t base64_encode_max_output_length(int64_t input_length)
 {
@@ -199,7 +206,7 @@ EXPORT int64_t base64_decode(void* _out, const void* _data, int64_t input_length
             //https://graphics.stanford.edu/~seander/bithacks.html#ValueInWord
             #define haszero(v) (((v) - 0x01010101UL) & ~(v) & 0x80808080UL)
 
-            bool has_error_value = haszero(masked_combined);
+            bool has_error_value = !!haszero(masked_combined);
 
             #undef haszero
 

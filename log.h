@@ -40,6 +40,10 @@ EXPORT Logger* log_system_get_logger();
 //Sets the default used logger. Returns a pointer to the previous logger so it can be restored later.
 EXPORT Logger* log_system_set_logger(Logger* logger);
 
+EXPORT bool log_is_enabled();
+EXPORT void log_disable();
+EXPORT void log_enable();
+
 EXPORT void log_group_push();   //Increases indentation of subsequent log messages
 EXPORT void log_group_pop();    //Decreases indentation of subsequent log messages
 EXPORT isize log_group_depth(); //Returns the current indentation of messages
@@ -83,6 +87,7 @@ EXPORT void log_captured_callstack(const char* log_module, Log_Type log_type, co
 
 static Logger* _global_logger = NULL;
 static isize _global_log_group_depth = 0;
+static bool _global_log_enabled = true;
 
 EXPORT Logger* log_system_get_logger()
 {
@@ -109,9 +114,22 @@ EXPORT isize log_group_depth()
     return _global_log_group_depth;
 }
 
+EXPORT bool log_is_enabled()
+{
+    return _global_log_enabled;
+}
+EXPORT void log_disable()
+{
+    _global_log_enabled = false;
+}
+EXPORT void log_enable()
+{
+    _global_log_enabled = true;
+}
+
 EXPORT void vlog_message(const char* module, Log_Type type, Source_Info source, const char* format, va_list args)
 {
-    if(_global_logger)
+    if(_global_logger && _global_log_enabled)
         _global_logger->log(_global_logger, module, type, _global_log_group_depth, source, format, args);
 }
 

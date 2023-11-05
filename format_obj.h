@@ -699,7 +699,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
             //Smoothing
             case 's': {
                 isize line_index1 = 1;
-                i64 smoothing_index = 0;
+                u64 smoothing_index = 0;
                 bool matched_smoothing_index = true
                     && match_whitespace(line, &line_index1)
                     && match_decimal_u64(line, &line_index1, &smoothing_index);
@@ -1083,7 +1083,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
         //illumination_mode
         else if(i = 0, match_sequence(line, &i, STRING("illum")))
         {
-            i64 val = 0;
+            u64 val = 0;
             if(match_whitespace(line, &i) && match_decimal_u64(line, &i, &val)
                 && FORMAT_MTL_ILLUM_MIN <= val && val <= FORMAT_MTL_ILLUM_MAX)
                     SET_PROP(material, illumination_mode) = (i32) val;
@@ -1186,7 +1186,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     //texture_resolution
                     else if(arg_i = 0, match_sequence(arg, &arg_i, STRING("-texres")))
                     {
-                        i64 res = 0;
+                        u64 res = 0;
                         if(match_whitespace(arg, &arg_i) && match_decimal_u64(arg, &arg_i, &res))
                             SET_PROP_(temp_tex_info,texture_resolution) = (i32) res;
                         else

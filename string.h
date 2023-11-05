@@ -40,10 +40,14 @@ EXPORT bool   string_is_postfixed_with(String string, String postfix);
 EXPORT bool   string_has_substring_at(String larger_string, isize from_index, String smaller_string); //Retursn true if larger_string has smaller_string at index from_index
 EXPORT int    string_compare(String a, String b); //Compares sizes and then lexographically the contents. Shorter strings are placed before longer ones.
 EXPORT isize  string_find_first(String string, String search_for, isize from); 
+
 EXPORT isize  string_find_last_from(String in_str, String search_for, isize from);
 EXPORT isize  string_find_last(String string, String search_for); 
 
 EXPORT isize  string_find_first_char(String string, char search_for, isize from); 
+EXPORT isize  string_find_first_char_vanilla(String string, char search_for, isize from); 
+EXPORT isize  string_find_first_char_far(String string, char search_for, isize from);
+EXPORT isize  string_find_first_char_far_unsafe(String string, char search_for, isize from);
 EXPORT isize  string_find_last_char_from(String in_str, char search_for, isize from);
 EXPORT isize  string_find_last_char(String string, char search_for); 
 
@@ -178,11 +182,148 @@ EXPORT String_Array string_split(String to_split, String split_by);
     EXPORT isize string_find_first_char(String string, char search_for, isize from)
     {
         ASSERT(from >= 0);
+        isize found_unsafe = string_find_first_char_far_unsafe(string, search_for, from);
+        #if 1
+        isize found_vanilal = string_find_first_char_vanilla(string, search_for, from);
+        ASSERT(found_vanilal == found_unsafe);
+        #endif
+
+        return found_unsafe;
+    }
+    
+    EXPORT isize string_find_first_char_far(String string, char search_for, isize from)
+    {
+        bool is_big_endian = false;
+        #ifdef PLATFORM_BIG_ENDIAN
+        is_big_endian = true;
+        #endif
+
+        if(is_big_endian)
+            return string_find_first_char_vanilla(string, search_for, from);
+
+        const char* search_start = string.data + from;
+        const char* string_end = string.data + string.size;
+        const char* start_of_long_search = (const char*) align_forward((void*) search_start, 8);
+        const char* end_of_long_search = (const char*) align_backward((void*) string_end, 8);
+        end_of_long_search = MAX(end_of_long_search, start_of_long_search);
+
+        #define broadcast64(c) (0x0101010101010101ULL * (u64) c)
+        #define haszero64(v) (((v) - 0x0101010101010101ULL) & ~(v) & 0x8080808080808080ULL)
+        
+        u64 search_mask = broadcast64(search_for);
+
+        //@TODO: We could get rid of the unaligned loops because pages are always 8 aligned 
+        //       thus reading them can never cause page fault. This could make this function mutch smaller in 
+        //       assembly
+
+        for(const char* i = search_start; i < start_of_long_search; i++)
+            if(*i == search_for)
+                return (isize) (i - string.data);
+
+        for(const char* i = start_of_long_search; i < end_of_long_search; i += 8)
+        {
+            u64 chunk = *(const u64*) i; 
+            u64 masked = chunk ^ search_mask;
+            if(haszero64(masked))
+            {
+                if(i[0] == search_for) return (isize) (i + 0 - string.data);
+                if(i[1] == search_for) return (isize) (i + 1 - string.data);
+                if(i[2] == search_for) return (isize) (i + 2 - string.data);
+                if(i[3] == search_for) return (isize) (i + 3 - string.data);
+                if(i[4] == search_for) return (isize) (i + 4 - string.data);
+                if(i[5] == search_for) return (isize) (i + 5 - string.data);
+                if(i[6] == search_for) return (isize) (i + 6 - string.data);
+
+                return (isize) (i + 7 - string.data);
+            }
+        }
+
+        for(const char* i = end_of_long_search; i < string_end; i++)
+            if(*i == search_for)
+                return (isize) (i - string.data);
+    
+        return -1;
+    }
+    
+    EXPORT isize string_find_first_char_vanilla(String string, char search_for, isize from)
+    {
+        ASSERT(from >= 0);
         for(isize i = from; i < string.size; i++)
             if(string.data[i] == search_for)
                 return i;
 
         return -1;
+    }
+
+    EXPORT isize string_find_first_char_far_unsafe(String string, char search_for, isize from)
+    {
+        //This is a very fast (not the fastest since it doesnt use SIMD) string find implementation.
+        //The idea is to scan 8 characters simulatneously using clever bit hacks and then localize
+        //the exact place of the match.
+        // 
+        //The chunks need to be 64 aligned so that we can read them as normal u64. We can however
+        //skip the code that would find within the reagion before and after the 64 aligned chunks.
+        //We do this by simply reading OUTSIDE THE BOUNDS OF THE ARRAY. This is okay since we can
+        //never trigger a page fault (pages are 64 aligned) and we shouldnt cause any debugger issues
+        //since we are only reading the adresses.
+
+        bool is_big_endian = false;
+        #ifdef PLATFORM_BIG_ENDIAN
+        is_big_endian = true;
+        #endif
+
+        if(is_big_endian)
+            return string_find_first_char_vanilla(string, search_for, from);
+
+        ASSERT(from >= 0);
+        if(string.size == 0 || from >= string.size)
+            return -1;
+
+        const char* search_start = string.data + from;
+        const char* string_end = string.data + string.size;
+        const char* long_search_start = (const char*) align_backward((void*) search_start, 8);
+        isize overread_before = search_start - long_search_start;
+
+        #define broadcast64(c) (0x0101010101010101ULL * (u64) c)
+        #define haszero64(v) (((v) - 0x0101010101010101ULL) & ~(v) & 0x8080808080808080ULL)
+        
+        const char* i = long_search_start;
+        u64 search_mask = broadcast64(search_for);
+        u64 first_chunk = *(const u64*) i;
+        u64 overread_mask = ~((~(u64) 0) << (overread_before * 8)); //masks off matches before the valid data of the string
+        u64 masked = (first_chunk ^ search_mask) | overread_mask;
+        
+        if(haszero64(masked))
+            goto localize_match;
+
+        for(i += 8; i < string_end; i += 8)
+        {
+            u64 chunk = *(const u64*) i; 
+            masked = chunk ^ search_mask;
+            if(haszero64(masked))
+                goto localize_match;
+        }
+
+        return -1;
+        localize_match: {
+            isize found = 7;
+            
+            if(((masked >> 0*8) & 0xff) == 0) { found = 0; goto function_end; }
+            if(((masked >> 1*8) & 0xff) == 0) { found = 1; goto function_end; }
+            if(((masked >> 2*8) & 0xff) == 0) { found = 2; goto function_end; }
+            if(((masked >> 3*8) & 0xff) == 0) { found = 3; goto function_end; }
+            if(((masked >> 4*8) & 0xff) == 0) { found = 4; goto function_end; }
+            if(((masked >> 5*8) & 0xff) == 0) { found = 5; goto function_end; }
+            if(((masked >> 6*8) & 0xff) == 0) { found = 6; goto function_end; }
+
+            function_end:
+
+            found += i - string.data;
+            if(string.data + found >= string_end)
+                found = -1;
+
+            return found;
+        }
     }
 
     EXPORT isize string_find_last_char_from(String string, char search_for, isize from)
