@@ -1,25 +1,4 @@
-
 //#define RUN_TESTS
-
-#ifdef RUN_TESTS
-
-//Try including multiple times
-#include "unicode.h"
-#include "unicode.h"
-#include "unicode.h"
-
-#include "_test_unicode.h"
-
-#include "unicode.h"
-
-void main()
-{
-
-    test_unicode(3.0);
-}
-
-
-#else
 
 #define LIB_ALL_IMPL
 //#define LIB_MEM_DEBUG
@@ -27,18 +6,21 @@ void main()
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-#include "allocator.h"
-#include "platform.h"
-#include "string.h"
-#include "hash_index.h"
-#include "log.h"
-#include "logger_file.h"
-#include "file.h"
-#include "allocator_debug.h"
-#include "allocator_malloc.h"
-#include "allocator_stack.h"
-#include "random.h"
-#include "math.h"
+#include "lib/allocator.h"
+#include "lib/platform.h"
+#include "lib/string.h"
+#include "lib/hash_index.h"
+#include "lib/log.h"
+#include "lib/logger_file.h"
+#include "lib/file.h"
+#include "lib/allocator_debug.h"
+#include "lib/allocator_malloc.h"
+#include "lib/allocator_stack.h"
+#include "lib/random.h"
+#include "lib/math.h"
+#include "lib/guid.h"
+#include "lib/profile.h"
+#include "lib/stable_array.h"
 
 #include "gl.h"
 #include "gl_shader_util.h"
@@ -49,8 +31,9 @@ void main()
 #include "todo.h"
 #include "resource_loading.h"
 #include "render.h"
+#include "camera.h"
+#include "render_world.h"
 
-//#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
 
 typedef enum Control_Name
@@ -143,29 +126,6 @@ typedef struct Controls
 #undef near
 #undef far
 
-typedef struct Camera
-{
-    f32 fov;
-    f32 aspect_ratio;
-    Vec3 pos;
-    Vec3 looking_at;
-    Vec3 up_dir;
-
-    f32 near;
-    f32 far;
-    
-    //if is set to true looking_at is relative to pos 
-    //effectively making the looking_at become looking_at + pos
-    bool is_position_relative;  
-
-    //specifies if should use ortographic projection.
-    //If is true uses top/bot/left/right. The area of the rectangle must not be 0!
-    bool is_ortographic;        
-    f32 top;
-    f32 bot;
-    f32 left;
-    f32 right;
-} Camera;
 
 typedef struct App_Settings
 {
@@ -544,38 +504,6 @@ void glfw_error_func(int code, const char* description)
     LOG_ERROR("APP", "GLWF error %d with message: %s", code, description);
 }
 
-Mat4 camera_make_projection_matrix(Camera camera)
-{
-    Mat4 projection = {0};
-    if(camera.is_ortographic)
-        projection = mat4_ortographic_projection(camera.bot, camera.top, camera.left, camera.right, camera.near, camera.far);
-    else
-        projection = mat4_perspective_projection(camera.fov, camera.aspect_ratio, camera.near, camera.far);
-    return projection;
-}
-
-Vec3 camera_get_look_dir(Camera camera)
-{
-    Vec3 look_dir = camera.looking_at;
-    if(camera.is_position_relative == false)
-        look_dir = vec3_sub(look_dir, camera.pos);
-    return look_dir;
-}
-
-Vec3 camera_get_looking_at(Camera camera)
-{
-    Vec3 looking_at = camera.looking_at;
-    if(camera.is_position_relative)
-        looking_at = vec3_add(looking_at, camera.pos); 
-    return looking_at;
-}
-
-Mat4 camera_make_view_matrix(Camera camera)
-{
-    Vec3 looking_at = camera_get_looking_at(camera);
-    Mat4 view = mat4_look_at(camera.pos, looking_at, camera.up_dir);
-    return view;
-}
 
 void run_func(void* context);
 void run_test_func(void* context);
@@ -623,7 +551,7 @@ int main()
         glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
     }
  
-    GLFWwindow* window = glfwCreateWindow(1600, 900, "Renderer", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1600, 900, "Render", NULL, NULL);
     TEST_MSG(window != NULL, "Failed to make glfw window");
 
     App_State app = {0};
@@ -660,12 +588,11 @@ int main()
     return 0;    
 }
 
-#include "profile.h"
 
 int perf_counter_compare_total_time_func(const void* a_, const void* b_)
 {
-    Perf_Counter* a = (Perf_Counter*) a_;
-    Perf_Counter* b = (Perf_Counter*) b_;
+    Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
+    Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
     
     if(profile_get_counter_total_running_time_s(*a) > profile_get_counter_total_running_time_s(*b))
         return -1;
@@ -675,20 +602,31 @@ int perf_counter_compare_total_time_func(const void* a_, const void* b_)
 
 int perf_counter_compare_file_func(const void* a_, const void* b_)
 {
-    Perf_Counter* a = (Perf_Counter*) a_;
-    Perf_Counter* b = (Perf_Counter*) b_;
+    Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
+    Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
     
-    return strcmp(a->file, b->file);
+    int res = strcmp(a->file, b->file);
+    if(res == 0)
+        res = strcmp(a->function, b->function);
+    if(res == 0)
+        res = strcmp(a->name, b->name);
+
+    return res;
 }
+
+//void log_perf_counter(const char* log_module, Log_Type log_type)
+//{
+//
+//}
 
 void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_name)
 {
-    DEFINE_ARRAY_TYPE(Perf_Counter, _Perf_Counter_Array);
+    DEFINE_ARRAY_TYPE(Global_Perf_Counter, _Global_Perf_Counter_Array);
 
     String common_prefix = {0};
 
-    _Perf_Counter_Array counters = {0};
-    for(Perf_Counter* counter = profile_get_counters(); counter != NULL; counter = counter->next)
+    _Global_Perf_Counter_Array counters = {0};
+    for(Global_Perf_Counter* counter = profile_get_counters(); counter != NULL; counter = counter->next)
     {
 
         String curent_file = string_make(counter->file);
@@ -711,43 +649,40 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
     }
     
     if(sort_by_name)
-        qsort(counters.data, counters.size, sizeof(Perf_Counter), perf_counter_compare_file_func);
+        qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_file_func);
     else
-        qsort(counters.data, counters.size, sizeof(Perf_Counter), perf_counter_compare_total_time_func);
+        qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_total_time_func);
     
-    LOG(log_module, log_type, "Logging perf counters (still running %lld):", (lld) profile_get_total_running_counters_count());
+    LOG(log_module, log_type, "Logging perf counters (still running %lli):", (lli) profile_get_total_running_counters_count());
     log_group_push();
     for(isize i = 0; i < counters.size; i++)
     {
-        Perf_Counter counter = counters.data[i];
+        Global_Perf_Counter counter = counters.data[i];
+        Perf_Counter_Stats stats = perf_counter_get_stats(counter.counter, 1);
+
         if(counter.is_detailed)
         {
-            if(i == counters.size - 1)
-            {
-                (void) profile_get_counter_normalized_standard_deviation_s(counter);
-            }
-
-		    LOG(log_module, log_type, "total: %15.8lf avg: %15.8lf runs: %-9lld σ/μ %15.8lf [%15.8lf %15.8lf] (ms) from %20s %-4lld %s \"%s\"", 
-			    profile_get_counter_total_running_time_s(counter)*1000,
-			    profile_get_counter_average_running_time_s(counter)*1000,
-                (lld) counter.runs,
-                profile_get_counter_normalized_standard_deviation_s(counter),
-			    profile_get_counter_min_running_time_s(counter)*1000,
-			    profile_get_counter_max_running_time_s(counter)*1000,
+		    LOG(log_module, log_type, "total: %15.8lf avg: %12.8lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lli %s \"%s\"", 
+			    stats.total_s*1000,
+			    stats.average_s*1000,
+                (lli) stats.runs,
+                stats.normalized_standard_deviation_s,
+			    stats.min_s*1000,
+			    stats.max_s*1000,
                 counter.file + common_prefix.size,
-			    (lld) counter.line,
+			    (lli) counter.line,
 			    counter.function,
 			    counter.name
 		    );
         }
         else
         {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %15.8lf runs: %-9lld (ms) from %20s %-4lld %s \"%s\"", 
-			    profile_get_counter_total_running_time_s(counter)*1000,
-			    profile_get_counter_average_running_time_s(counter)*1000,
-                (lld) counter.runs,
+		    LOG(log_module, log_type, "total: %15.8lf avg: %13.6lf runs: %-8lli (ms) from %20s %-4lli %s \"%s\"", 
+			    stats.total_s*1000,
+			    stats.average_s*1000,
+                (lli) stats.runs,
                 counter.file + common_prefix.size,
-			    (lld) counter.line,
+			    (lli) counter.line,
 			    counter.function,
 			    counter.name
 		    );
@@ -755,7 +690,7 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
         if(counter.concurrent_running_counters > 0)
         {
             log_group_push();
-            LOG(log_module, log_type, "COUNTER LEAKS! Still running %lld", (lld) counter.concurrent_running_counters);
+            LOG(log_module, log_type, "COUNTER LEAKS! Still running %lli", (lli) counter.concurrent_running_counters);
             log_group_pop();
         }
     }
@@ -789,7 +724,7 @@ void log_todos(const char* log_module, Log_Type log_type, const char* marker)
         }
     }
     
-    LOG(log_module, log_type, "Logging TODOs (%lld):", (lld) todos.size);
+    LOG(log_module, log_type, "Logging TODOs (%lli):", (lli) todos.size);
     log_group_push();
     for(isize i = 0; i < todos.size; i++)
     {
@@ -800,9 +735,9 @@ void log_todos(const char* log_module, Log_Type log_type, const char* marker)
             path = string_safe_tail(path, common_path_prefix.size);
 
         if(todo.signature.size > 0)
-            LOG(log_module, log_type, "%-20s %4lld %s(%s) %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
+            LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
         else
-            LOG(log_module, log_type, "%-20s %4lld %s %s\n", cstring_escape(path.data), (lld) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
+            LOG(log_module, log_type, "%-20s %4lli %s %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
     }
     log_group_pop();
     
@@ -832,10 +767,10 @@ const char* get_memory_unit(isize bytes, isize *unit_or_null)
         out = "MB";
         unit = MB;
     }
-    if(bytes > KB)
+    else if(bytes > KB)
     {
-        out = "MB";
-        unit = MB;
+        out = "KB";
+        unit = KB;
     }
     else
     {
@@ -850,12 +785,18 @@ const char* get_memory_unit(isize bytes, isize *unit_or_null)
 }
 
 
-void format_memory_unit_ephemeral(String_Builder* formatted, isize bytes)
+const char* format_memory_unit_ephemeral(isize bytes)
 {
     isize unit = 1;
+    static String_Builder formatted = {0};
+    if(formatted.allocator == NULL)
+        array_init(&formatted, allocator_get_static());
+
     const char* unit_text = get_memory_unit(bytes, &unit);
     f64 ratio = (f64) bytes / (f64) unit;
-    format_into(formatted, "%.1lf %s", ratio, unit_text);
+    format_into(&formatted, "%.1lf %s", ratio, unit_text);
+
+    return formatted.data;
 }
 
 void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_Stats stats)
@@ -863,13 +804,11 @@ void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_St
     String_Builder formatted = {0};
     array_init_backed(&formatted, NULL, 512);
 
-    format_memory_unit_ephemeral(&formatted, stats.bytes_allocated);
-    LOG(log_module, log_type, "bytes_allocated: "STRING_FMT, STRING_PRINT(formatted));
-    format_memory_unit_ephemeral(&formatted, stats.max_bytes_allocated);
-    LOG(log_module, log_type, "max_bytes_allocated: "STRING_FMT, STRING_PRINT(formatted));
-    LOG(log_module, log_type, "allocation_count: %lld", (lld) stats.allocation_count);
-    LOG(log_module, log_type, "deallocation_count: %lld", (lld) stats.deallocation_count);
-    LOG(log_module, log_type, "reallocation_count: %lld", (lld) stats.reallocation_count);
+    LOG(log_module, log_type, "bytes_allocated: %s", format_memory_unit_ephemeral(stats.bytes_allocated));
+    LOG(log_module, log_type, "max_bytes_allocated: %s", format_memory_unit_ephemeral(stats.max_bytes_allocated));
+    LOG(log_module, log_type, "allocation_count: %lli", (lli) stats.allocation_count);
+    LOG(log_module, log_type, "deallocation_count: %lli", (lli) stats.deallocation_count);
+    LOG(log_module, log_type, "reallocation_count: %lli", (lli) stats.reallocation_count);
 
     array_deinit(&formatted);
 }
@@ -918,17 +857,17 @@ EXPORT void allocator_out_of_memory(
 
     LOG_FATAL("MEMORY", 
         "Allocator %s %s ran out of memory\n"
-        "new_size:    %lld B\n"
+        "new_size:    %lli B\n"
         "old_ptr:     %p\n"
-        "old_size:    %lld B\n"
-        "align:       %lld B\n"
+        "old_size:    %lli B\n"
+        "align:       %lli B\n"
         "called from: " SOURCE_INFO_FMT "\n"
         "user message:\n%s",
         stats.type_name, stats.name, 
-        (lld) new_size, 
+        (lli) new_size, 
         old_ptr,
-        (lld) old_size,
-        (lld) align,
+        (lli) old_size,
+        (lli) align,
         SOURCE_INFO_PRINT(called_from),
         cstring_from_builder(user_message)
     );
@@ -947,8 +886,67 @@ EXPORT void allocator_out_of_memory(
     platform_abort();
 }
 
+
+
+void break_debug_allocator()
+{
+    //My theory is that when reallocating from high aligned offset to low aligned offset we dont shift over the data
+    //I belive this can be easily solved by alloc & dealloc pair instead of the singular realloc we do currenlty.
+
+    Debug_Allocator debug_alloc = {0};
+    debug_allocator_init(&debug_alloc, allocator_get_default(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+    {
+        Allocator* allocator = allocator_get_default();
+        isize alloc_gran = 41;
+        enum {ITERS = 100, TEST_VAL = 0x66};
+        u8* allocs[ITERS] = {0};
+        isize sizes[ITERS] = {0};
+        isize aligns[ITERS] = {0};
+
+        isize i = 6;
+        //for(isize i = 0; i < ITERS; i++)
+        {
+            sizes[i] = alloc_gran*i;
+            aligns[i] = (isize) 1 << (i % 13); 
+            allocs[i] = (u8*) debug_allocator_allocate(allocator, sizes[i], NULL, 0, aligns[i], SOURCE_INFO());
+
+            memset(allocs[i], TEST_VAL, sizes[i]);
+            for(isize k = 0; k < sizes[i]; k++)
+                TEST(allocs[i][k] == TEST_VAL);
+        }
+        
+        //for(isize i = 0; i < ITERS; i++)
+        {
+            u8* alloc = allocs[i];
+            isize size = sizes[i];
+            isize align = aligns[i];
+
+            allocs[i] = (u8*) debug_allocator_allocate(allocator, size + alloc_gran, alloc, size, align, SOURCE_INFO());
+            sizes[i] = size + alloc_gran;
+            for(isize k = 0; k < size - alloc_gran; k++)
+                TEST(alloc[k] == TEST_VAL);
+        }
+        //for(isize i = 0; i < ITERS; i++)
+        {
+            u8* alloc = allocs[i];
+            isize size = sizes[i];
+            isize align = aligns[i]; 
+            for(isize k = 0; k < size - alloc_gran; k++)
+                TEST(alloc[k] == TEST_VAL);
+
+            allocator_deallocate(allocator, alloc, size, align, SOURCE_INFO());
+        }
+    }
+    debug_allocator_deinit(&debug_alloc);
+}
+
+
+
+
+
 void run_func(void* context)
 {
+
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
     LOG_INFO("APP", "run_func enter");
@@ -994,14 +992,18 @@ void run_func(void* context)
     debug_allocator_init(&renderer_alloc, upstream_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
     Resources resources = {0};
-    Renderer renderer = {0};
+    Render renderer = {0};
+
+    render_world_init(&renderer_alloc.allocator);
 
     resources_init(&resources, &resources_alloc.allocator);
     resources_set(&resources);
 
-    renderer_init(&renderer, &renderer_alloc.allocator);
+    render_init(&renderer, &renderer_alloc.allocator);
     
-    Triangle_Mesh_Handle falcon_handle = {0};
+    Entity falcon = entity_generate(0);
+
+    Id falcon_handle = {0};
     Render_Object render_falcon = {0};
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
@@ -1171,14 +1173,16 @@ void run_func(void* context)
             {
                 triangle_mesh_read_entire(&falcon_handle, STRING("resources/sponza/sponza.obj"));
             
+                
+                Transform transf = {0};
+                transf.translate = vec3(20, 0, 20);
+                transf.scale = vec3_of(0.1f);
+                render_compoment_add(&falcon, falcon_handle, transf, 0);
+
                 //falcon_object = resources_object_get(&resources, falcon_handle);
                 //@TODO: add error returns here!
-                render_object_init_from_object(&render_falcon, &renderer, (Triangle_Mesh_Ref*) &falcon_handle);
+                render_object_init_from_object(&render_falcon, &renderer, falcon_handle);
             }
-
-            //@TODO: make Handle_Table type polymorphic!
-            //       rework platform to include support for allocators
-            //       rework platform to include support for paths
 
             Error error = {0};
 
@@ -1361,7 +1365,7 @@ void run_func(void* context)
             glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            PBR_Light lights[PBR_MAX_LIGHTS] = {0};
+            Sphere_Light lights[PBR_MAX_LIGHTS] = {0};
 
             f32 light_radius = 0.3f;
             if(control_is_down(&app->controls, CONTROL_DEBUG_4))
@@ -1385,7 +1389,7 @@ void run_func(void* context)
 
             //render blinn phong sphere
             {
-                PBR_Light light = lights[0]; 
+                Sphere_Light light = lights[0]; 
                 Blinn_Phong_Params blinn_phong_params = {0};
                 blinn_phong_params.light_ambient_strength = 0.01f;
                 blinn_phong_params.light_specular_strength = 0.4f;
@@ -1461,7 +1465,7 @@ void run_func(void* context)
             //render light
             for(isize i = 0; i < PBR_MAX_LIGHTS; i++)
             {
-                PBR_Light light = lights[i]; 
+                Sphere_Light light = lights[i]; 
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(light.radius)), light.pos);
                 //render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, settings->screen_gamma);
                 render_mesh_draw_using_solid_color(render_uv_sphere, &shader_solid_color, projection, view, model, light.color, 1);
@@ -1552,10 +1556,10 @@ void run_func(void* context)
                 &capture_buffers, &shader_brdf_lut, render_quad);
             PERF_COUNTER_END(art_counter_brdf_lut);
             }
-            
+
             log_perf_counters("APP", LOG_TYPE_INFO, true);
 
-            LOG_INFO("RENDER", "Renderer allocation stats:");
+            LOG_INFO("RENDER", "Render allocation stats:");
             log_group_push();
                 log_allocator_stats("RENDER", LOG_TYPE_INFO, allocator_get_stats(&renderer_alloc.allocator));
             log_group_pop();
@@ -1563,6 +1567,30 @@ void run_func(void* context)
             LOG_INFO("RESOURCES", "Resources allocation stats:");
             log_group_push();
                 log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
+            log_group_pop();
+            
+            LOG_INFO("RESOURCES", "Resources repository memory usage stats:");
+            log_group_push();
+            
+                isize accumulated_total = 0;
+                for(isize i = 0; i < RESOURCE_TYPE_ENUM_COUNT; i++)
+                {
+                    Resource_Manager* manager = resources_get_type(i);
+                    isize type_alloced = stable_array_capacity(&manager->storage)*manager->type_size;
+                    isize hash_alloced = manager->id_hash.entries_count * sizeof(Hash_Ptr_Entry);
+
+                    LOG_INFO("RESOURCES", "%s", manager->type_name);
+                    log_group_push();
+                        LOG_INFO("RESOURCES", "type_alloced: %s", format_memory_unit_ephemeral(type_alloced));
+                        LOG_INFO("RESOURCES", "hashes:       %s", format_memory_unit_ephemeral(hash_alloced));
+                    log_group_pop();
+
+                    accumulated_total += type_alloced + hash_alloced;
+                }
+                
+
+                debug_allocator_print_alive_allocations(resources_alloc, 200);
+                LOG_INFO("RESOURCES", "total overhead:       %s", format_memory_unit_ephemeral(accumulated_total));
             log_group_pop();
 
             glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
@@ -1573,7 +1601,7 @@ void run_func(void* context)
         if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
         {
             fps_display_last_update = end_frame_time;
-            format_into(&fps_display, "Renderer %5d fps", (int) (1.0f/frame_time));
+            format_into(&fps_display, "Render %5d fps", (int) (1.0f/frame_time));
             glfwSetWindowTitle(window, cstring_from_builder(fps_display));
         }
     }
@@ -1608,7 +1636,7 @@ void run_func(void* context)
     
     render_object_deinit(&render_falcon, &renderer);
     resources_deinit(&resources);
-    renderer_deinit(&renderer);
+    render_deinit(&renderer);
 
     render_pbr_material_deinit(&material_metal, &renderer);
 
@@ -1626,7 +1654,13 @@ void run_func(void* context)
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
     
     log_perf_counters("APP", LOG_TYPE_INFO, true);
-    
+    render_world_deinit();
+
+    LOG_INFO("RESOURCES", "Resources allocation stats:");
+    log_group_push();
+        log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
+    log_group_pop();
+
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);
     
@@ -1650,31 +1684,34 @@ void error_func(void* context, Platform_Sandox_Error error_code)
     log_group_pop();
 }
 
-//@TODO: environment mapping for pbr
-//       shadow mapping
-//       resource management using debug_allocator
+#include "lib/_test_unicode.h"
+#include "lib/_test_random.h"
+#include "lib/_test_array.h"
+#include "lib/_test_hash_index.h"
+#include "lib/_test_log.h"
+#include "lib/_test_hash_table.h"
+#include "lib/_test_math.h"
+#include "lib/_test_base64.h"
+#include "lib/_test_hash_index.h"
+#include "lib/_test_stable_array.h"
+#include "lib/_test_lpf.h"
 
-#include "_test_unicode.h"
-#include "_test_random.h"
-#include "_test_array.h"
-#include "_test_hash_index.h"
-#include "_test_log.h"
-#include "_test_hash_table.h"
-#include "_test_math.h"
-#include "_test_base64.h"
 void run_test_func(void* context)
 {
 
     (void) context;
     test_unicode(3.0);
-    //test_base64(3.0);
-    //test_array(3.0);
-    //test_math(3.0);
-    //test_hash_table_stress(3.0);
-    //test_log();
-    //test_hash_index(3.0);
-    //test_random();
+    test_format_lpf();
+    test_stable_array();
+    test_hash_index(3.0);
+    test_stable_array();
+    test_base64(3.0);
+    test_array(3.0);
+    test_math(3.0);
+    test_hash_table_stress(3.0);
+    test_log();
+    test_hash_index(3.0);
+    test_random();
     LOG_INFO("TEST", "All tests passed! uwu");
     return;
 }
-#endif

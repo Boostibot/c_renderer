@@ -3,8 +3,8 @@
 
 #include "shapes.h"
 #include "string.h"
-#include "image.h"
-#include "handle_table.h"
+#include "lib/image.h"
+#include "lib/handle_table.h"
 #include "clock.h"
 
 typedef enum Map_Scale_Filter {

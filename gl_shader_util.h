@@ -1,6 +1,6 @@
 #pragma once
 
-#include "file.h"
+#include "lib/file.h"
 #include "math.h"
 #include "gl.h"
 
@@ -320,14 +320,14 @@ GLint render_shader_get_uniform_location(const Render_Shader* shader, const char
         u64 shader_hash = hash64(shader->shader);
         u64 final_hash = name_hash ^ uniform_hash ^ shader_hash;
 
-        static Hash_Index error_hash_index = {0};
+        static Hash_Index64 error_hash_index = {0};
         if(error_hash_index.allocator == NULL)
         {
-            hash_index_init(&error_hash_index, allocator_get_static());
-            hash_index_reserve(&error_hash_index, 32);
+            hash_index64_init(&error_hash_index, allocator_get_static());
+            hash_index64_reserve(&error_hash_index, 32);
         }
 
-        isize found = hash_index_find_or_insert(&error_hash_index, final_hash, 0);
+        isize found = hash_index64_find_or_insert(&error_hash_index, final_hash, 0);
         u64* error_count = &error_hash_index.entries[found].value;
         if(is_power_of_two_or_zero((*error_count)++))
             LOG_ERROR("RENDER", "failed to find uniform %-25s shader: " STRING_FMT, uniform, STRING_PRINT(shader->name));

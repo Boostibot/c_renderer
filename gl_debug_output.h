@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gl.h"
-#include "log.h"
+#include "lib/log.h"
 
 #define DEBUG_OUTPUT_CHANEL "RENDER"
 

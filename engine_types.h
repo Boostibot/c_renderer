@@ -1,9 +1,9 @@
 #pragma once
 
-#include "math.h"
-#include "array.h"
-#include "hash_index.h"
-#include "hash.h"
+#include "lib/math.h"
+#include "lib/array.h"
+#include "lib/hash_index.h"
+#include "lib/hash.h"
 
 #ifndef VEC_ARRAY_DEFINED
 
