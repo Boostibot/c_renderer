@@ -30,8 +30,8 @@
 //   comment: "make better!"
 //
 
-#include "parse.h"
-#include "file.h"
+#include "lib/parse.h"
+#include "lib/file.h"
 
 typedef struct Todo
 {

@@ -1,11 +1,11 @@
 #pragma once
 #include "resources.h"
 #include "format_obj.h"
-#include "error.h"
-#include "file.h"
-#include "profile.h"
+#include "lib/error.h"
+#include "lib/file.h"
+#include "lib/profile.h"
 #include "image_loader.h"
-#include "allocator_malloc.h"
+#include "lib/allocator_malloc.h"
 
 INTERNAL String _format_obj_mtl_translate_error(u32 code, void* context)
 {

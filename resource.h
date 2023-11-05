@@ -1,12 +1,12 @@
 #pragma once
 
-#include "stable_array.h"
-#include "hash_index.h"
-#include "guid.h"
+#include "lib/stable_array.h"
+#include "lib/hash_index.h"
+#include "lib/guid.h"
 #include "string.h"
-#include "hash_string.h"
-#include "log.h"
-#include "vformat.h"
+#include "lib/hash_string.h"
+#include "lib/log.h"
+#include "lib/vformat.h"
 
 #define RESOURCE_CALLSTACK_SIZE 8
 #define RESOURCE_EPHEMERAL_SIZE 4

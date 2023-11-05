@@ -1,10 +1,10 @@
 #pragma once
 
 
-#include "hash_index.h"
-#include "array.h"
+#include "lib/hash_index.h"
+#include "lib/array.h"
 #include "entity.h"
-#include "stable_array.h"
+#include "lib/stable_array.h"
 #include "resources.h"
 #include "systems.h"
 

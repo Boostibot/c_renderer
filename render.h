@@ -1,6 +1,6 @@
 #pragma once
 
-#include "log.h"
+#include "lib/log.h"
 #include "camera.h"
 #include "gl.h"
 #include "gl_shader_util.h"

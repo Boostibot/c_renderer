@@ -1,6 +1,6 @@
 #pragma once
-#include "math.h"
-#include "defines.h"
+#include "lib/math.h"
+#include "lib/defines.h"
 
 typedef struct Camera
 {

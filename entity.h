@@ -1,12 +1,12 @@
 #ifndef LIB_ENTITY
 #define LIB_ENTITY
 
-#include "defines.h"
-#include "platform.h"
+#include "lib/defines.h"
+#include "lib/platform.h"
 #include "string.h"
-#include "log.h"
+#include "lib/log.h"
 
-#include "guid.h"
+#include "lib/guid.h"
 
 // This is a very very simple entity compoment system.
 // It is focuses on minimalizing the ammount of state in the system. 

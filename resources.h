@@ -3,8 +3,8 @@
 
 #include "resource_descriptions.h"
 #include "resource.h"
-#include "file.h"
-#include "serialize.h"
+#include "lib/file.h"
+#include "lib/serialize.h"
 
 #define RESOURCE_NAME_SIZE 64
 

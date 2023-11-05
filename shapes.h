@@ -1,11 +1,11 @@
 #pragma once
 
 #include "math.h"
-#include "array.h"
-#include "hash_index.h"
-#include "hash.h"
+#include "lib/array.h"
+#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "engine_types.h"
-#include "profile.h"
+#include "lib/profile.h"
 
 typedef struct Shape
 {

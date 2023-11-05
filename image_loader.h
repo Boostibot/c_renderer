@@ -1,11 +1,11 @@
 #ifndef LIB_IMAGE_LOADER
 #define LIB_IMAGE_LOADER
 
-#include "image.h"
-#include "string.h"
-#include "file.h"
+#include "lib/image.h"
+#include "lib/string.h"
+#include "lib/file.h"
 
-#include "allocator_wrapper.h"
+#include "lib/allocator_wrapper.h"
 
 typedef enum Image_File_Format {
     IMAGE_LOAD_FILE_FORMAT_NONE = 0,
@@ -54,11 +54,11 @@ EXPORT Error image_write_to_file(Image image, String path);
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-#include "format_netbpm.h"
+#include "lib/format_netbpm.h"
 #include "extrenal/include/stb/stb_image.h"
 #include "extrenal/include/stb/stb_image_write.h"
 
-#include "log.h"
+#include "lib/log.h"
 
 INTERNAL String _image_loader_translate_error(u32 code, void* context)
 {

@@ -1,25 +1,4 @@
-
 //#define RUN_TESTS
-
-#ifdef RUN_TESTS
-
-//Try including multiple times
-#include "unicode.h"
-#include "unicode.h"
-#include "unicode.h"
-
-#include "_test_unicode.h"
-
-#include "unicode.h"
-
-void main()
-{
-
-    test_unicode(3.0);
-}
-
-
-#else
 
 #define LIB_ALL_IMPL
 //#define LIB_MEM_DEBUG
@@ -27,18 +6,21 @@ void main()
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-#include "allocator.h"
-#include "platform.h"
-#include "string.h"
-#include "hash_index.h"
-#include "log.h"
-#include "logger_file.h"
-#include "file.h"
-#include "allocator_debug.h"
-#include "allocator_malloc.h"
-#include "allocator_stack.h"
-#include "random.h"
-#include "math.h"
+#include "lib/allocator.h"
+#include "lib/platform.h"
+#include "lib/string.h"
+#include "lib/hash_index.h"
+#include "lib/log.h"
+#include "lib/logger_file.h"
+#include "lib/file.h"
+#include "lib/allocator_debug.h"
+#include "lib/allocator_malloc.h"
+#include "lib/allocator_stack.h"
+#include "lib/random.h"
+#include "lib/math.h"
+#include "lib/guid.h"
+#include "lib/profile.h"
+#include "lib/stable_array.h"
 
 #include "gl.h"
 #include "gl_shader_util.h"
@@ -50,8 +32,8 @@ void main()
 #include "resource_loading.h"
 #include "render.h"
 #include "camera.h"
+#include "render_world.h"
 
-//#include "stb/stb_image.h"
 #include "glfw/glfw3.h"
 
 typedef enum Control_Name
@@ -606,7 +588,6 @@ int main()
     return 0;    
 }
 
-#include "profile.h"
 
 int perf_counter_compare_total_time_func(const void* a_, const void* b_)
 {
@@ -905,8 +886,6 @@ EXPORT void allocator_out_of_memory(
     platform_abort();
 }
 
-#include "_test_hash_index.h"
-#include "stable_array.h"
 
 
 void break_debug_allocator()
@@ -962,20 +941,11 @@ void break_debug_allocator()
 }
 
 
-#include "render_world.h"
-#include "_test_stable_array.h"
-#include "_test_lpf.h"
 
 
 
 void run_func(void* context)
 {
-    test_format_lpf();
-    platform_abort();
-
-    //test_stable_array();
-    //test_hash_index(3.0);
-    //test_stable_array();
 
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
@@ -1714,31 +1684,34 @@ void error_func(void* context, Platform_Sandox_Error error_code)
     log_group_pop();
 }
 
-//@TODO: environment mapping for pbr
-//       shadow mapping
-//       resource management using debug_allocator
+#include "lib/_test_unicode.h"
+#include "lib/_test_random.h"
+#include "lib/_test_array.h"
+#include "lib/_test_hash_index.h"
+#include "lib/_test_log.h"
+#include "lib/_test_hash_table.h"
+#include "lib/_test_math.h"
+#include "lib/_test_base64.h"
+#include "lib/_test_hash_index.h"
+#include "lib/_test_stable_array.h"
+#include "lib/_test_lpf.h"
 
-#include "_test_unicode.h"
-#include "_test_random.h"
-#include "_test_array.h"
-#include "_test_hash_index.h"
-#include "_test_log.h"
-#include "_test_hash_table.h"
-#include "_test_math.h"
-#include "_test_base64.h"
 void run_test_func(void* context)
 {
 
     (void) context;
     test_unicode(3.0);
-    //test_base64(3.0);
-    //test_array(3.0);
-    //test_math(3.0);
-    //test_hash_table_stress(3.0);
-    //test_log();
-    //test_hash_index(3.0);
-    //test_random();
+    test_format_lpf();
+    test_stable_array();
+    test_hash_index(3.0);
+    test_stable_array();
+    test_base64(3.0);
+    test_array(3.0);
+    test_math(3.0);
+    test_hash_table_stress(3.0);
+    test_log();
+    test_hash_index(3.0);
+    test_random();
     LOG_INFO("TEST", "All tests passed! uwu");
     return;
 }
-#endif

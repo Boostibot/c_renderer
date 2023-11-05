@@ -13,10 +13,10 @@
 // The parsing itself is really fast. About 8x faster than using scanf however the float parsing is not
 // very accurate at the moment.
 
-#include "math.h"
-#include "array.h"
-#include "string.h"
-#include "parse.h"
+#include "lib/math.h"
+#include "lib/array.h"
+#include "lib/string.h"
+#include "lib/parse.h"
 
 #ifndef VEC_ARRAY_DEFINED
     #define VEC_ARRAY_DEFINED
