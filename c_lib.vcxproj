@@ -247,6 +247,7 @@
     <ClInclude Include="callstack.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
+    <ClInclude Include="control.h" />
     <ClInclude Include="engine_types.h" />
     <ClInclude Include="entity.h" />
     <ClInclude Include="entity_store.h" />
