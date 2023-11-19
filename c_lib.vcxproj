@@ -244,7 +244,6 @@
     <None Include="shaders\uv_debug.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="callstack.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
@@ -306,6 +305,8 @@
     <ClInclude Include="lib\_test_random.h" />
     <ClInclude Include="lib\_test_stable_array.h" />
     <ClInclude Include="lib\_test_unicode.h" />
+    <ClInclude Include="mdump.h" />
+    <ClInclude Include="mdump2.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />
     <ClInclude Include="resource.h" />

@@ -6,6 +6,9 @@
 #define GLAD_GL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
+#include "mdump2.h"
+
+#include "lib/platform.h"
 #include "lib/allocator.h"
 #include "lib/platform.h"
 #include "lib/string.h"
@@ -712,7 +715,7 @@ void break_debug_allocator()
 
 void run_func(void* context)
 {
-
+    test_mdump();
     log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
 
     LOG_INFO("APP", "run_func enter");
@@ -1441,7 +1444,7 @@ void run_func(void* context)
 void error_func(void* context, Platform_Sandox_Error error_code)
 {
     (void) context;
-    const char* msg = platform_sandbox_error_to_cstring(error_code);
+    const char* msg = platform_sandbox_error_to_string(error_code);
     
     LOG_ERROR("APP", "%s exception occured", msg);
     LOG_TRACE("APP", "printing trace:");

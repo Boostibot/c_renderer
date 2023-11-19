@@ -25,7 +25,7 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="lib\platform_windows.c">
-      <Filter>Source Files</Filter>
+      <Filter>lib</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -106,9 +106,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="callstack.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -168,6 +165,63 @@
     </ClInclude>
     <ClInclude Include="todo.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="control.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mdump2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mdump.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_array.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_base64.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_hash_index.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_hash_table.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_image.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_log.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_lpf.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_math.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_random.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_stable_array.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_unicode.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator_debug.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator_failing.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator_malloc.h">
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\allocator_stack.h">
       <Filter>lib</Filter>
@@ -270,57 +324,6 @@
     </ClInclude>
     <ClInclude Include="lib\vformat.h">
       <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_array.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_base64.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_hash_index.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_hash_table.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_image.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_log.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_lpf.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_math.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_random.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_stable_array.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_unicode.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator_debug.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator_failing.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator_malloc.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="control.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
