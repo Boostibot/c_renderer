@@ -325,5 +325,11 @@
     <ClInclude Include="lib\vformat.h">
       <Filter>lib</Filter>
     </ClInclude>
+    <ClInclude Include="mdump3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mdump_types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

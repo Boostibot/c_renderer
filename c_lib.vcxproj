@@ -307,6 +307,8 @@
     <ClInclude Include="lib\_test_unicode.h" />
     <ClInclude Include="mdump.h" />
     <ClInclude Include="mdump2.h" />
+    <ClInclude Include="mdump3.h" />
+    <ClInclude Include="mdump_types.h" />
     <ClInclude Include="render.h" />
     <ClInclude Include="render_world.h" />
     <ClInclude Include="resource.h" />
