@@ -169,12 +169,6 @@
     <ClInclude Include="control.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="mdump2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mdump.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="lib\_test.h">
       <Filter>lib</Filter>
     </ClInclude>
@@ -325,7 +319,7 @@
     <ClInclude Include="lib\vformat.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="mdump3.h">
+    <ClInclude Include="mdump.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
