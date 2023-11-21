@@ -2,8 +2,8 @@
 
 #include "lib/log.h"
 #include "camera.h"
-#include "gl.h"
-#include "gl_shader_util.h"
+#include "gl_utils/gl.h"
+#include "gl_utils/gl_shader_util.h"
 #include "resource_loading.h"
 
 typedef struct Render_Screen_Frame_Buffers

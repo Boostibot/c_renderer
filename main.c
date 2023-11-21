@@ -1,19 +1,15 @@
 //#define RUN_TESTS
 
-#define LIB_ALL_IMPL
-//#define LIB_MEM_DEBUG
+#define JOT_ALL_IMPL
+#define LIB_MEM_DEBUG
 #define DEBUG
-#define GLAD_GL_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
 
-#include "mdump3.h"
+#include "mdump.h"
 
 #include "lib/platform.h"
 #include "lib/allocator.h"
-#include "lib/platform.h"
 #include "lib/string.h"
 #include "lib/hash_index.h"
-#include "lib/log.h"
 #include "lib/logger_file.h"
 #include "lib/file.h"
 #include "lib/allocator_debug.h"
@@ -25,9 +21,9 @@
 #include "lib/profile.h"
 #include "lib/stable_array.h"
 
-#include "gl.h"
-#include "gl_shader_util.h"
-#include "gl_debug_output.h"
+#include "gl_utils/gl.h"
+#include "gl_utils/gl_shader_util.h"
+#include "gl_utils/gl_debug_output.h"
 #include "shapes.h"
 #include "format_obj.h"
 #include "image_loader.h"
@@ -39,11 +35,6 @@
 
 #include "glfw/glfw3.h"
 #include "control.h"
-
-//windows defines...
-#undef near
-#undef far
-
 
 typedef struct App_Settings
 {
@@ -273,7 +264,6 @@ void glfw_error_func(int code, const char* description)
     LOG_ERROR("APP", "GLWF error %d with message: %s", code, description);
 }
 
-
 void run_func(void* context);
 void run_test_func(void* context);
 void error_func(void* context, Platform_Sandox_Error error_code);
@@ -431,7 +421,7 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
 
         if(counter.is_detailed)
         {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %12.8lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lli %s \"%s\"", 
+		    LOG(log_module, log_type, "total: %15.7lf avg: %13.6lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lli %s \"%s\"", 
 			    stats.total_s*1000,
 			    stats.average_s*1000,
                 (lli) stats.runs,
@@ -516,43 +506,6 @@ void log_todos(const char* log_module, Log_Type log_type, const char* marker)
     array_deinit(&todos);
 }
 
-const char* get_memory_unit(isize bytes, isize *unit_or_null)
-{
-    isize GB = (isize) 1000*1000*1000;
-    isize MB = (isize) 1000*1000;
-    isize KB = (isize) 1000;
-    isize B = (isize) 1;
-
-    const char* out = "";
-    isize unit = 1;
-
-    if(bytes > GB)
-    {
-        out = "GB";
-        unit = GB;
-    }
-    else if(bytes > MB)
-    {
-        out = "MB";
-        unit = MB;
-    }
-    else if(bytes > KB)
-    {
-        out = "KB";
-        unit = KB;
-    }
-    else
-    {
-        out = "B";
-        unit = B;
-    }
-
-    if(unit_or_null)
-        *unit_or_null = unit;
-
-    return out;
-}
-
 
 const char* format_memory_unit_ephemeral(isize bytes)
 {
@@ -581,80 +534,6 @@ void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_St
 
     array_deinit(&formatted);
 }
-
-EXPORT void assertion_report(const char* expression, Source_Info info, const char* message, ...)
-{
-    LOG_FATAL("TEST", "TEST(%s) TEST/ASSERTION failed! " SOURCE_INFO_FMT, expression, SOURCE_INFO_PRINT(info));
-    if(message != NULL && strlen(message) != 0)
-    {
-        LOG_FATAL("TEST", "with message:\n", message);
-        va_list args;
-        va_start(args, message);
-        vlog_message("TEST", LOG_TYPE_FATAL, SOURCE_INFO(), message, args);
-        va_end(args);
-    }
-        
-    log_group_push();
-    log_callstack("TEST", LOG_TYPE_FATAL, -1, 1);
-    log_group_pop();
-    log_flush_all();
-
-    platform_abort();
-}
-
-EXPORT void allocator_out_of_memory(
-    Allocator* allocator, isize new_size, void* old_ptr, isize old_size, isize align, 
-    Source_Info called_from, const char* format_string, ...)
-{
-    Allocator_Stats stats = {0};
-    if(allocator != NULL && allocator->get_stats != NULL)
-        stats = allocator_get_stats(allocator);
-        
-    if(stats.type_name == NULL)
-        stats.type_name = "<no type name>";
-
-    if(stats.name == NULL)
-        stats.name = "<no name>";
-    
-    String_Builder user_message = {0};
-    array_init_backed(&user_message, allocator_get_scratch(), 1024);
-    
-    va_list args;
-    va_start(args, format_string);
-    vformat_into(&user_message, format_string, args);
-    va_end(args);
-
-    LOG_FATAL("MEMORY", 
-        "Allocator %s %s ran out of memory\n"
-        "new_size:    %lli B\n"
-        "old_ptr:     %p\n"
-        "old_size:    %lli B\n"
-        "align:       %lli B\n"
-        "called from: " SOURCE_INFO_FMT "\n"
-        "user message:\n%s",
-        stats.type_name, stats.name, 
-        (lli) new_size, 
-        old_ptr,
-        (lli) old_size,
-        (lli) align,
-        SOURCE_INFO_PRINT(called_from),
-        cstring_from_builder(user_message)
-    );
-    
-    LOG_FATAL("MEMORY", "Allocator_Stats:");
-    log_group_push();
-        log_allocator_stats("MEMORY", LOG_TYPE_FATAL, stats);
-    log_group_pop();
-    
-    log_group_push();
-        log_callstack("MEMORY", LOG_TYPE_FATAL, -1, 1);
-    log_group_pop();
-
-    log_flush_all();
-    platform_trap(); 
-    platform_abort();
-}
-
 
 
 void break_debug_allocator()
@@ -711,12 +590,17 @@ void break_debug_allocator()
 
 
 
-
+Error render_shader_init_from_disk_compat(Render_Shader* shader, String vert, String frag, String name)
+{
+    (void) name;
+    LOG_INFO("APP", "loading shader: " STRING_FMT, STRING_PRINT(vert));
+    return render_shader_init_from_disk_split(shader, vert, frag, STRING(""));
+}
 
 void run_func(void* context)
 {
     test_mdump();
-    log_todos("APP", LOG_TYPE_INFO, "@TODO @TOOD @TEMP @SPEED @PERF");
+    log_todos("APP", LOG_TYPE_DEBUG, "@TODO @TOOD @TEMP @SPEED @PERF");
 
     LOG_INFO("APP", "run_func enter");
     Allocator* upstream_alloc = allocator_get_default();
@@ -857,56 +741,73 @@ void run_func(void* context)
             LOG_INFO("APP", "Refreshing shaders");
             PERF_COUNTER_START(shader_load_counter);
             
+            //@TODO: refactor out Error and use bools.
+            //@TODO: add include directive to shader files!
             Error error = {0};
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_solid_color, 
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr,               STRING("shaders/pbr.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_equi_to_cubemap,   STRING("shaders/equi_to_cubemap.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_irradiance,        STRING("shaders/irradiance_convolution.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_prefilter,         STRING("shaders/prefilter.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_brdf_lut,          STRING("shaders/brdf_lut.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr_mapped,        STRING("shaders/pbr_mapped.frag_vert"));
+            error = ERROR_OR(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.frag_vert"));
+            
+            //@TODO: remove!
+            #if 0
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_solid_color, 
                 STRING("shaders/solid_color.vert"), 
                 STRING("shaders/solid_color.frag"), 
                 STRING("shader_solid_color"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_depth_color, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_depth_color, 
                 STRING("shaders/depth_color.vert"), 
                 STRING("shaders/depth_color.frag"), 
                 STRING("shader_depth_color"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_screen, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_screen, 
                 STRING("shaders/screen.vert"), 
                 STRING("shaders/screen.frag"), 
                 STRING("shader_screen"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_blinn_phong, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_blinn_phong, 
                 STRING("shaders/blinn_phong.vert"), 
                 STRING("shaders/blinn_phong.frag"), 
                 STRING("shader_blinn_phong"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_skybox, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_skybox, 
                 STRING("shaders/skybox.vert"), 
                 STRING("shaders/skybox.frag"), 
                 STRING("shader_skybox"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_pbr, 
                 STRING("shaders/pbr.vert"), 
                 STRING("shaders/pbr.frag"), 
                 STRING("shader_pbr"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_equi_to_cubemap, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_equi_to_cubemap, 
                 STRING("shaders/equi_to_cubemap.vert"), 
                 STRING("shaders/equi_to_cubemap.frag"), 
                 STRING("shader_equi_to_cubemap"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_irradiance, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_irradiance, 
                 STRING("shaders/irradiance_convolution.vert"), 
                 STRING("shaders/irradiance_convolution.frag"), 
                 STRING("shader_irradiance"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_prefilter, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_prefilter, 
                 STRING("shaders/prefilter.vert"), 
                 STRING("shaders/prefilter.frag"), 
                 STRING("shader_prefilter"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_brdf_lut, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_brdf_lut, 
                 STRING("shaders/brdf_lut.vert"), 
                 STRING("shaders/brdf_lut.frag"), 
                 STRING("shader_brdf_lut"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr_mapped, 
+            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_pbr_mapped, 
                 STRING("shaders/pbr_mapped.vert"), 
                 STRING("shaders/pbr_mapped.frag"), 
                 STRING("shader_pbr_mapped"));
-            error = ERROR_OR(error) render_shader_init_from_disk_custom(&shader_debug, 
+            error = ERROR_OR(error) render_shader_init_from_disk_split(&shader_debug, 
                 STRING("shaders/uv_debug.vert"), 
                 STRING("shaders/uv_debug.frag"), 
-                STRING("shaders/uv_debug.geom"), 
-                STRING(""), STRING("shader_debug"), NULL);
+                STRING("shaders/uv_debug.geom"));
+            #endif
                 
             PERF_COUNTER_END(shader_load_counter);
             ASSERT(error_is_ok(error));
@@ -1326,7 +1227,7 @@ void run_func(void* context)
             PERF_COUNTER_END(art_counter_brdf_lut);
             }
 
-            log_perf_counters("APP", LOG_TYPE_INFO, true);
+            log_perf_counters("APP", LOG_TYPE_DEBUG, true);
 
             LOG_INFO("RENDER", "Render allocation stats:");
             log_group_push();
@@ -1356,9 +1257,7 @@ void run_func(void* context)
 
                     accumulated_total += type_alloced + hash_alloced;
                 }
-                
 
-                debug_allocator_print_alive_allocations(resources_alloc, 200);
                 LOG_INFO("RESOURCES", "total overhead:       %s", format_memory_unit_ephemeral(accumulated_total));
             log_group_pop();
 

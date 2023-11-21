@@ -1,3 +1,6 @@
 [submodule "lib"]
 	path = lib
 	url = https://github.com/Boostibot/c_lib.git
+[submodule "gl_utils"]
+	path = gl_utils
+	url = https://github.com/Boostibot/gl_utils.git

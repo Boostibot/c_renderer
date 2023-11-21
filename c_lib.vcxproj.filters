@@ -19,6 +19,9 @@
     <Filter Include="lib">
       <UniqueIdentifier>{8f775cc1-4f10-4ebe-b8d2-74b51fea9506}</UniqueIdentifier>
     </Filter>
+    <Filter Include="gl_utils">
+      <UniqueIdentifier>{f5813dbe-3281-4557-9d2c-322eea5fa262}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.c">
@@ -27,83 +30,6 @@
     <ClCompile Include="lib\platform_windows.c">
       <Filter>lib</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="shaders\screen.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\screen.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\depth_color.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\depth_color.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.geom">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\blinn_phong.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\blinn_phong.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\solid_color.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\solid_color.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\skybox.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\skybox.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\equi_to_cubemap.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\equi_to_cubemap.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\irradiance_convolution.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\irradiance_convolution.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr_mapped.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr_mapped.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\brdf_lut.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\brdf_lut.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\prefilter.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\prefilter.vert">
-      <Filter>shaders</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h">
@@ -122,15 +48,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="format_obj.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gl_debug_output.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gl_shader_util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="image_loader.h">
@@ -322,5 +239,136 @@
     <ClInclude Include="mdump.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="gl_utils\gl.h">
+      <Filter>gl_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="gl_utils\gl_debug_output.h">
+      <Filter>gl_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="gl_utils\gl_shader_util.h">
+      <Filter>gl_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="gl_utils\gl_texture_util.h">
+      <Filter>gl_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="gl_utils\gl_pixel_format.h">
+      <Filter>gl_utils</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\brdf_lut.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\depth_color.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\depth_color.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\depth_color.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\equi_to_cubemap.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\equi_to_cubemap.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\equi_to_cubemap.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\irradiance_convolution.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\irradiance_convolution.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\irradiance_convolution.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr_mapped.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr_mapped.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr_mapped.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\prefilter.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\prefilter.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\prefilter.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\screen.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\screen.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\screen.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\skybox.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\skybox.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\skybox.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\solid_color.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\solid_color.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\solid_color.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.geom">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\_template.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\blinn_phong.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\blinn_phong.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\blinn_phong.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\brdf_lut.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\brdf_lut.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

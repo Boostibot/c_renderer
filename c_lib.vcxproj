@@ -155,7 +155,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
-      <AdditionalOptions>/wd4996  /wd4820 /wd4255  /wd5045  /wd4064 /wd4548 /wd4201 /wd4296 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/wd4996  /wd4820 /wd4255  /wd5045  /wd4064 /wd4548 /wd4201 /wd4296 /wd4189 %(AdditionalOptions)</AdditionalOptions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
     </ClCompile>
@@ -217,33 +217,6 @@
     <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\blinn_phong.frag" />
-    <None Include="shaders\blinn_phong.vert" />
-    <None Include="shaders\brdf_lut.frag" />
-    <None Include="shaders\brdf_lut.vert" />
-    <None Include="shaders\depth_color.frag" />
-    <None Include="shaders\depth_color.vert" />
-    <None Include="shaders\equi_to_cubemap.frag" />
-    <None Include="shaders\equi_to_cubemap.vert" />
-    <None Include="shaders\irradiance_convolution.frag" />
-    <None Include="shaders\irradiance_convolution.vert" />
-    <None Include="shaders\pbr.frag" />
-    <None Include="shaders\pbr.vert" />
-    <None Include="shaders\pbr_mapped.frag" />
-    <None Include="shaders\pbr_mapped.vert" />
-    <None Include="shaders\prefilter.frag" />
-    <None Include="shaders\prefilter.vert" />
-    <None Include="shaders\screen.frag" />
-    <None Include="shaders\screen.vert" />
-    <None Include="shaders\skybox.frag" />
-    <None Include="shaders\skybox.vert" />
-    <None Include="shaders\solid_color.frag" />
-    <None Include="shaders\solid_color.vert" />
-    <None Include="shaders\uv_debug.frag" />
-    <None Include="shaders\uv_debug.geom" />
-    <None Include="shaders\uv_debug.vert" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
@@ -251,9 +224,11 @@
     <ClInclude Include="entity.h" />
     <ClInclude Include="entity_store.h" />
     <ClInclude Include="format_obj.h" />
-    <ClInclude Include="gl.h" />
-    <ClInclude Include="gl_debug_output.h" />
-    <ClInclude Include="gl_shader_util.h" />
+    <ClInclude Include="gl_utils\gl.h" />
+    <ClInclude Include="gl_utils\gl_debug_output.h" />
+    <ClInclude Include="gl_utils\gl_pixel_format.h" />
+    <ClInclude Include="gl_utils\gl_shader_util.h" />
+    <ClInclude Include="gl_utils\gl_texture_util.h" />
     <ClInclude Include="image_loader.h" />
     <ClInclude Include="lib\allocator.h" />
     <ClInclude Include="lib\allocator_debug.h" />
@@ -316,6 +291,46 @@
     <ClInclude Include="systems.h" />
     <ClInclude Include="temp.h" />
     <ClInclude Include="todo.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\blinn_phong.frag" />
+    <None Include="shaders\blinn_phong.frag_vert" />
+    <None Include="shaders\blinn_phong.vert" />
+    <None Include="shaders\brdf_lut.frag" />
+    <None Include="shaders\brdf_lut.frag_vert" />
+    <None Include="shaders\brdf_lut.vert" />
+    <None Include="shaders\depth_color.frag" />
+    <None Include="shaders\depth_color.frag_vert" />
+    <None Include="shaders\depth_color.vert" />
+    <None Include="shaders\equi_to_cubemap.frag" />
+    <None Include="shaders\equi_to_cubemap.frag_vert" />
+    <None Include="shaders\equi_to_cubemap.vert" />
+    <None Include="shaders\irradiance_convolution.frag" />
+    <None Include="shaders\irradiance_convolution.frag_vert" />
+    <None Include="shaders\irradiance_convolution.vert" />
+    <None Include="shaders\pbr.frag" />
+    <None Include="shaders\pbr.frag_vert" />
+    <None Include="shaders\pbr.vert" />
+    <None Include="shaders\pbr_mapped.frag" />
+    <None Include="shaders\pbr_mapped.frag_vert" />
+    <None Include="shaders\pbr_mapped.vert" />
+    <None Include="shaders\prefilter.frag" />
+    <None Include="shaders\prefilter.frag_vert" />
+    <None Include="shaders\prefilter.vert" />
+    <None Include="shaders\screen.frag" />
+    <None Include="shaders\screen.frag_vert" />
+    <None Include="shaders\screen.vert" />
+    <None Include="shaders\skybox.frag" />
+    <None Include="shaders\skybox.frag_vert" />
+    <None Include="shaders\skybox.vert" />
+    <None Include="shaders\solid_color.frag" />
+    <None Include="shaders\solid_color.frag_vert" />
+    <None Include="shaders\solid_color.vert" />
+    <None Include="shaders\uv_debug.frag" />
+    <None Include="shaders\uv_debug.frag_vert" />
+    <None Include="shaders\uv_debug.geom" />
+    <None Include="shaders\uv_debug.vert" />
+    <None Include="shaders\_template.frag_vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
