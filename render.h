@@ -73,14 +73,19 @@ typedef struct Render_Cubeimage
     isize heights[6];
 } Render_Cubeimage;
 
-typedef struct Blinn_Phong_Params
-{
-    f32 light_ambient_strength;
-    f32 light_specular_strength;
-    f32 light_specular_sharpness;
+typedef struct Blinn_Phong_Params {
+    Mat4 projection; 
+    Mat4 view; 
+    Mat4 model; 
+    Vec3 view_pos; 
+    Vec3 light_pos; 
+    Vec3 light_color; 
+    Vec3 ambient_color; 
+    Vec3 specular_color;
+
+    f32 specular_exponent;
     f32 light_linear_attentuation;
     f32 light_quadratic_attentuation;
-    f32 light_specular_effect;
     f32 gamma;
 } Blinn_Phong_Params;
 
@@ -135,8 +140,8 @@ typedef struct Render
     Handle_Table cubeimages;
     Handle_Table meshes;
     Handle_Table materials;
-} Render;
 
+} Render;
 
 #define PBR_MAX_LIGHTS 4
 #define PBR_MAX_SPHERE_LIGHTS 128
@@ -778,7 +783,7 @@ INTERNAL void _make_capture_projections(Mat4* capture_projection, Mat4 capture_i
 
 
 void render_cubeimage_init_environment_from_environment_map(Render_Cubeimage* cubemap_environment, i32 width, i32 height, const Render_Image* environment_tetxure, f32 map_gamma,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_equi_to_cubemap, Render_Mesh cube_mesh)
+    const Render_Capture_Buffers* capture, Render_Shader* shader_equi_to_cubemap, Render_Mesh cube_mesh)
 {
     render_cubeimage_deinit(cubemap_environment);
     cubemap_environment->name = builder_from_cstring("environment", NULL);
@@ -835,7 +840,7 @@ void render_cubeimage_init_environment_from_environment_map(Render_Cubeimage* cu
 
 void render_cubeimage_init_irradiance_from_environment(
     Render_Cubeimage* cubemap_irradiance, i32 width, i32 height, f32 sample_delta, const Render_Cubeimage* cubemap_environment,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_irradiance_gen, Render_Mesh cube_mesh)
+    const Render_Capture_Buffers* capture, Render_Shader* shader_irradiance_gen, Render_Mesh cube_mesh)
 {
     // pbr: create an irradiance cubemap, and re-scale capture FBO to irradiance scale.
     // --------------------------------------------------------------------------------
@@ -890,7 +895,7 @@ void render_cubeimage_init_irradiance_from_environment(
 
 void render_cubeimage_init_prefilter_from_environment(
     Render_Cubeimage* cubemap_irradiance, i32 width, i32 height, const Render_Cubeimage* cubemap_environment,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_prefilter, Render_Mesh cube_mesh)
+    const Render_Capture_Buffers* capture, Render_Shader* shader_prefilter, Render_Mesh cube_mesh)
 {
     // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
     // --------------------------------------------------------------------------------
@@ -954,7 +959,7 @@ void render_cubeimage_init_prefilter_from_environment(
 
 void render_image_init_BRDF_LUT(
     Render_Image* cubemap_irradiance, i32 width, i32 height,
-    const Render_Capture_Buffers* capture, const Render_Shader* shader_brdf_lut, Render_Mesh screen_quad_mesh)
+    const Render_Capture_Buffers* capture, Render_Shader* shader_brdf_lut, Render_Mesh screen_quad_mesh)
 {
     // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
     // --------------------------------------------------------------------------------
@@ -986,7 +991,7 @@ void render_image_init_BRDF_LUT(
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color, f32 gamma)
+void render_mesh_draw_using_solid_color(Render_Mesh mesh, Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color, f32 gamma)
 {
     render_shader_use(shader_depth_color);
     render_shader_set_vec3(shader_depth_color, "color", color);
@@ -998,7 +1003,7 @@ void render_mesh_draw_using_solid_color(Render_Mesh mesh, const Render_Shader* s
     render_shader_unuse(shader_depth_color);
 }
 
-void render_mesh_draw_using_depth_color(Render_Mesh mesh, const Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
+void render_mesh_draw_using_depth_color(Render_Mesh mesh, Render_Shader* shader_depth_color, Mat4 projection, Mat4 view, Mat4 model, Vec3 color)
 {
     render_shader_use(shader_depth_color);
     render_shader_set_vec3(shader_depth_color, "color", color);
@@ -1009,7 +1014,7 @@ void render_mesh_draw_using_depth_color(Render_Mesh mesh, const Render_Shader* s
     render_shader_unuse(shader_depth_color);
 }
 
-void render_mesh_draw_using_uv_debug(Render_Mesh mesh, const Render_Shader* uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
+void render_mesh_draw_using_uv_debug(Render_Mesh mesh, Render_Shader* uv_shader_debug, Mat4 projection, Mat4 view, Mat4 model)
 {
     render_shader_use(uv_shader_debug);
     Mat4 inv = mat4_inverse_nonuniform_scale(model);
@@ -1024,28 +1029,27 @@ void render_mesh_draw_using_uv_debug(Render_Mesh mesh, const Render_Shader* uv_s
     render_shader_unuse(uv_shader_debug);
 }
 
-void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, const Render_Shader* blin_phong_shader, Mat4 projection, Mat4 view, Mat4 model, Vec3 view_pos, Vec3 light_pos, Vec3 light_color, Blinn_Phong_Params params, Render_Image diffuse)
+
+void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, Render_Shader* blin_phong_shader, Blinn_Phong_Params params, Render_Image diffuse)
 {
     render_shader_use(blin_phong_shader);
-    Mat4 inv = mat4_inverse_nonuniform_scale(model);
+    Mat4 inv = mat4_inverse_nonuniform_scale(params.model);
     Mat3 normal_matrix = mat3_from_mat4(inv);
-    normal_matrix = mat3_from_mat4(model);
 
-    render_shader_set_mat4(blin_phong_shader, "projection", projection);
-    render_shader_set_mat4(blin_phong_shader, "view", view);
-    render_shader_set_mat4(blin_phong_shader, "model", model);
+    render_shader_set_mat4(blin_phong_shader, "projection", params.projection);
+    render_shader_set_mat4(blin_phong_shader, "view", params.view);
+    render_shader_set_mat4(blin_phong_shader, "model", params.model);
     render_shader_set_mat3(blin_phong_shader, "normal_matrix", normal_matrix);
 
-    render_shader_set_vec3(blin_phong_shader, "view_pos", view_pos);
-    render_shader_set_vec3(blin_phong_shader, "light_pos", light_pos);
-    render_shader_set_vec3(blin_phong_shader, "light_color", light_color);
-    
-    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    render_shader_set_f32(blin_phong_shader, "light_specular_strength", params.light_specular_strength);
-    render_shader_set_f32(blin_phong_shader, "light_specular_sharpness", params.light_specular_sharpness);
-    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    render_shader_set_f32(blin_phong_shader, "light_ambient_strength", params.light_ambient_strength);
-    render_shader_set_f32(blin_phong_shader, "light_specular_effect", params.light_specular_effect);
+    render_shader_set_vec3(blin_phong_shader, "view_pos", params.view_pos);
+    render_shader_set_vec3(blin_phong_shader, "light_pos", params.light_pos);
+    render_shader_set_vec3(blin_phong_shader, "light_color", params.light_color);
+    render_shader_set_vec3(blin_phong_shader, "ambient_color", params.ambient_color);
+    render_shader_set_vec3(blin_phong_shader, "specular_color", params.specular_color);
+
+    render_shader_set_f32(blin_phong_shader, "light_linear_attentuation", params.light_linear_attentuation);
+    render_shader_set_f32(blin_phong_shader, "light_quadratic_attentuation", params.light_quadratic_attentuation);
+    render_shader_set_f32(blin_phong_shader, "specular_exponent", params.specular_exponent);
     render_shader_set_f32(blin_phong_shader, "gamma", params.gamma);
 
     render_image_use(&diffuse, 0);
@@ -1056,7 +1060,7 @@ void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, const Render_Shader* b
     render_shader_unuse(blin_phong_shader);
 }
 
-void render_mesh_draw_using_skybox(Render_Mesh mesh, const Render_Shader* skybox_shader, Mat4 projection, Mat4 view, Mat4 model, f32 gamma, Render_Cubeimage skybox)
+void render_mesh_draw_using_skybox(Render_Mesh mesh, Render_Shader* skybox_shader, Mat4 projection, Mat4 view, Mat4 model, f32 gamma, Render_Cubeimage skybox)
 {
     glDepthFunc(GL_LEQUAL);
     render_shader_use(skybox_shader);
@@ -1450,7 +1454,7 @@ typedef struct Render_Filled_Material
     Render_Filled_Map normal;
 } Render_Filled_Material; 
 
-bool render_filled_map_use(Render_Filled_Map map, const Render_Shader* shader, const char* name, isize* slot)
+bool render_filled_map_use(Render_Filled_Map map, Render_Shader* shader, const char* name, isize* slot)
 {
     if(map.image)
     {
@@ -1463,7 +1467,7 @@ bool render_filled_map_use(Render_Filled_Map map, const Render_Shader* shader, c
 }
 
 //@TODO: remove till 20/10/2023 
-bool render_map_use(Render_Map map, Render* render, const Render_Shader* shader, const char* name, isize* slot)
+bool render_map_use(Render_Map map, Render* render, Render_Shader* shader, const char* name, isize* slot)
 {
     Render_Image* image = render_image_get(render, map.image);
     if(image)
@@ -1478,7 +1482,7 @@ bool render_map_use(Render_Map map, Render* render, const Render_Shader* shader,
 
 //@TODO: restore esentially to the previous version. Ie do the querying from Render to outside of this func and supply something like Render_Material_Pointers.
 // This is necessary so that this whole thing becomes at least a bit disentagled from the handle mess. I want concrete things in my life again :( 
-void render_mesh_draw_using_pbr(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Filled_Material* material, 
+void render_mesh_draw_using_pbr(Render_Mesh mesh, Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Filled_Material* material, 
     const Triangle_Sub_Range* sub_range_or_null)
 {
     render_shader_use(pbr_shader);
@@ -1565,7 +1569,7 @@ Render_Filled_Map render_filled_map_from_map(Render* render, Render_Map map)
     return filled_map;
 }
 
-void render_object(const Render_Object* render_object, Render* render, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params)
+void render_object(const Render_Object* render_object, Render* render, Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params)
 {
     Render_Mesh* mesh = render_mesh_get(render, render_object->mesh);
     if(!mesh)
@@ -1593,7 +1597,7 @@ void render_object(const Render_Object* render_object, Render* render, const Ren
 }
 
 #if 0
-void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, const Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Material* material, 
+void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, Render_Shader* pbr_shader, Mat4 projection, Mat4 view, Mat4 model, const PBR_Params* params, const Render_Material* material, 
     const Render_Cubeimage* environment, const Render_Cubeimage* irradience, const Render_Cubeimage* prefilter, const Render_Image* brdf_lut)
 {
     render_shader_use(pbr_shader);
@@ -1697,7 +1701,7 @@ void render_mesh_draw_using_pbr_mapped(Render_Mesh mesh, const Render_Shader* pb
 }
 #endif 
 
-void render_mesh_draw_using_postprocess(Render_Mesh screen_quad, const Render_Shader* shader_screen, GLuint screen_map, f32 gamma, f32 exposure)
+void render_mesh_draw_using_postprocess(Render_Mesh screen_quad, Render_Shader* shader_screen, GLuint screen_map, f32 gamma, f32 exposure)
 {
     render_shader_use(shader_screen);
     render_shader_set_f32(shader_screen, "gamma", gamma);

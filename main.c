@@ -756,58 +756,6 @@ void run_func(void* context)
             error = ERROR_OR(error) render_shader_init_from_disk(&shader_brdf_lut,          STRING("shaders/brdf_lut.frag_vert"));
             error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr_mapped,        STRING("shaders/pbr_mapped.frag_vert"));
             error = ERROR_OR(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.frag_vert"));
-            
-            //@TODO: remove!
-            #if 0
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_solid_color, 
-                STRING("shaders/solid_color.vert"), 
-                STRING("shaders/solid_color.frag"), 
-                STRING("shader_solid_color"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_depth_color, 
-                STRING("shaders/depth_color.vert"), 
-                STRING("shaders/depth_color.frag"), 
-                STRING("shader_depth_color"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_screen, 
-                STRING("shaders/screen.vert"), 
-                STRING("shaders/screen.frag"), 
-                STRING("shader_screen"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_blinn_phong, 
-                STRING("shaders/blinn_phong.vert"), 
-                STRING("shaders/blinn_phong.frag"), 
-                STRING("shader_blinn_phong"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_skybox, 
-                STRING("shaders/skybox.vert"), 
-                STRING("shaders/skybox.frag"), 
-                STRING("shader_skybox"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_pbr, 
-                STRING("shaders/pbr.vert"), 
-                STRING("shaders/pbr.frag"), 
-                STRING("shader_pbr"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_equi_to_cubemap, 
-                STRING("shaders/equi_to_cubemap.vert"), 
-                STRING("shaders/equi_to_cubemap.frag"), 
-                STRING("shader_equi_to_cubemap"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_irradiance, 
-                STRING("shaders/irradiance_convolution.vert"), 
-                STRING("shaders/irradiance_convolution.frag"), 
-                STRING("shader_irradiance"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_prefilter, 
-                STRING("shaders/prefilter.vert"), 
-                STRING("shaders/prefilter.frag"), 
-                STRING("shader_prefilter"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_brdf_lut, 
-                STRING("shaders/brdf_lut.vert"), 
-                STRING("shaders/brdf_lut.frag"), 
-                STRING("shader_brdf_lut"));
-            error = ERROR_OR(error) render_shader_init_from_disk_compat(&shader_pbr_mapped, 
-                STRING("shaders/pbr_mapped.vert"), 
-                STRING("shaders/pbr_mapped.frag"), 
-                STRING("shader_pbr_mapped"));
-            error = ERROR_OR(error) render_shader_init_from_disk_split(&shader_debug, 
-                STRING("shaders/uv_debug.vert"), 
-                STRING("shaders/uv_debug.frag"), 
-                STRING("shaders/uv_debug.geom"));
-            #endif
                 
             PERF_COUNTER_END(shader_load_counter);
             ASSERT(error_is_ok(error));
@@ -839,7 +787,7 @@ void run_func(void* context)
             PERF_COUNTER_END(art_counter_shapes);
 
 
-            if(1)
+            if(0)
             {
                 triangle_mesh_read_entire(&falcon_handle, STRING("resources/sponza/sponza.obj"));
             
@@ -905,6 +853,11 @@ void run_func(void* context)
         if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
         {
             app->is_in_mouse_mode = !app->is_in_mouse_mode;
+        }
+        
+        if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
+        {
+            log_perf_counters("app", LOG_TYPE_INFO, true);
         }
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
@@ -1061,17 +1014,25 @@ void run_func(void* context)
             {
                 Sphere_Light light = lights[0]; 
                 Blinn_Phong_Params blinn_phong_params = {0};
-                blinn_phong_params.light_ambient_strength = 0.01f;
-                blinn_phong_params.light_specular_strength = 0.4f;
+                Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_s32() / 8), vec3(5, 0, -5));
+                blinn_phong_params.projection = projection;
+                blinn_phong_params.view = view;
+                blinn_phong_params.model = model;
+
+                blinn_phong_params.view_pos = app->camera.pos;
+                blinn_phong_params.light_pos = light.pos;
+                blinn_phong_params.light_color = light.color;
+
+                blinn_phong_params.ambient_color = vec3_of(0.01f);
+                blinn_phong_params.specular_color = vec3_of(0.4f);
                 blinn_phong_params.light_linear_attentuation = 0;
                 blinn_phong_params.light_quadratic_attentuation = 0.00f;
-                blinn_phong_params.light_specular_sharpness = 32;
-                blinn_phong_params.light_specular_effect = 0.4f; 
+                blinn_phong_params.specular_exponent = 32;
+                //blinn_phong_params.light_specular_effect = 0.4f; 
                 //blinn_phong_params.gamma = settings->screen_gamma;
                 blinn_phong_params.gamma = 1.3f; //looks better on the wood texture
 
-                Mat4 model = mat4_translate(mat4_rotation(vec3(2, 1, 3), clock_s32() / 8), vec3(5, 0, -5));
-                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, projection, view, model, app->camera.pos, light.pos, light.color, blinn_phong_params, image_floor);
+                render_mesh_draw_using_blinn_phong(render_cube_sphere, &shader_blinn_phong, blinn_phong_params, image_floor);
             
                 if(app->is_in_uv_debug_mode)
                     render_mesh_draw_using_uv_debug(render_cube_sphere, &shader_debug, projection, view, model);

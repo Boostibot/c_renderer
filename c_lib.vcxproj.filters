@@ -254,6 +254,12 @@
     <ClInclude Include="gl_utils\gl_pixel_format.h">
       <Filter>gl_utils</Filter>
     </ClInclude>
+    <ClInclude Include="render2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gl_utils\gl_frame_buffers.h">
+      <Filter>gl_utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\brdf_lut.vert">

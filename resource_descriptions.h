@@ -107,7 +107,8 @@ typedef struct Material_Info {
     Vec3 ambient_color;                     
     Vec3 diffuse_color;                     
     Vec3 specular_color;                    
-    f32 specular_exponent;    
+    f32 specular_exponent; 
+    f32 specular_light_color_effect;
     
     Vec3 albedo;
     Vec3 emissive;
