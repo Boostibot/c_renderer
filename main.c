@@ -1,5 +1,15 @@
 //#define RUN_TESTS
 
+#define _CRT_SECURE_NO_WARNINGS
+#pragma warning(disable:4464) //Dissable "relative include path contains '..'"
+#pragma warning(disable:4702) //Dissable "unrelachable code"
+#pragma warning(disable:4820) //Dissable "Padding added to struct" 
+#pragma warning(disable:4255) //Dissable "no function prototype given: converting '()' to '(void)"  
+#pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
+#pragma warning(disable:4201) //Dissable "nonstandard extension used: nameless struct/union" 
+#pragma warning(disable:4189) //Dissable "local variable is initialized but not referenced" (for assert macro)
+#pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic checking)
+
 #define JOT_ALL_IMPL
 #define LIB_MEM_DEBUG
 #define DEBUG
@@ -266,7 +276,7 @@ void glfw_error_func(int code, const char* description)
 
 void run_func(void* context);
 void run_test_func(void* context);
-void error_func(void* context, Platform_Sandox_Error error_code);
+void error_func(void* context, Platform_Sandbox_Error error);
 
 int main()
 {
@@ -282,7 +292,7 @@ int main()
     file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator);
 
     Debug_Allocator debug_alloc = {0};
-    debug_allocator_init_use(&debug_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+    debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
     GLFWallocator allocator = {0};
     allocator.allocate = glfw_malloc_func;
@@ -744,18 +754,18 @@ void run_func(void* context)
             //@TODO: refactor out Error and use bools.
             //@TODO: add include directive to shader files!
             Error error = {0};
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr,               STRING("shaders/pbr.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_equi_to_cubemap,   STRING("shaders/equi_to_cubemap.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_irradiance,        STRING("shaders/irradiance_convolution.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_prefilter,         STRING("shaders/prefilter.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_brdf_lut,          STRING("shaders/brdf_lut.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_pbr_mapped,        STRING("shaders/pbr_mapped.frag_vert"));
-            error = ERROR_OR(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_pbr,               STRING("shaders/pbr.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_equi_to_cubemap,   STRING("shaders/equi_to_cubemap.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_irradiance,        STRING("shaders/irradiance_convolution.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_prefilter,         STRING("shaders/prefilter.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_brdf_lut,          STRING("shaders/brdf_lut.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_pbr_mapped,        STRING("shaders/pbr_mapped.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.frag_vert"));
                 
             PERF_COUNTER_END(shader_load_counter);
             ASSERT(error_is_ok(error));
@@ -811,10 +821,10 @@ void run_func(void* context)
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
             
             PERF_COUNTER_START(art_counter_single_tex);
-            error = ERROR_OR(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            error = ERROR_AND(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
             PERF_COUNTER_END(art_counter_single_tex);
-            error = ERROR_OR(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
-            error = ERROR_OR(error) render_cubeimage_init_from_disk(&cubemap_skybox, 
+            error = ERROR_AND(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
+            error = ERROR_AND(error) render_cubeimage_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
                 STRING("resources/skybox_back.jpg"), 
                 STRING("resources/skybox_top.jpg"), 
@@ -822,7 +832,7 @@ void run_func(void* context)
                 STRING("resources/skybox_right.jpg"), 
                 STRING("resources/skybox_left.jpg"), STRING("skybox"));
 
-            error = ERROR_OR(error) render_image_init_from_disk(&image_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("image_environment"));
+            error = ERROR_AND(error) render_image_init_from_disk(&image_environment, STRING("resources/HDR_041_Path_Ref.hdr"), STRING("image_environment"));
 
             render_capture_buffers_init(&capture_buffers, res_environment, res_environment);
             
@@ -1103,7 +1113,7 @@ void run_func(void* context)
             }
 
             //render falcon
-            if(1)
+            if(0)
             {
                 Mat4 model = mat4_translate(mat4_scaling(vec3_of(0.01f)), vec3(20, 0, 20));
                 //render_mesh_draw_using_depth_color(render_falcon, &shader_depth_color, projection, view, model, vec3(0.3f, 0.3f, 0.3f));
@@ -1301,15 +1311,15 @@ void run_func(void* context)
     LOG_INFO("APP", "run_func exit");
 }
 
-void error_func(void* context, Platform_Sandox_Error error_code)
+void error_func(void* context, Platform_Sandbox_Error error)
 {
     (void) context;
-    const char* msg = platform_sandbox_error_to_string(error_code);
+    const char* msg = platform_exception_to_string(error.exception);
     
     LOG_ERROR("APP", "%s exception occured", msg);
     LOG_TRACE("APP", "printing trace:");
     log_group_push();
-    log_callstack("APP", LOG_TYPE_ERROR, -1, 1);
+    log_translated_callstack("APP", LOG_TYPE_ERROR, error.call_stack, error.call_stack_size);
     log_group_pop();
 }
 

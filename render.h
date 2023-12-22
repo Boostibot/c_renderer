@@ -658,7 +658,7 @@ Error render_cubeimage_init_from_disk(Render_Cubeimage* render, String front, St
     Error error = {0};
     for (isize i = 0; i < 6; i++)
     {
-        error = ERROR_OR(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+        error = ERROR_AND(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
         face_images[i] = image_from_builder(face_image_builders[i]);
     }
     

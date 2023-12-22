@@ -432,7 +432,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     void resources_end_frame()
     {
         Resources* resources = resources_get();
-        i64 now = platform_universal_epoch_time();
+        i64 now = platform_epoch_time();
         i64 period = (i64) (resources->check_time_every * 10000);
         if(resources->last_check_etime + period < now)
         {

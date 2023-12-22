@@ -7,7 +7,7 @@
 #include "image_loader.h"
 #include "lib/allocator_malloc.h"
 
-INTERNAL String _format_obj_mtl_translate_error(u32 code, void* context)
+INTERNAL const char* _format_obj_mtl_translate_error(u32 code, void* context)
 {
     (void) context;
     enum {LOCAL_BUFF_SIZE = 256, MAX_ERRORS = 4};
@@ -19,9 +19,9 @@ INTERNAL String _format_obj_mtl_translate_error(u32 code, void* context)
 
     const char* error_flag_str = format_obj_mtl_error_statement_to_string((Format_Obj_Mtl_Error_Statement) error_flag);
 
-    memset(error_strings[error_index], 0, LOCAL_BUFF_SIZE);
-    snprintf(error_strings[error_index], LOCAL_BUFF_SIZE, "%s line: %d", error_flag_str, line);
-    String out = string_make(error_strings[error_index]);
+    char* out = error_strings[error_index];
+    memset(out, 0, LOCAL_BUFF_SIZE);
+    snprintf(out, LOCAL_BUFF_SIZE, "%s line: %d", error_flag_str, line);
     error_index += 1;
     return out;
 }
@@ -30,7 +30,7 @@ INTERNAL Error _format_obj_mtl_error_on_to_error(Format_Obj_Mtl_Error_Statement 
 {
     static u32 error_module = 0;
     if(error_module == 0)
-        error_module = error_system_register_module(_format_obj_mtl_translate_error, STRING("format_obj_mtl.h"), NULL);
+        error_module = error_system_register_module(_format_obj_mtl_translate_error, "format_obj_mtl.h", NULL);
 
     u32 splatted = (u32) line << 8 | (u32) statement;
     return error_make(error_module, splatted);
@@ -49,19 +49,19 @@ typedef enum Resource_Loading_Error {
 
 } Resource_Loading_Error;
 
-INTERNAL String _resource_loading_translate_error(u32 code, void* context)
+INTERNAL const char* _resource_loading_translate_error(u32 code, void* context)
 {
     (void) context;
     switch(code)
     {
-        case RESOURCE_LOADING_ERROR_NONE: return STRING("RESOURCE_LOADING_ERROR_NONE");
-        case RESOURCE_LOADING_ERROR_UV_INDEX: return STRING("RESOURCE_LOADING_ERROR_UV_INDEX");
-        case RESOURCE_LOADING_ERROR_POS_INDEX: return STRING("RESOURCE_LOADING_ERROR_POS_INDEX");
-        case RESOURCE_LOADING_ERROR_NORM_INDEX: return STRING("RESOURCE_LOADING_ERROR_NORM_INDEX");
-        case RESOURCE_LOADING_ERROR_MATERIAL_NOT_FOUND: return STRING("RESOURCE_LOADING_ERROR_MATERIAL_NOT_FOUND");
+        case RESOURCE_LOADING_ERROR_NONE: return "RESOURCE_LOADING_ERROR_NONE";
+        case RESOURCE_LOADING_ERROR_UV_INDEX: return "RESOURCE_LOADING_ERROR_UV_INDEX";
+        case RESOURCE_LOADING_ERROR_POS_INDEX: return "RESOURCE_LOADING_ERROR_POS_INDEX";
+        case RESOURCE_LOADING_ERROR_NORM_INDEX: return "RESOURCE_LOADING_ERROR_NORM_INDEX";
+        case RESOURCE_LOADING_ERROR_MATERIAL_NOT_FOUND: return "RESOURCE_LOADING_ERROR_MATERIAL_NOT_FOUND";
         
         case RESOURCE_LOADING_ERROR_OTHER: 
-        default: return STRING("RESOURCE_LOADING_ERROR_OTHER");
+        default: return "RESOURCE_LOADING_ERROR_OTHER";
     }
 }
 
@@ -69,7 +69,7 @@ INTERNAL Error _resource_loading_error_to_error(Resource_Loading_Error error)
 {
     static u32 error_module = 0;
     if(error_module == 0)
-        error_module = error_system_register_module(_resource_loading_translate_error, STRING("resource_loading.h"), NULL);
+        error_module = error_system_register_module(_resource_loading_translate_error, "resource_loading.h", NULL);
 
     return error_make(error_module, (u32) error);
 }
@@ -478,7 +478,7 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
         //       iterate all resources when looking for path.
 
         Platform_File_Info file_info = {0};
-        Error file_info_error = error_from_platform(platform_file_info(full_path.data, &file_info));
+        Error file_info_error = error_from_platform(platform_file_info(string_from_builder(full_path), &file_info));
         if(error_is_ok(file_info_error) == false)
             LOG_ERROR("ASSET", "Error getting info of material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 
@@ -571,7 +571,7 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     if(error_is_ok(error))
     {
         Platform_File_Info file_info = {0};
-        Error file_info_error = error_from_platform(platform_file_info(full_path.data, &file_info));
+        Error file_info_error = error_from_platform(platform_file_info(string_from_builder(full_path), &file_info));
         if(error_is_ok(file_info_error) == false)
             LOG_ERROR("ASSET", "Error getting info of object file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 

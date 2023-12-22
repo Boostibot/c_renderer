@@ -60,16 +60,16 @@ EXPORT Error image_write_to_file(Image image, String path);
 
 #include "lib/log.h"
 
-INTERNAL String _image_loader_translate_error(u32 code, void* context)
+INTERNAL const char* _image_loader_translate_error(u32 code, void* context)
 {
     Hash_Index64* error_hash = (Hash_Index64*) context;
     isize found = hash_index64_find(*error_hash, code);
     if(found == -1)
-        return STRING("unknown error. This is likely an internal bug.");
+        return "unknown error. This is likely an internal bug.";
     else
     {
         const char* string = (const char*) error_hash->entries[found].value;
-        return string_make(string);
+        return string;
     }
 }
 
@@ -80,7 +80,7 @@ INTERNAL Error _image_loader_to_error(const char* error_string)
     if(error_module == 0)
     {
         hash_index64_init(&error_hash, allocator_get_static());
-        error_module = error_system_register_module(_image_loader_translate_error, STRING("image_loader.h"), &error_hash);
+        error_module = error_system_register_module(_image_loader_translate_error, "image_loader.h", &error_hash);
     }
 
     //We assume no hash collisions.
@@ -172,7 +172,7 @@ EXPORT Error image_read_from_file(Image_Builder* image, String path, isize desir
 {
     String_Builder file_content = {allocator_get_scratch()};
     Error file_error = file_read_entire(path, &file_content);
-    Error parse_error = ERROR_OR(file_error) image_read_from_memory(image, string_from_builder(file_content), desired_channels, format, flags);
+    Error parse_error = ERROR_AND(file_error) image_read_from_memory(image, string_from_builder(file_content), desired_channels, format, flags);
     
     if(!error_is_ok(parse_error))
         LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
@@ -281,7 +281,7 @@ EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File
     }
 
     if(had_internal_error)
-        out_error = ERROR_OR(out_error) _image_loader_to_error(error_msg_unspecfied);
+        out_error = ERROR_AND(out_error) _image_loader_to_error(error_msg_unspecfied);
 
     image_builder_deinit(&contiguous);
     return out_error;
@@ -291,7 +291,7 @@ EXPORT Error image_write_to_file_formatted(Image image, String path, Image_File_
 {
     String_Builder formatted = {allocator_get_scratch()};
     Error format_error = image_write_to_memory(image, &formatted, file_format);
-    Error output_error = ERROR_OR(format_error) file_write_entire(path, string_from_builder(formatted));
+    Error output_error = ERROR_AND(format_error) file_write_entire(path, string_from_builder(formatted));
 
     array_deinit(&formatted);
 

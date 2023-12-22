@@ -298,7 +298,7 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     }
 
     isize index = stable_array_insert(&manager->storage, (void**) &info);
-    i64 now = platform_universal_epoch_time();
+    i64 now = platform_epoch_time();
 
     ASSERT(params.name.size != 0);
 
@@ -507,7 +507,7 @@ EXPORT void resource_manager_frame_cleanup(Resource_Manager* manager)
 
 EXPORT void resource_manager_time_cleanup(Resource_Manager* manager)
 {
-    i64 now = platform_universal_epoch_time();
+    i64 now = platform_epoch_time();
     for(isize i = 0; i < manager->timed.size; i++)
     {
         Resource_Ptr* curr = &manager->timed.data[i];

@@ -198,16 +198,12 @@ EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo)
 
 EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
-    String_Builder escaped_path = {0};
-    array_init_backed(&escaped_path, allocator_get_scratch(), 512);
-    builder_assign(&escaped_path, path);
-
     String_Builder source = {allocator_get_scratch()};
 
     Platform_Directory_Entry* entries = NULL;
     isize entries_count = 0;
 
-    Platform_Error platform_error = platform_directory_list_contents_alloc(escaped_path.data, &entries, &entries_count, depth);
+    Platform_Error platform_error = platform_directory_list_contents_alloc(path, &entries, &entries_count, depth);
     Error error = error_from_platform(platform_error);
 
     if(error_is_ok(error))
@@ -221,14 +217,13 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
                 Error file_error = file_read_entire(file_path, &source);
 
                 todo_parse_source(todos, file_path, todo, string_from_builder(source));
-                error = ERROR_OR(error) file_error;
+                error = ERROR_AND(error) file_error;
             }
         }
     }
 
     platform_directory_list_contents_free(entries);
 
-    array_deinit(&escaped_path);
     array_deinit(&source);
 
     return error;
