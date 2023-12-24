@@ -5,15 +5,19 @@
 #include "gl_utils/gl.h"
 #include "gl_utils/gl_shader_util.h"
 #include "gl_utils/gl_pixel_format.h"
+#include "gl_utils/gl_debug_output.h"
 #include "resource_loading.h"
 #include "resources.h"
 
 
 
 typedef struct Render_Resource_Info {
+    Id id;
     Resource_Ptr resource;
-    bool is_loaded;
-    String_Builder name;
+    Name name;
+    i64 creation_etime;
+    i64 last_used_etime;
+    i64 resource_creation_etime;
 } Render_Resource_Info;
 
 typedef struct Render_Ptr {
@@ -68,18 +72,16 @@ typedef struct Render_Map
     isize height;
     
     GL_Pixel_Format pixel_format;
-
-    bool is_clamped;
 } Render_Map;
 
 typedef struct Render_Cubemap
 {
     Render_Resource_Info info;
     
-    Map_Info map_info;
     GLuint map;
 
-    GL_Pixel_Format pixel_format;
+    Map_Info map_infos[6];
+    GL_Pixel_Format pixel_formats[6];
     isize widths[6];
     isize heights[6];
 } Render_Cubemap;
@@ -121,6 +123,7 @@ typedef struct Render_Sub_Mesh {
 DEFINE_ARRAY_TYPE(Render_Sub_Mesh, Render_Sub_Mesh_Array);
 
 typedef struct Render_Mesh {
+    Render_Resource_Info info;
     Render_Sub_Mesh_Array submeshes;
     Render_Ptr shape;
 } Render_Mesh;
@@ -184,9 +187,6 @@ typedef struct Render_Scene_Layer {
 typedef struct Render_Command {
     Render_Environment* environment_or_null;
     Resource_Ptr mesh;
-    Resource_Ptr material;
-    i32 trinagles_from;
-    i32 triangles_to;
     Shader_Type shader;
     Transform transform;
 } Render_Command;
@@ -436,181 +436,229 @@ void render_shape_draw_using_skybox(Render_Shape mesh, Render_Shader* skybox_sha
     glDepthFunc(GL_LESS);
 }
 
-
-
-Render_Map render_map_from_map(Map map, Render* render)
+Render_Resource_Info render_info_from_resource_info(const Resource_Info* info)
 {
-    Render_Map out = {0};
+    Render_Resource_Info out = {0};
 
-    out.info = map.info;
-    
-    Resource_Info* info = NULL;
-    Image_Builder* image = image_get_with_info(map.image, &info);
-
-    if(image)
-    {
-        String path = string_from_builder(info->path);
-        Render_Image_Handle handle = {0};
-
-        //Scan if we have this image already
-        HANDLE_TABLE_FOR_EACH_BEGIN(render->images, Render_Image_Handle, h, Render_Image*, found_image)
-            if(string_is_equal(string_from_builder(found_image->path), path))
-            {
-                handle = h;
-                break;
-            }
-        HANDLE_TABLE_FOR_EACH_END
-
-        if(HANDLE_IS_NULL(handle))
-        {
-            LOG_INFO("RENDER", "Created map "STRING_FMT" (%lli channels)", STRING_PRINT(path), image_builder_channel_count(*image));
-            Render_Image render_image = {0};
-            render_image_init(&render_image, image_from_builder(*image), STRING("@TEMP"), 0);
-            builder_assign(&render_image.path, path);
-            handle = render_image_add(render, &render_image);
-        }
-
-        out.image = handle;
-    }
+    name_from_builder(&out.name, info->path);
+    out.creation_etime = platform_epoch_time();
+    out.resource_creation_etime = info->creation_etime;
+    out.id = id_generate();
+    out.resource.id = info->id;
+    out.resource.ptr = (Resource_Info*) info;
 
     return out;
 }
-
-Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Render* render)
+bool render_map_from_map(Id map_id, Render_Ptr* render_map, Render* render)
 {
-    String_Builder concatenated_paths = {render->alloc};
-
-    bool had_at_least_one_side = false;
-    Image images[6] = {0};
-    for(isize i = 0; i < 6; i++)
+    bool state = false;
+    Resource_Info* info = NULL;
+    Map* map = map_get_with_info(map_id, &info);
+    if(map == NULL)
+        LOG_ERROR("render", "invalid map_id submitted! %lli", (lli) map_id);
+    else
     {
-        Map* map = &cubemap.maps.faces[i];
-        Resource_Info* info = NULL;
-        Image_Builder* image = image_get_with_info(map->image, &info);
+        Image_Builder* image = image_get(map->image);
 
-        if(image)
+        if(image == NULL)
+            LOG_ERROR("render", "map with invalid image given to renderer. Map{name: %s, path: %s}", info->name.data, info->path.data);
+        else
         {
-            images[i] = image_from_builder(*image);
-            had_at_least_one_side = true;
-            String path = string_from_builder(info->path);;
-            builder_append(&concatenated_paths, path);
-        }
+            Render_Map out = {0};
+            out.info = render_info_from_resource_info(info);
+            
+            out.map_info = map->info;
+            out.height = image->height;
+            out.width = image->width;
+            out.pixel_format = gl_pixel_format_from_pixel_format((Image_Pixel_Format) image->pixel_format, image_builder_channel_count(*image));
 
-        array_push(&concatenated_paths, '\0');
+            if(out.pixel_format.unrepresentable)
+                LOG_ERROR("render", "map with invalid pixel format %i given. Map{name: %s, path: %s}", image->pixel_format, info->name.data, info->path.data);
+            else
+            {
+                glGenTextures(1, &out.map);
+                glBindTexture(GL_TEXTURE_2D, out.map);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexImage2D(GL_TEXTURE_2D, 0, out.pixel_format.internal_format, (GLsizei) out.width, (GLsizei) out.height, 0, out.pixel_format.format, out.pixel_format.type, image->pixels);
+                glGenerateMipmap(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, 0);
+
+                gl_check_error();
+                
+                Render_Map* addr = NULL;
+                stable_array_insert(&render->cubemaps, (void**) &addr);
+                *addr = out;
+                hash_ptr_insert(&render->hash_cubemaps, (u64) map_id, (u64) addr);
+
+                state = true;  
+            }
+        }
     }
-    
-    Render_Cubeimage_Handle handle = {0};
 
-    //Scan if we have this cubemap already
-    HANDLE_TABLE_FOR_EACH_BEGIN(render->images, Render_Cubeimage_Handle, h, Render_Image*, image_ptr)
-        if(builder_is_equal(image_ptr->path, concatenated_paths))
-        {
-            handle = h;
-            break;
-        }
-    HANDLE_TABLE_FOR_EACH_END
+    return state;
+}
 
-    if(HANDLE_IS_NULL(handle))
+bool render_cubemap_from_cubemap(Id cubemap_id, Render_Ptr* render_cubemap, Render* render)
+{
+    bool state = false;
+    Resource_Info* info = NULL;
+    Cubemap* cubemap = cubemap_get_with_info(cubemap_id, &info);
+    if(cubemap == NULL)
+        LOG_ERROR("render", "invalid cubemap_id submitted! %lli", (lli) cubemap_id);
+    else
     {
-        if(had_at_least_one_side)
+        Image_Builder* faces[6] = {NULL};
+        
+        bool had_null = false;
+        for(isize i = 0; i < 6; i++)
         {
-            Render_Cubeimage render_image = {0};
-            //String name = {0};
-            //map_get_name(&name, (Map_Ref*) &cubemap.maps.faces[0]);
-            //render_cubeimage_init(&render_image, images, name);
-            //SWAP(&render_image.path, &concatenated_paths, String_Builder);
+            faces[i] = image_get(cubemap->maps.faces[i].image);
+            had_null = had_null || faces[i] == NULL;
+        }
 
-            ASSERT_MSG(false, "@NOTE: something seems to be missing here!");
+        if(had_null)
+            LOG_ERROR("render", "Cubemap with invalid image/images given to renderer. Cubemap{name: %s, path: %s}", info->name.data, info->path.data);
+        else
+        {
+            Render_Cubemap out = {0};
+            out.info = render_info_from_resource_info(info);
+            
+            bool had_bad_format = false;
+            for(isize i = 0; i < 6; i++)
+            {
+                Image_Builder* face = faces[i];
+                out.map_infos[i] = cubemap->maps.faces[i].info;
+                out.heights[i] = face->height;
+                out.widths[i] = face->width;
+                out.pixel_formats[i] = gl_pixel_format_from_pixel_format((Image_Pixel_Format) face->pixel_format, image_builder_channel_count(*face));
+            
+                had_null = had_null || out.pixel_formats[i].unrepresentable;
+            }
 
-            handle = render_cubeimage_add(render, &render_image);
+            if(had_bad_format)
+                LOG_ERROR("render", "map with invalid pixel format given. Cubemap{name: %s, path: %s}", info->name.data, info->path.data);
+            else
+            {
+                glGenTextures(1, &out.map);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, out.map);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+                for (isize i = 0; i < 6; i++)
+                    glTexImage2D(GL_TEXTURE_2D, 0, out.pixel_formats[i].internal_format, (GLsizei) out.widths[i], (GLsizei) out.heights[i], 0, out.pixel_formats[i].format, out.pixel_formats[i].type, faces[i]->pixels);
+
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+                gl_check_error();
+
+                ASSERT_MSG(false, "@TODO");
+                render_cubemap->id = cubemap_id;
+                stable_array_insert(&render->cubemaps, (void**) &render_cubemap->ptr);
+                *(Render_Cubemap*) render_cubemap->ptr = out;
+                hash_ptr_insert(&render->hash_cubemaps, (u64) cubemap_id, (u64) render_cubemap->ptr);
+
+
+                state = true;  
+            }
         }
     }
-    
-    array_deinit(&concatenated_paths);
 
-    Render_Cubemap out = {0};
-    //@NOTE: not setting info!
-    out.image = handle;
-    return out;
+    return state;
+}
+
+
+Render_Shape* render_shape_from_shape(Id shape_id, Render* render)
+{
+    Render_Shape* out_ptr = NULL;
+    Resource_Info* info = NULL;
+    Shape_Assembly* shape = shape_get_with_info(shape_id, &info);
+    if(shape == NULL)
+        LOG_ERROR("render", "invalid shape_id submitted! %lli", (lli) shape_id);
+    else
+    {
+        Render_Shape out = {0};
+        out.info = render_info_from_resource_info(info);
+
+        glGenVertexArrays(1, &out.vao);
+        glGenBuffers(1, &out.vbo);
+        glGenBuffers(1, &out.ebo);
+  
+        glBindVertexArray(out.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, out.vbo);
+        glBufferData(GL_ARRAY_BUFFER, shape->vertices.size * sizeof(Vertex), shape->vertices.data, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out.ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, shape->triangles.size * sizeof(Triangle_Index), shape->triangles.data, GL_STATIC_DRAW);
+    
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
+    
+        glEnableVertexAttribArray(0);	
+        glEnableVertexAttribArray(1);	
+        glEnableVertexAttribArray(2);	
+    
+        stable_array_insert(&render->cubemaps, (void**) &out_ptr);
+        hash_ptr_insert(&render->hash_cubemaps, (u64) shape_id, (u64) out_ptr);
+        *out_ptr = out;
+
+        glBindVertexArray(0);   
+    }
+
+    return out_ptr;
+}
+
+
+Render_Material* render_material_from_material(Id mat_id, Render* render);
+
+bool render_mesh_from_mesh(Id mesh_id, Render_Ptr* render_mesh, Render* render)
+{
+    DEFINE_ARRAY_TYPE(Material*, Material_Ptr_Array);
+    DEFINE_ARRAY_TYPE(Render_Material*, Render_Material_Ptr_Array);
+
+    Render_Material_Ptr_Array render_materials = {0};
+    array_init_backed(&render_materials, allocator_get_scratch(), 16);
+
+    bool state = false;
+    Resource_Info* info = NULL;
+    Triangle_Mesh* mesh = triangle_mesh_get_with_info(mesh_id, &info);
+    if(mesh == NULL)
+        LOG_ERROR("render", "invalid mesh_id submitted! %lli", (lli) mesh_id);
+    else
+    {
+        Shape_Assembly* shape = shape_get(mesh->shape);
+
+        array_resize(&render_materials, mesh->materials.size);
+
+        for(isize i = 0; i < mesh->materials.size; i++)
+            render_materials.data[i] = render_material_from_material(mesh->materials.data[i], render);
+
+        Render_Shape* render_shape = render_shape_from_shape(mesh->shape, render);
+
+        if(shape == NULL)
+            LOG_ERROR("render", "mesh with invalid shape given to renderer. Triangle_Mesh{name: %s, path: %s}", info->name.data, info->path.data);
+        else
+        {
+            Render_Mesh out = {0};
+            out.info = render_info_from_resource_info(info);
+        }
+    }
+
+    array_deinit(&render_materials);
+    return state;
 }
 
 void render_map_unuse(Render_Map map)
 {
     (void) map;
     glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-
-void render_object_deinit(Render_Object* render_object, Render* render)
-{
-    render_mesh_remove(render, render_object->mesh);
-
-    for(isize i = 0; i < render_object->leaf_groups.size; i++)
-        render_pbr_material_deinit(&render_object->leaf_groups.data[i].material, render);
-
-    array_deinit(&render_object->leaf_groups);
-}
-
-void render_object_init(Render_Object* render_object, Render* render)
-{
-    render_object_deinit(render_object, render);
-    array_init(&render_object->leaf_groups, render->alloc);
-}
-
-void render_object_init_from_object(Render_Object* render_object, Render* render, Id object_ref)
-{
-    Resource_Info* info = NULL;
-    Triangle_Mesh* object = triangle_mesh_get_with_info(object_ref, &info);
-
-    render_object_init(render_object, render);
-
-    if(object)
-    {
-        String path = string_from_builder(info->path);
-        String name = string_from_builder(info->name);
-
-        Shape_Assembly* shape_assembly = shape_get(object->shape);
-        ASSERT(shape_assembly);
-        if(name.size == 0)
-            name = STRING("default");
-
-        if(shape_assembly)
-        {
-            Shape shape = {0};
-            shape.triangles = shape_assembly->triangles;
-            shape.vertices = shape_assembly->vertices;
-
-            Render_Mesh out_mesh = {0};
-            render_mesh_init_from_shape(&out_mesh, shape, name);
-    
-            render_object->mesh = render_mesh_add(render, &out_mesh);
-        }
-
-        LOG_INFO("RENDER", "Creating render object from obect at "STRING_FMT". (%lli groups)", STRING_PRINT(path), (lli) object->groups.size);
-        log_group_push();
-        for(isize i = 0; i < object->groups.size; i++)
-        {
-            Triangle_Mesh_Group* group = &object->groups.data[i];
-
-            ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
-            if(group->material_i1)
-            {
-                Id material_ref = object->materials.data[group->material_i1 - 1];
-                Material* material = material_get(material_ref);
-                if(material)
-                {
-                    Render_Object_Leaf_Group out_group = {0};
-                    render_pbr_material_init_from_material(&out_group.material, render, material_ref);
-                    out_group.triangles_from = group->triangles_from;
-                    out_group.triangles_to = group->triangles_to;
-
-                    array_push(&render_object->leaf_groups, out_group);
-                }
-            }
-            
-        }
-        log_group_pop();
-    }
 }
 
 

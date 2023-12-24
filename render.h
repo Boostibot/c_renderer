@@ -658,7 +658,7 @@ Error render_cubeimage_init_from_disk(Render_Cubeimage* render, String front, St
     Error error = {0};
     for (isize i = 0; i < 6; i++)
     {
-        error = ERROR_AND(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+        error = ERROR_AND(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, 0);
         face_images[i] = image_from_builder(face_image_builders[i]);
     }
     
@@ -1028,7 +1028,6 @@ void render_mesh_draw_using_uv_debug(Render_Mesh mesh, Render_Shader* uv_shader_
     render_mesh_draw(mesh);
     render_shader_unuse(uv_shader_debug);
 }
-
 
 void render_mesh_draw_using_blinn_phong(Render_Mesh mesh, Render_Shader* blin_phong_shader, Blinn_Phong_Params params, Render_Image diffuse)
 {
@@ -1410,7 +1409,6 @@ void render_object_init_from_object(Render_Object* render_object, Render* render
         {
             Triangle_Mesh_Group* group = &object->groups.data[i];
 
-            ASSERT_MSG(group->child_i1 == 0, "@TEMP: assuming only leaf groups");
             if(group->material_i1)
             {
                 Id material_ref = object->materials.data[group->material_i1 - 1];

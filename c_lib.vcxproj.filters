@@ -260,120 +260,63 @@
     <ClInclude Include="gl_utils\gl_frame_buffers.h">
       <Filter>gl_utils</Filter>
     </ClInclude>
+    <ClInclude Include="name.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="run_default.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="run_test.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="run_temp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="run.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\brdf_lut.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\depth_color.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\depth_color.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\depth_color.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\equi_to_cubemap.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\equi_to_cubemap.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\equi_to_cubemap.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\irradiance_convolution.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\irradiance_convolution.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\irradiance_convolution.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr_mapped.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr_mapped.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\pbr_mapped.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\prefilter.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\prefilter.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\prefilter.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\screen.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\screen.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\screen.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\skybox.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\skybox.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\skybox.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\solid_color.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\solid_color.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\solid_color.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.geom">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\uv_debug.vert">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="shaders\_template.frag_vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\blinn_phong.frag">
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\blinn_phong.frag_vert">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\blinn_phong.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\brdf_lut.frag">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="shaders\brdf_lut.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\depth_color.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\equi_to_cubemap.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\irradiance_convolution.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr_mapped.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\prefilter.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\screen.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\skybox.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\solid_color.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\uv_debug.frag_vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\instanced_texture.frag_vert">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

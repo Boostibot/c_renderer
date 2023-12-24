@@ -654,9 +654,9 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                             name_from_string(&group.name, material_name);
                             group.material_i1 = (i32) j + 1;
 
-                            group.next_i1 = group_desc->next_i1;
-                            group.child_i1 = group_desc->child_i1;
-                            group.depth = group_desc->depth;
+                            //group.next_i1 = group_desc->next_i1;
+                            //group.child_i1 = group_desc->child_i1;
+                            //group.depth = group_desc->depth;
 
                             group.triangles_from = group_desc->triangles_from;
                             group.triangles_to = group_desc->triangles_to;

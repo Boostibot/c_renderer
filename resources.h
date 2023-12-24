@@ -3,15 +3,10 @@
 
 #include "resource_descriptions.h"
 #include "resource.h"
+#include "name.h"
 #include "lib/file.h"
 #include "lib/serialize.h"
 
-#define RESOURCE_NAME_SIZE 64
-
-typedef struct Name {
-    char data[RESOURCE_NAME_SIZE];
-    isize size;
-} Name;
 
 //A list of concatenated filenames. Each filename is followed by a NULL character.
 //This makes it ideal for comunicating with io (NULL terminated strings) and reducing complexity
@@ -89,9 +84,9 @@ typedef struct Triangle_Mesh_Group {
     Name name;
 
     i32 material_i1;
-    i32 next_i1;
-    i32 child_i1;
-    i32 depth;
+    //i32 next_i1;
+    //i32 child_i1;
+    //i32 depth;
 
     i32 triangles_from;
     i32 triangles_to;
@@ -120,9 +115,6 @@ void resources_cleanup_framed();
 void resources_cleanup_timed();
 void resources_end_frame();
 void resources_check_reloads();
-
-String               string_from_name(const Name* name);
-void                 name_from_string(Name* name, String string);
 
 
 #define RESOURCE_FUNCTION_DECL(Type_Name, TYPE_ENUM, name)       \
@@ -384,28 +376,15 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         array_deinit(&out->vertex_shader_source);
     }
     
-    String string_from_name(const Name* name)
-    {
-        String out = {name->data, name->size};
-        return out;
-    }
-
-    void name_from_string(Name* name, String string)
-    {
-        String trimmed = string_safe_head(string, RESOURCE_NAME_SIZE);
-        memcpy(name->data, trimmed.data, trimmed.size);
-        name->size = trimmed.size;
-    }
-
     void resources_init(Resources* resources, Allocator* alloc)
     {
         resources_deinit(resources);
         resources->allocator = alloc;
     
-        #pragma warning(disable:4191)
+        //#pragma warning(disable:4191)
         //@NOTE: safe function pointer cast here but visual studo complains
         #define RESOURCE_INIT(Type_Name, TYPE_ENUM, type_name)  \
-            resource_manager_init(&resources->resources[TYPE_ENUM], alloc, sizeof(Type_Name), (Resource_Constructor) _##type_name##_init, (Resource_Destructor) _##type_name##_deinit, (Resource_Copy) _##type_name##_copy, #type_name, TYPE_ENUM);
+            resource_manager_init(&resources->resources[TYPE_ENUM], alloc, sizeof(Type_Name), (Resource_Constructor) (void*) _##type_name##_init, (Resource_Destructor) (void*) _##type_name##_deinit, (Resource_Copy) (void*) _##type_name##_copy, #type_name, TYPE_ENUM);
         
         RESOURCE_INIT(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
         RESOURCE_INIT(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
@@ -414,7 +393,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         RESOURCE_INIT(Material,        RESOURCE_TYPE_MATERIAL,         material)
         RESOURCE_INIT(Triangle_Mesh,   RESOURCE_TYPE_TRIANGLE_MESH,    triangle_mesh)
         RESOURCE_INIT(Shader,          RESOURCE_TYPE_SHADER,           shader)
-        #pragma warning(default:4191)
+        //#pragma warning(default:4191)
     }
 
     void resources_frame_cleanup()

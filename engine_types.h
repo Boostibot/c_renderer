@@ -55,7 +55,15 @@ typedef struct Transform
     Quat rotate;
 } Transform;
 
+typedef struct Uniform_Transform
+{
+    Vec3 translate;
+    f32 scale;
+    Quat rotate;
+} Uniform_Transform;
+
 DEFINE_ARRAY_TYPE(Vertex, Vertex_Array);
 DEFINE_ARRAY_TYPE(Triangle_Index, Triangle_Index_Array);
 DEFINE_ARRAY_TYPE(AABB, AABB_Array);
 DEFINE_ARRAY_TYPE(Transform, Transform_Array);
+
