@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "lib/log.h"
 #include "camera.h"
@@ -50,17 +50,15 @@ typedef struct Render_Shader2 {
     Render_Shader shader;
 } Render_Shader2;
 
-typedef struct Render_Shape
-{
-    Render_Resource_Info info;
-
+typedef struct Render_Vertex_Data {
     GLuint vao;
     GLuint vbo;
     GLuint ebo;
 
     GLuint vertex_count;
-    GLuint triangle_count;
-} Render_Shape;
+    GLuint index_count;
+    GLuint primitive_type;
+} Render_Vertex_Data;
 
 typedef struct Render_Map
 {
@@ -105,8 +103,6 @@ typedef struct Blinn_Phong_Params {
 
 typedef struct Render_Material
 {
-    Render_Resource_Info info;
-
     Material_Info material_info;
     Render_Ptr maps[MAP_TYPE_ENUM_COUNT];
     Render_Ptr cubemaps[CUBEMAP_TYPE_ENUM_COUNT];
@@ -114,24 +110,155 @@ typedef struct Render_Material
 
 DEFINE_ARRAY_TYPE(Render_Material, Render_Material_Array);
 
-typedef struct Render_Sub_Mesh {
-    Render_Ptr material;
-    isize triangles_from;
-    isize triangles_to;
-} Render_Sub_Mesh;
 
-DEFINE_ARRAY_TYPE(Render_Sub_Mesh, Render_Sub_Mesh_Array);
+//The main idea of this new rendere is to use the incredibly efficient
+// command buffer instanced calls (see below) to drastically reduce the number of draw calls,
+// while keeping as much flexibility as possible (ie not generting texture atlasses etc). 
+// 
+// We do this by keeping geometry in 'batches'. A batch is a single GL buffer 
+// containing aggragate of multiple different meshes or submeshes (groups in OBJ format - sponza has about a hundred). 
+// However a single model can be at most in one batch (ie we never split because too big).
+// The command buffer commands can dispatch any number of sub ranges of indeces (so meshes/groups in out batch) across any 
+// number of instances within single draw call. (So we can draw just the pot and plant from sponza.obj 100x at once!)
+// 
+// To use this we need:
+// 1) To group geometry into batches. 
+//      This is done by putting each object into its separate batch if big enough or appending to previously allocated batch
+//      untill big enough.
+// 
+// 2) To sort and group draw requests by shader/batch/obejct and then transform into the Render_Internal_Command structure.
+//      We simply sort.
+// 
+// 3) To set material 'uniforms' per model 
+//      We make a uniform buffer where instead of single field for each uniform we have an array of BLINN_PHONG_NUM_BATCH_ENTRIES.
+//      We then read at gl_DrawID to obtain our 'uniforms'
+// 
+// 4) To set samplers per model 
+//      Here are two solutions: 
+//          1 - use "bindless textures" and store them just like above - this is probably the more optimal solution
+//              and its call overhead is esentially zero
+//          2 - Have an array of sampler uniforms but since we are limited by the number of samplers we 'allocate' these slots
+//              so that we place indeces to the appropriate maps into the uniform buffer. This requires fancy code and might not be
+//              worth doing.
+//
+//
+
+
+//Render_Internal_Command can be understood as doing the following 
+// in a hypothetical opengl implementation:
+#if 0
+for(int draw_i = 0; draw_i < command_count; draw_i++)
+{
+    Render_Internal_Command c = commands[draw_i];
+    for(int instance_i = 0; instance_i < c.instance_count; instance_i++)
+    {
+        for(int i = c.indeces_from; i < c.indeces_from + c.indeces_count; i++)
+        {
+            GLuint gl_VertexID = indeces[i] + c.base_vertex;
+            GLuint gl_InstanceID = instance_i + c.base_instance;
+            GLuint gl_DrawID = draw_i;
+ 
+            GLuint gl_BaseVertex = c.base_vertex;
+            GLuint gl_BaseInstance = c.base_instance;
+ 
+            //... fire vertext shader and render ...
+        }
+    }
+}
+#endif
+
+typedef struct Render_Internal_Command {
+    GLuint indeces_count;
+    GLuint instance_count;
+    GLuint indeces_from;
+    GLint  base_vertex;   
+    GLuint base_instance;
+} Render_Internal_Command;
+
+enum {
+    BLINN_PHONG_BATCH_SIZE = 8,
+    BLINN_PHONG_NUM_BATCH_ENTRIES = 32,
+    BLINN_PHONG_NUM_INSTANCES = 4096,
+    BLINN_PHONG_NUM_COMMANDS = 128,
+    BLINN_PHONG_MIN_TRIANGLES = 1024,
+    BLINN_PHONG_MAX_TRIANGLES = 1024*1024,
+};
+
+typedef struct Render_Blinn_Phong_Vertex {
+    Vec3 pos;
+    Vec2 uv;
+    Vec3 norm;
+    Vec3 tan;
+    Vec3 bitan;
+} Render_Blinn_Phong_Vertex;
+
+
+typedef struct Render_Blinn_Phong_Instance {
+    Mat4 model;
+} Render_Blinn_Phong_Instance;
+
+typedef enum Render_Blinn_Phong_Uniforms {
+    RENDER_BP_UNIFORM_COLOR_DIFFUSE,
+    RENDER_BP_UNIFORM_COLOR_SPECULAR,
+    RENDER_BP_UNIFORM_COLOR_AMBIENT,
+    RENDER_BP_UNIFORM_SPECULAR_EXPONENT,
+
+    RENDER_BP_UNIFORM_ENUM_COUNT
+} Render_Blinn_Phong_Uniforms;
+
+typedef struct Render_Blinn_Phong_Material_Uniforms {
+    Vec3 diffuse_color;
+    Vec3 ambient_color;
+    Vec3 specular_color;
+    f32 specular_exponent;
+
+    uint8_t map_slot_diffuse;
+    uint8_t map_slot_specular;
+    uint8_t map_slot_ambient;
+    uint8_t map_slot_normal;
+} Render_Blinn_Phong_Material_Uniforms;
+
+typedef struct Render_Blinn_Phong_Buffers {
+    bool is_init;
+    GLuint command_buffer;
+    GLuint instance_buffer;
+    GLuint uniform_buffer;
+    i32 instance_count;
+    u8* uniform_buffer_block;
+    i32 uniform_buffer_size;
+    i32 uniform_buffer_offsets[RENDER_BP_UNIFORM_ENUM_COUNT];
+} Render_Blinn_Phong_Buffers;
+
+void render_init_blinn_phong_buffers(Render_Blinn_Phong_Buffers& buffers, Render_Shader shader)
+{
+    
+}
+
+typedef struct Render_Batch_Entry {
+    i32 indeces_from;
+    i32 indeces_to;
+    i32 reference_count; //zero if slot empty
+} Render_Batch_Entry;
+
+DEFINE_ARRAY_TYPE(Render_Batch_Entry, Render_Batch_Entry_Array);
+
+typedef struct Render_Batch {
+    Id id;
+    Render_Vertex_Data vertex_data;
+    Render_Batch_Entry batch_entries[BLINN_PHONG_NUM_BATCH_ENTRIES];
+    Name batch_names[BLINN_PHONG_NUM_BATCH_ENTRIES];
+} Render_Batch;
 
 typedef struct Render_Mesh {
+    Render_Material material;
+    Render_Ptr batch;
+    i32 batch_entry;
     Render_Resource_Info info;
-    Render_Sub_Mesh_Array submeshes;
-    Render_Ptr shape;
 } Render_Mesh;
 
 #define MAX_SINGLE_COLOR_MAPS 20
 #define MAX_PBR_UNIFORM_BUFFERS 10
 #define MAX_PHONG_UNIFORM_BUFFERS 10
-
 
 #define PBR_MAX_LIGHTS 4
 #define PBR_MAX_SPHERE_LIGHTS 128
@@ -176,28 +303,19 @@ typedef struct Render_Environment {
     f32 attentuation_strength;
 } Render_Environment;
 
-typedef struct Render_Mesh_Environment {
-    int xxx;
-} Render_Mesh_Environment;
-
 typedef struct Render_Scene_Layer {
     Name name;
 } Render_Scene_Layer;
 
 typedef struct Render_Command {
-    Render_Environment* environment_or_null;
+    Resource_Ptr environment;
     Resource_Ptr mesh;
     Shader_Type shader;
     Transform transform;
+    f32 layer;
 } Render_Command;
 
-
 DEFINE_ARRAY_TYPE(Render_Command, Render_Command_Array);
-
-typedef struct Render_Command_Buffer {
-    Render_Command_Array commands; 
-} Render_Command_Buffer;
-
 
 //global render state
 typedef struct Render
@@ -205,22 +323,23 @@ typedef struct Render
     Allocator* allocator;
     Allocator* scratch_allocator;
 
-    Render_Ptr selected_shaders[SHADER_TYPE_ENUM_COUNT];
+    Render_Shader shaders[SHADER_TYPE_ENUM_COUNT];
 
-    Render_Command_Buffer commands;
-    Render_Command_Buffer last_frame_commands;
+    Render_Blinn_Phong_Buffers blinn_phong_buffers;
+    Render_Command_Array commands;
+    Render_Command_Array last_frame_commands;
 
-    Stable_Array shaders;
     Stable_Array cubemaps;
     Stable_Array maps;
-    Stable_Array meshes;
-    Stable_Array materials;
+    Stable_Array batches;
+    Stable_Array geometries;
     
-    Hash_Ptr hash_shaders;
     Hash_Ptr hash_cubemaps;
     Hash_Ptr hash_maps;
-    Hash_Ptr hash_meshes;
-    Hash_Ptr hash_materials;
+    Hash_Ptr hash_batches;
+    Hash_Ptr hash_geometries;
+    Hash_Ptr model_to_geometries;
+
 } Render;
 
 void render_scene_begin();
@@ -232,27 +351,12 @@ Render_Mesh* render_mesh_query(Render* render, Id id)
     return NULL;
 }
 
-Render_Shader2* render_shader_query(Render* render, Id id)
-{
-    return NULL;
-}
-
 Render_Material* render_material_query(Render* render, Id id)
 {
     return NULL;
 }
 
-Render_Material* render_material_get(Render* render, Render_Ptr material)
-{
-    return NULL;
-}
-
-Render_Shape* render_shape_get(Render* render, Render_Ptr material)
-{
-    return NULL;
-}
-
-Render_Shader2* render_shaper_get(Render* render, Render_Ptr material)
+Render_Map* render_map_get(Render* render, Render_Ptr material)
 {
     return NULL;
 }
@@ -262,24 +366,270 @@ Mat4 mat4_from_transform(Transform transform)
     return mat4_scale_affine(mat4_translation(transform.translate), transform.translate);
 }
 
-void render_command_buffer(Render* render, Render_Command_Buffer commands)
+int _compare_u64(u64 a, u64 b)
 {
-    Render_Environment global_environment = {0};
-    Render_Shader2* selected_shaders[SHADER_TYPE_ENUM_COUNT] = {0};
+    if(a < b)
+        return -1;
+    else if(a > b)
+        return 1;
+    else
+        return 0;
+}
 
-    for(isize i = 0; i < SHADER_TYPE_ENUM_COUNT; i++)
-        selected_shaders[i] = render_shaper_get(render, render->selected_shaders[i]);
+Render_Ptr get_geometry(Render* render, Resource_Ptr model, isize* index_or_null)
+{
+    Render_Ptr out = {0};
 
-    for(isize i = 0; i < commands.commands.size; i++)
+    //Render_Geometry* geometry = (Render_Geometry*) hash_ptr_get(render->model_to_geometries, (u64) model.id, 0);
+    //if(geometry == NULL)
+    //{
+    //    
+    //    Resource_Info* info = NULL;
+    //    Trinagle* map = triangle_mesh_get_with_info(model.id, &info);
+    //}
+
+    //if(geometry != NULL)
+    //    ASSERT(geometry->info.resource.id == mesh.id);
+
+    if(index_or_null)
+        *index_or_null = 0;
+
+    return out;
+}
+
+typedef struct Validated_Render_Command {
+    Resource_Ptr environment;
+    Resource_Ptr mesh;
+    Shader_Type shader;
+    Transform transform;
+    f32 layer;
+    Render_Mesh* render_mesh;
+} Validated_Render_Command;
+
+DEFINE_ARRAY_TYPE(Validated_Render_Command, Validated_Render_Command_Array);
+
+//@TODO: only sort indeces to commands and not the commands themselves
+int _sort_validated_commands(const void* _a, const void* _b)
+{
+    Render* render = (Render*) NULL;
+    const Validated_Render_Command* a = (Validated_Render_Command*) _a;
+    const Validated_Render_Command* b = (Validated_Render_Command*) _b;
+
+    if(a->layer < b->layer)
+        return -1;
+    else if(a->layer > b->layer)
+        return 1;
+
+    int diff_shader = _compare_u64((u64) a->shader, (u64) b->shader);
+    if(diff_shader != 0)
+        return diff_shader;
+        
+    int diff_env = _compare_u64((u64) a->environment.id, (u64) b->environment.id);
+    if(diff_env != 0)
+        return diff_env;
+
+    if(a->render_mesh == b->render_mesh)
+        return 0;
+
+    int diff_mesh = _compare_u64((u64) a->render_mesh->batch.id, (u64) b->render_mesh->batch.id);
+    if(diff_mesh != 0)
+        return diff_mesh;
+}
+
+Validated_Render_Command_Array validate_render_commands(Render* render, Render_Command_Array commands)
+{
+    Validated_Render_Command_Array validated_commands = {render->scratch_allocator};
+    array_reserve(&validated_commands, commands.size);
+
+    for(isize i = 0; i < commands.size; i++)
     {
-        Render_Command* command = &commands.commands.data[i];
+        Render_Command* command = &commands.data[i];
+        Validated_Render_Command validated = {0};
+
+        validated.layer = command->layer;
+        validated.environment = command->environment;
+        validated.shader = command->shader;
+        validated.transform = command->transform;
+        validated.mesh = command->mesh;
+        validated.render_mesh = render_mesh_query(render, command->mesh.id);
+        
+        //No invlaid meshes! 
+        //@TODO: draw some debug things
+        ASSERT(validated.render_mesh);
+        if(validated.render_mesh)
+            array_push(&validated_commands, validated);
+        else
+            LOG_ERROR("render2", "invalid render command with mesh %llx", command->mesh.id);
+    }
+
+    return validated_commands;
+}
+Render_Batch* render_batch_get(Render* render, Render_Ptr)
+{
+    return NULL;
+}
+
+//@TODO: rename handles to handles (instead og shader.shader, map.map etc)
+
+void render_batch(Render* render, 
+        const Transform_Array transforms, 
+        const i32 batch_slot_indeces[BLINN_PHONG_NUM_BATCH_ENTRIES], 
+        const i32 batch_instance_indeces[BLINN_PHONG_NUM_BATCH_ENTRIES + 1],
+        
+        i32 batch_slots_used,
+        const Validated_Render_Command* validated, isize batch_from, isize batch_to)
+{
+    const Validated_Render_Command* representant = &validated[batch_from];
+    Render_Batch* batch = render_batch_get(render, representant->render_mesh->batch);
+    if(representant->shader != SHADER_TYPE_BLINN_PHONG)
+    {
+        Render_Internal_Command commands[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+        GLuint textures_difuse[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+        GLuint textures_normal[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+
+        //Prepare command buffer and texture data.
+        for(i32 i = 0; i < batch_slots_used; i++)
+        {
+            i32 batch_slot = batch_slot_indeces[i];
+
+            Render_Batch_Entry* batch_entry = &batch->batch_entries[batch_slot];
+            commands[i].indeces_from = batch_entry->indeces_from;
+            commands[i].indeces_count = batch_entry->indeces_to - batch_entry->indeces_from;
+            commands[i].base_instance = batch_instance_indeces[i];
+            commands[i].instance_count = batch_instance_indeces[i+1] - batch_instance_indeces[i];
+            commands[i].base_vertex = 0;
+
+            const Validated_Render_Command* batched = &validated[batch_from + batch_slot];
+            Render_Material* material = &batched->render_mesh->material;
+
+            //WAY TOO MANY GETS HERE!
+            Render_Map* diffuse = render_map_get(render, material->maps[MAP_TYPE_DIFFUSE]);
+            Render_Map* normal = render_map_get(render, material->maps[MAP_TYPE_NORMAL]);
+            //...
+            //@TODO: make into a forloop?
+            textures_difuse[i] = diffuse->map;
+            textures_normal[i] = normal->map;
+        }
+
+        Render_Blinn_Phong_Buffers* buffers = &render->blinn_phong_buffers;
+
+
+        glBindBuffer(GL_UNIFORM_BUFFER, buffers->uniform_buffer);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, buffers->uniform_buffer_size, buffers->uniform_buffer_block);
+
+        //@TODO: make into a forloop?
+        //@TODO: layout binding!
+        GLuint location_diffuse = render_shader_get_uniform_location(&render->shaders[SHADER_TYPE_BLINN_PHONG], "u_maps_diffuse");
+        GLuint location_normal = render_shader_get_uniform_location(&render->shaders[SHADER_TYPE_BLINN_PHONG], "u_maps_normal");
+        
+        GLint map_slots_used = 0;
+        GLint map_slots[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+
+        for(isize i = 0; i < batch_slots_used; i++)
+        {
+            map_slots[i] = map_slots_used++;
+            glActiveTexture(GL_TEXTURE0 + (GLenum) i);
+            glBindTexture(GL_TEXTURE_2D, textures_difuse[i]);
+        }
+        glUniform1iv(location_diffuse, (GLsizei) batch_slots_used, map_slots);
+
+        for(isize i = 0; i < batch_slots_used; i++)
+        {
+            map_slots[i] = map_slots_used++;
+            glActiveTexture(GL_TEXTURE0 + (GLenum) i);
+            glBindTexture(GL_TEXTURE_2D, textures_normal[i]);
+        }
+        glUniform1iv(location_diffuse, (GLsizei) batch_slots_used, map_slots);
+
+        //...
+    }
+    else
+        ASSERT(false);
+}
+
+void render_command_buffer(Render* render, Render_Command_Array commands)
+{
+    if(commands.size == 0)
+        return;
+
+    Render_Environment global_environment = {0};
+
+    Validated_Render_Command_Array validated = validate_render_commands(render, commands);
+    qsort(validated.data, sizeof *validated.data, validated.size, _sort_validated_commands);
+
+    DEFINE_ARRAY_TYPE(Mat4, Mat4_Array);
+    
+    i32              batch_slot_indeces[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+    i32              batch_instance_indeces[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+    Transform_Array  batch_transforms[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+
+    for(isize i = 0; i < STATIC_ARRAY_SIZE(batch_transforms); i++)
+    {
+        array_init(&batch_transforms[i], render->scratch_allocator);
+        array_reserve(&batch_transforms[i], 32);
+    }
+    
+    bool end_batch = false;
+    isize last_command_i = -1;
+    //Layer and shader
+    for(isize command_i = 0; command_i < validated.size; last_command_i = command_i)
+    {
+        
+        //Environment
+        //for(; command_i < validated.size; )
+        {
+            Validated_Render_Command* representant = &validated.data[command_i];
+
+            isize batch_from = 0;
+            isize batch_to = 0;
+            i32   batch_index = 0;
+        
+            for(isize i = 0; i < STATIC_ARRAY_SIZE(batch_transforms); i++)
+                array_clear(&batch_transforms[i]);
+
+            batch_from = command_i;
+
+            //Element
+            for(; command_i < validated.size; command_i++)
+            {
+                Validated_Render_Command* curr = &validated.data[command_i];
+                ASSERT(curr->render_mesh != NULL);
+
+                //If is different mesh test just how much different it is.
+                //If the curr_render_mesh is in different batch storage break.
+                if(representant->mesh.id != curr->mesh.id)
+                {
+                    if(curr->render_mesh->batch.id != representant->render_mesh->batch.id)
+                        break;
+                    else
+                        batch_index += 1;
+                }
+
+                //If is category so different that it needs another batch stop.
+                if(curr->shader != representant->shader 
+                    || curr->layer != representant->layer)
+                    break;
+
+
+                //Append the transform
+                array_push(&batch_transforms[batch_index], curr->transform);
+                batch_slot_indeces[batch_index] = curr->render_mesh->batch_entry;
+            }
+
+            batch_to = command_i;
+            render_batch(render, batch_transforms, batch_indeces, batch_index + 1, validated.data, batch_from, batch_to);
+        }
+
+        ASSERT_MSG(last_command_i != command_i, "stuck!");
+    }
+
+    for(isize i = 0; i < commands.size; i++)
+    {
+        Render_Command* command = &commands.data[i];
 
         Transform transform = command->transform;
-        Render_Environment* environment = command->environment_or_null;
+        Render_Environment* environment = &global_environment;
         Render_Mesh* render_mesh = render_mesh_query(render, command->mesh.id);
-
-        if(environment == NULL)
-            environment = &global_environment;
 
         if(render_mesh == NULL)
         {

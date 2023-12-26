@@ -1,0 +1,59 @@
+#version 460 core
+
+#ifdef FRAG
+    out vec4 o_color;
+    
+    in VS_OUT
+    {
+        vec3 frag_pos;
+        vec2 uv;
+        vec3 norm;
+        flat int batch_index;
+    } _in;
+
+    #define MAX_BATCH 8
+
+    uniform sampler2D u_map_diffuses[MAX_BATCH];
+    
+    uniform Params 
+    {
+        vec3 color_diffuse[MAX_BATCH];
+        vec3 color_specular[MAX_BATCH];
+    };
+
+    void main()
+    {
+        int bi = _in.batch_index;
+        o_color = texture(u_map_diffuses[bi], _in.uv);
+    }
+#endif 
+
+#ifdef VERT
+    layout (location = 0) in vec3 a_pos;
+    layout (location = 1) in vec2 a_uv;
+    layout (location = 5) in mat4 a_model;
+    
+    uniform Environment
+    {
+        mat4 u_projection;
+        mat4 u_view;
+    };
+    
+    out VS_OUT
+    {
+        vec3 frag_pos;
+        vec2 uv;
+        vec3 norm;
+        int batch_index;
+    } _out;
+
+    void main()
+    {
+        vec4 world_pos = u_projection * u_view * a_model * vec4(a_pos, 1.0);
+        gl_Position = world_pos;
+        _out.frag_pos = world_pos.xyz;
+        _out.uv = a_uv;
+        _out.norm = vec3(1, 0, 0);
+        _out.batch_index = gl_DrawID;
+    } 
+#endif

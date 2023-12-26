@@ -670,6 +670,7 @@ Error render_cubeimage_init_from_disk(Render_Cubeimage* render, String front, St
     return error;
 }
 
+
 void render_mesh_init(Render_Mesh* mesh, const Vertex* vertices, isize vertices_count, const Triangle_Index* triangles, isize triangles_count, String name)
 {
     memset(mesh, 0, sizeof *mesh);

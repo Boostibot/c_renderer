@@ -715,6 +715,89 @@ Mat4 mat4_from_transform(Transform trans)
 {
     return mat4_translate(mat4_scaling(trans.scale), trans.translate);
 }
+void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize trinagles_count)
+{
+    isize vertex_count_before = shape->vertices.size;
+    isize triangle_count_before = shape->triangles.size;
+
+    array_append(&shape->vertices, vertices, vertices_count);
+    array_resize(&shape->triangles, triangle_count_before + trinagles_count);
+    for(isize i = 0; i < trinagles_count; i++)
+    {
+        Triangle_Index index = indeces[i];
+        CHECK_BOUNDS(index.vertex_i[0], vertices_count);
+        CHECK_BOUNDS(index.vertex_i[1], vertices_count);
+        CHECK_BOUNDS(index.vertex_i[2], vertices_count);
+        
+        Triangle_Index offset_index = index;
+        offset_index.vertex_i[0] += (u32) vertex_count_before;
+        offset_index.vertex_i[1] += (u32) vertex_count_before;
+        offset_index.vertex_i[2] += (u32) vertex_count_before;
+
+        *array_get(shape->triangles, triangle_count_before + i) = offset_index;
+        //shape->triangles.data[vertex_count_before + i] = offset_index;
+    }
+}
+typedef struct Render_Batch_Group {
+    i32 indeces_from;
+    i32 indeces_to;
+
+    Render_Image texture;
+} Render_Batch_Group;
+
+DEFINE_ARRAY_TYPE(Render_Batch_Group, Render_Batch_Group_Array);
+
+typedef struct Render_Batch_Mesh {
+    Render_Mesh mesh;
+    Render_Batch_Group_Array groups;
+} Render_Batch_Mesh;
+
+GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, const char* const* querried_names, GLint* offsets_or_null, GLint* sizes_or_null, GLuint querried_count, GLint* block_size_or_null)
+{
+    GLuint blockIndex = glGetUniformBlockIndex(program_handle, block_name);
+    if(block_size_or_null)
+        glGetActiveUniformBlockiv(program_handle, blockIndex, GL_UNIFORM_BLOCK_DATA_SIZE, block_size_or_null);
+
+    enum {max_indeces = 256};
+    if(querried_count > max_indeces)
+        querried_count = max_indeces;
+
+    GLuint indices[max_indeces] = {0};
+    glGetUniformIndices(program_handle, querried_count, querried_names, indices);
+
+    if(offsets_or_null)
+        glGetActiveUniformsiv(program_handle, querried_count, indices, GL_UNIFORM_OFFSET, offsets_or_null);
+
+    if(sizes_or_null)
+        glGetActiveUniformsiv(program_handle, querried_count, indices, GL_UNIFORM_SIZE, sizes_or_null);
+
+    return blockIndex;
+}
+
+GLint print_all_active_uniforms(GLuint program)
+{
+    GLint count = 0;
+
+    GLint size = 0; // size of the variable
+    GLenum type = 0; // type of the variable (float, vec3 or mat4, etc)
+
+    enum { bufSize = 16 }; // maximum name length
+    GLchar name[bufSize] = {0}; // variable name in GLSL
+    GLsizei length = 0; // name length
+
+    glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
+    printf("Active Uniforms: %d\n", count);
+
+    for (GLint i = 0; i < count; i++)
+    {
+        glGetActiveUniform(program, (GLuint)i, bufSize, &length, &size, &type, name);
+
+        printf("Uniform #%d Type: %u Name: %s\n", i, type, name);
+    }
+
+    return count;
+}
+
 
 void run_func(void* context)
 {
@@ -775,12 +858,16 @@ void run_func(void* context)
     Shape screen_quad = {0};
     Shape unit_quad = {0};
     Shape unit_cube = {0};
+    
+    Shape combined_shape = {0};
 
     Render_Mesh render_uv_sphere = {0};
     Render_Mesh render_cube_sphere = {0};
     Render_Mesh render_screen_quad = {0};
     Render_Mesh render_cube = {0};
     Render_Mesh render_quad = {0};
+
+    Render_Batch_Mesh render_batch = {0};
 
     Render_Image image_floor = {0};
     Render_Image image_debug = {0};
@@ -794,6 +881,10 @@ void run_func(void* context)
     Render_Shader shader_blinn_phong = {0};
     Render_Shader shader_skybox = {0};
     Render_Shader shader_instanced = {0};
+    Render_Shader shader_instanced_batched = {0};
+
+    Render_Mesh* render_indirect_meshes[] = {&render_cube, &render_uv_sphere};
+    Render_Mesh render_indirect_mesh = {0};
 
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
@@ -801,11 +892,14 @@ void run_func(void* context)
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     
     enum { 
-        num_instances_x = 100,
-        num_instances_y = 100,
+        num_instances_x = 10,
+        num_instances_y = 10,
         num_instances = num_instances_x * num_instances_y, 
+        max_commands = 128,
         model_slot = 5 
     };
+    
+
     GLuint instanceVBO = 0;
     {
         DEFINE_ARRAY_TYPE(Mat4, Mat4_Array);
@@ -825,14 +919,38 @@ void run_func(void* context)
             Mat4 mat = mat4_from_transform(transform);
             array_push(&models, mat);
         }
-        glGenBuffers(1, &instanceVBO);
-        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(Mat4) * models.size, models.data, GL_STATIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, 0); 
-        gl_check_error();
+
+        glCreateBuffers(1, &instanceVBO);
+        glNamedBufferData(instanceVBO, sizeof(Mat4) * models.size, models.data, GL_STATIC_DRAW);
 
         array_deinit(&models);
     }
+    
+    typedef  struct {
+        GLuint count;
+        GLuint instance_count;
+        GLuint first_index;
+        GLint  base_vertex;
+        GLuint base_instance;
+    } Draw_Elements_Indirect_Command;
+    
+    GLuint command_buffer = 0;
+    {
+        glCreateBuffers(1, &command_buffer);
+        glNamedBufferData(command_buffer, sizeof(Draw_Elements_Indirect_Command) * max_commands, NULL, GL_DYNAMIC_DRAW);
+    }
+    
+    typedef  struct {
+        Mat4 view;
+        Mat4 projection;
+    } Uniform_Buffer_Data;
+
+    GLuint uniform_buffer = 0;
+    const char *uniform_names[] = { "u_projection", "u_view"};
+    GLint uniform_offsets[2] = {0};
+    GLuint uniform_block_index = 0;
+    u8 uniform_block_buffer[512] = {0};
+    GLint uniform_block_size = 0;
 
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
@@ -867,10 +985,29 @@ void run_func(void* context)
             error = ERROR_AND(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.frag_vert"));
             error = ERROR_AND(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.frag_vert"));
             error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.frag_vert"));
-                
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.frag_vert"));
+
+            {
+                uniform_block_index = get_uniform_block_info(shader_instanced_batched.shader, "Environment", uniform_names, uniform_offsets, NULL, STATIC_ARRAY_SIZE(uniform_names), &uniform_block_size);
+                GLint max_textures = 0;
+                glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_textures);
+                LOG_INFO("app", "max textures %i", max_textures);
+
+                ASSERT(uniform_block_size <= sizeof(uniform_block_buffer));
+
+                GLuint binding_point = 10;
+                glUniformBlockBinding(shader_instanced_batched.shader, uniform_block_index, binding_point);
+
+                glGenBuffers(1, &uniform_buffer);
+                glBindBuffer(GL_UNIFORM_BUFFER, uniform_buffer);
+                glBufferData(GL_UNIFORM_BUFFER, uniform_block_size, NULL, GL_DYNAMIC_DRAW);
+                glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, uniform_buffer);
+            }
+
             PERF_COUNTER_END(shader_load_counter);
             ASSERT(error_is_ok(error));
         }
+
 
         if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
             || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
@@ -915,8 +1052,37 @@ void run_func(void* context)
             ASSERT(error_is_ok(error));
 
             {
+                shape_deinit(&combined_shape);
+
+                //Shape combined_shape_other = {0};
+                //shape_append(&combined_shape_other, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.triangles.data, unit_cube.triangles.size);
+                //shape_append(&combined_shape_other, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.triangles.data, cube_sphere.triangles.size);
+
+                Render_Batch_Group group_cube_sphere = {0};
+                group_cube_sphere.indeces_from = (i32) combined_shape.triangles.size*3;
+                shape_append(&combined_shape, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.triangles.data, cube_sphere.triangles.size);
+                group_cube_sphere.indeces_to = (i32) combined_shape.triangles.size*3;
+                
+                Render_Batch_Group group_unit_cube = {0};
+                group_unit_cube.indeces_from = (i32) combined_shape.triangles.size*3;
+                shape_append(&combined_shape, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.triangles.data, unit_cube.triangles.size);
+                group_unit_cube.indeces_to = (i32) combined_shape.triangles.size*3;
+
+                //array_last(combined_shape.vertices)->tan = vec3_of(0);
+                render_mesh_init_from_shape(&render_batch.mesh, combined_shape, STRING("render_batch.mesh"));
+
+                group_unit_cube.texture = image_floor;
+                group_cube_sphere.texture = image_debug;
+
+                array_push(&render_batch.groups, group_cube_sphere);
+                array_push(&render_batch.groups, group_unit_cube);
+
+            }
+
+            {
+                Render_Mesh* mesh = &render_batch.mesh;
                 glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-                glBindVertexArray(render_cube.vao);
+                glBindVertexArray(mesh->vao);
                 glVertexAttribPointer(model_slot + 0, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[0]));
                 glVertexAttribPointer(model_slot + 1, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[1]));
                 glVertexAttribPointer(model_slot + 2, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[2]));
@@ -977,17 +1143,49 @@ void run_func(void* context)
 
             //render instanced sphere
             {
-                glBindVertexArray(render_cube.vao);
+                Draw_Elements_Indirect_Command commands[2] = {0};
+
+                u32 instance_step = num_instances / (u32) render_batch.groups.size;
+                for(u32 i = 0; i < (u32) render_batch.groups.size; i++)
+                {
+                    Render_Batch_Group* group = &render_batch.groups.data[i];
+                    commands[i].first_index = group->indeces_from;
+                    commands[i].count = group->indeces_to - group->indeces_from;
+                    commands[i].base_instance = instance_step * i;
+                    commands[i].instance_count = instance_step;
+                    commands[i].base_vertex = 0;
+                }
+
+                render_shader_use(&shader_instanced_batched);
+
+                memcpy(uniform_block_buffer + uniform_offsets[0], &projection, sizeof(projection));
+                memcpy(uniform_block_buffer + uniform_offsets[1], &view, sizeof(view));
+                
+                glBindBuffer(GL_UNIFORM_BUFFER, uniform_buffer);
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, uniform_block_size, uniform_block_buffer);
+
+                //render_shader_set_mat4(&shader_instanced_batched, "u_projection", projection);
+                //render_shader_set_mat4(&shader_instanced_batched, "u_view", view);
+
+                GLuint map_location = render_shader_get_uniform_location(&shader_instanced_batched, "u_map_diffuses");
+                GLint map_slots[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, /* ... */};
+                glUniform1iv(map_location, (GLsizei) render_batch.groups.size, map_slots);
+
+                for(isize i = 0; i < render_batch.groups.size; i++)
+                {
+                    Render_Batch_Group* group = &render_batch.groups.data[i];
+                    render_image_use(&group->texture, i);
+                }
+                
+                glBindBuffer(GL_DRAW_INDIRECT_BUFFER , command_buffer);
+                glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(commands), commands);
+
+                glBindVertexArray(render_batch.mesh.vao);
                 glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-                render_shader_use(&shader_instanced);
 
-                render_shader_set_mat4(&shader_instanced, "u_projection", projection);
-                render_shader_set_mat4(&shader_instanced, "u_view", view);
-
-                render_image_use(&image_debug, 0);
-                render_shader_set_i32(&shader_instanced, "u_map_diffuse", 0);
-    
-                glDrawElementsInstanced(GL_TRIANGLES, render_cube.triangle_count*3, GL_UNSIGNED_INT, 0, num_instances);
+                glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) render_batch.groups.size, 0);
+                //glDrawElementsInstanced(GL_TRIANGLES, render_batch.mesh.triangle_count*3, GL_UNSIGNED_INT, NULL, num_instances);
+                
             }
 
             //render skybox
