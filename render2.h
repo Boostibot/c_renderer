@@ -211,11 +211,6 @@ typedef struct Render_Blinn_Phong_Material_Uniforms {
     Vec3 ambient_color;
     Vec3 specular_color;
     f32 specular_exponent;
-
-    uint8_t map_slot_diffuse;
-    uint8_t map_slot_specular;
-    uint8_t map_slot_ambient;
-    uint8_t map_slot_normal;
 } Render_Blinn_Phong_Material_Uniforms;
 
 typedef struct Render_Blinn_Phong_Buffers {
@@ -224,14 +219,20 @@ typedef struct Render_Blinn_Phong_Buffers {
     GLuint instance_buffer;
     GLuint uniform_buffer;
     i32 instance_count;
-    u8* uniform_buffer_block;
     i32 uniform_buffer_size;
-    i32 uniform_buffer_offsets[RENDER_BP_UNIFORM_ENUM_COUNT];
 } Render_Blinn_Phong_Buffers;
 
 void render_init_blinn_phong_buffers(Render_Blinn_Phong_Buffers& buffers, Render_Shader shader)
 {
     
+}
+
+void render_blinn_phong_buffers_uniforms_fill(const Render_Material* materials, isize count)
+{
+    for(isize i = 0; i < count; i++)
+    {
+        
+    }
 }
 
 typedef struct Render_Batch_Entry {
@@ -477,13 +478,14 @@ void render_batch(Render* render,
         const i32 batch_instance_indeces[BLINN_PHONG_NUM_BATCH_ENTRIES + 1],
         
         i32 batch_slots_used,
-        const Validated_Render_Command* validated, isize batch_from, isize batch_to)
+        Validated_Render_Command* validated, isize batch_from, isize batch_to)
 {
-    const Validated_Render_Command* representant = &validated[batch_from];
+    Validated_Render_Command* representant = &validated[batch_from];
     Render_Batch* batch = render_batch_get(render, representant->render_mesh->batch);
     if(representant->shader != SHADER_TYPE_BLINN_PHONG)
     {
         Render_Internal_Command commands[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
+        Render_Mesh* render_meshes[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
         GLuint textures_difuse[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
         GLuint textures_normal[BLINN_PHONG_NUM_BATCH_ENTRIES] = {0};
 
@@ -499,8 +501,9 @@ void render_batch(Render* render,
             commands[i].instance_count = batch_instance_indeces[i+1] - batch_instance_indeces[i];
             commands[i].base_vertex = 0;
 
-            const Validated_Render_Command* batched = &validated[batch_from + batch_slot];
+            Validated_Render_Command* batched = &validated[batch_from + batch_slot];
             Render_Material* material = &batched->render_mesh->material;
+            render_meshes[i] = (Render_Mesh*) &batched->render_mesh;
 
             //WAY TOO MANY GETS HERE!
             Render_Map* diffuse = render_map_get(render, material->maps[MAP_TYPE_DIFFUSE]);
@@ -513,9 +516,10 @@ void render_batch(Render* render,
 
         Render_Blinn_Phong_Buffers* buffers = &render->blinn_phong_buffers;
 
-
         glBindBuffer(GL_UNIFORM_BUFFER, buffers->uniform_buffer);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, buffers->uniform_buffer_size, buffers->uniform_buffer_block);
+
+        //memcpy(buffers->uniform_buffer_offsets[RENDER_BP_UNIFORM_COLOR_AMBIENT]
 
         //@TODO: make into a forloop?
         //@TODO: layout binding!

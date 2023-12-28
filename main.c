@@ -4,6 +4,7 @@
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
 #pragma warning(disable:4702) //Dissable "unrelachable code"
 #pragma warning(disable:4820) //Dissable "Padding added to struct" 
+#pragma warning(disable:4324) //Dissable "structure was padded due to alignment specifier" (when using explicti modifer to align struct)
 #pragma warning(disable:4255) //Dissable "no function prototype given: converting '()' to '(void)"  
 #pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
 #pragma warning(disable:4201) //Dissable "nonstandard extension used: nameless struct/union" 
@@ -279,90 +280,6 @@ void run_test_func(void* context);
 void error_func(void* context, Platform_Sandbox_Error error);
 
 
-#undef near
-#undef far
-
-int main()
-{
-    
-
-
-    platform_init();
-    Malloc_Allocator static_allocator = {0};
-    malloc_allocator_init(&static_allocator);
-    allocator_set_static(&static_allocator.allocator);
-    
-    Malloc_Allocator malloc_allocator = {0};
-    malloc_allocator_init_use(&malloc_allocator, 0);
-    
-    error_system_init(&static_allocator.allocator);
-    file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator);
-
-    Debug_Allocator debug_alloc = {0};
-    debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
-
-    GLFWallocator allocator = {0};
-    allocator.allocate = glfw_malloc_func;
-    allocator.reallocate = glfw_realloc_func;
-    allocator.deallocate = glfw_free_func;
-    allocator.user = &malloc_allocator;
- 
-    glfwInitAllocator(&allocator);
-    glfwSetErrorCallback(glfw_error_func);
-    TEST_MSG(glfwInit(), "Failed to init glfw");
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);  
- 
-    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-    ASSERT(monitor && mode);
-    if(monitor != NULL && mode != NULL)
-    {
-        glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-        glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-        glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-        glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-    }
- 
-    GLFWwindow* window = glfwCreateWindow(1600, 900, "Render", NULL, NULL);
-    TEST_MSG(window != NULL, "Failed to make glfw window");
-
-    App_State app = {0};
-    glfwSetWindowUserPointer(window, &app);
-    glfwMakeContextCurrent(window);
-    gladSetGLOnDemandLoader((GLADloadfunc) glfwGetProcAddress);
-
-    gl_debug_output_enable();
-
-    #ifndef RUN_TESTS
-    platform_exception_sandbox(
-        run_func, window, 
-        error_func, window);
-    #else
-    platform_exception_sandbox(
-        run_test_func, window, 
-        error_func, window);
-    #endif
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
-    debug_allocator_deinit(&debug_alloc);
-    
-    file_logger_deinit(&global_logger);
-    error_system_deinit();
-
-    //@TODO: fix
-    ASSERT(malloc_allocator.bytes_allocated == 0);
-    malloc_allocator_deinit(&malloc_allocator);
-    platform_deinit();
-
-    return 0;    
-}
-
-
 int perf_counter_compare_total_time_func(const void* a_, const void* b_)
 {
     Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
@@ -387,11 +304,6 @@ int perf_counter_compare_file_func(const void* a_, const void* b_)
 
     return res;
 }
-
-//void log_perf_counter(const char* log_module, Log_Type log_type)
-//{
-//
-//}
 
 void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_name)
 {
@@ -473,81 +385,81 @@ void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_n
     array_deinit(&counters);
 }
 
-void log_todos(const char* log_module, Log_Type log_type, const char* marker)
+int main()
 {
-    Todo_Array todos = {0};
-    todo_parse_folder(&todos, STRING("./"), string_make(marker), 1);
-
-    String common_path_prefix = {0};
-    for(isize i = 0; i < todos.size; i++)
-    {
-        String curent_path = string_from_builder(todos.data[i].path);
-        if(common_path_prefix.data == NULL)
-            common_path_prefix = curent_path;
-        else
-        {
-            isize matches_to = 0;
-            isize min_size = MIN(common_path_prefix.size, curent_path.size);
-            for(; matches_to < min_size; matches_to++)
-            {
-                if(common_path_prefix.data[matches_to] != curent_path.data[matches_to])
-                    break;
-            }
-
-            common_path_prefix = string_safe_head(common_path_prefix, matches_to);
-        }
-    }
+    platform_init();
+    Malloc_Allocator static_allocator = {0};
+    malloc_allocator_init(&static_allocator);
+    allocator_set_static(&static_allocator.allocator);
     
-    LOG(log_module, log_type, "Logging TODOs (%lli):", (lli) todos.size);
-    log_group_push();
-    for(isize i = 0; i < todos.size; i++)
-    {
-        Todo todo = todos.data[i];
-        String path = string_from_builder(todo.path);
-        
-        if(path.size > common_path_prefix.size)
-            path = string_safe_tail(path, common_path_prefix.size);
-
-        if(todo.signature.size > 0)
-            LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
-        else
-            LOG(log_module, log_type, "%-20s %4lli %s %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
-    }
-    log_group_pop();
+    Malloc_Allocator malloc_allocator = {0};
+    malloc_allocator_init_use(&malloc_allocator, 0);
     
-    for(isize i = 0; i < todos.size; i++)
-        todo_deinit(&todos.data[i]);
+    error_system_init(&static_allocator.allocator);
+    file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator);
 
-    array_deinit(&todos);
-}
+    Debug_Allocator debug_alloc = {0};
+    debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
+    GLFWallocator allocator = {0};
+    allocator.allocate = glfw_malloc_func;
+    allocator.reallocate = glfw_realloc_func;
+    allocator.deallocate = glfw_free_func;
+    allocator.user = &malloc_allocator;
+ 
+    glfwInitAllocator(&allocator);
+    glfwSetErrorCallback(glfw_error_func);
+    TEST_MSG(glfwInit(), "Failed to init glfw");
 
-const char* format_memory_unit_ephemeral(isize bytes)
-{
-    isize unit = 1;
-    static String_Builder formatted = {0};
-    if(formatted.allocator == NULL)
-        array_init(&formatted, allocator_get_static());
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);  
+ 
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    ASSERT(monitor && mode);
+    if(monitor != NULL && mode != NULL)
+    {
+        glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+        glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+        glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+        glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    }
+ 
+    GLFWwindow* window = glfwCreateWindow(1600, 900, "Render", NULL, NULL);
+    TEST_MSG(window != NULL, "Failed to make glfw window");
 
-    const char* unit_text = get_memory_unit(bytes, &unit);
-    f64 ratio = (f64) bytes / (f64) unit;
-    format_into(&formatted, "%.1lf %s", ratio, unit_text);
+    App_State app = {0};
+    glfwSetWindowUserPointer(window, &app);
+    glfwMakeContextCurrent(window);
+    gladSetGLOnDemandLoader((GLADloadfunc) glfwGetProcAddress);
 
-    return formatted.data;
-}
+    gl_debug_output_enable();
 
-void log_allocator_stats(const char* log_module, Log_Type log_type, Allocator_Stats stats)
-{
-    String_Builder formatted = {0};
-    array_init_backed(&formatted, NULL, 512);
+    #ifndef RUN_TESTS
+    platform_exception_sandbox(
+        run_func, window, 
+        error_func, window);
+    #else
+    platform_exception_sandbox(
+        run_test_func, window, 
+        error_func, window);
+    #endif
+    glfwDestroyWindow(window);
+    glfwTerminate();
 
-    LOG(log_module, log_type, "bytes_allocated: %s", format_memory_unit_ephemeral(stats.bytes_allocated));
-    LOG(log_module, log_type, "max_bytes_allocated: %s", format_memory_unit_ephemeral(stats.max_bytes_allocated));
-    LOG(log_module, log_type, "allocation_count: %lli", (lli) stats.allocation_count);
-    LOG(log_module, log_type, "deallocation_count: %lli", (lli) stats.deallocation_count);
-    LOG(log_module, log_type, "reallocation_count: %lli", (lli) stats.reallocation_count);
+    debug_allocator_deinit(&debug_alloc);
+    
+    file_logger_deinit(&global_logger);
+    error_system_deinit();
 
-    array_deinit(&formatted);
+    //@TODO: fix
+    ASSERT(malloc_allocator.bytes_allocated == 0);
+    malloc_allocator_deinit(&malloc_allocator);
+    platform_deinit();
+
+    return 0;    
 }
 
 void break_debug_allocator()
@@ -600,13 +512,6 @@ void break_debug_allocator()
         }
     }
     debug_allocator_deinit(&debug_alloc);
-}
-
-Error render_shader_init_from_disk_compat(Render_Shader* shader, String vert, String frag, String name)
-{
-    (void) name;
-    LOG_INFO("APP", "loading shader: " STRING_FMT, STRING_PRINT(vert));
-    return render_shader_init_from_disk_split(shader, vert, frag, STRING(""));
 }
 
 void process_first_person_input(App_State* app, f64 start_frame_time)
@@ -742,7 +647,14 @@ typedef struct Render_Batch_Group {
     i32 indeces_from;
     i32 indeces_to;
 
-    Render_Image texture;
+    Render_Image diffuse;
+    Render_Image specular;
+    
+    Vec4 diffuse_color;
+    Vec4 ambient_color;
+    Vec4 specular_color;
+    f32 specular_exponent;
+    f32 metallic;
 } Render_Batch_Group;
 
 DEFINE_ARRAY_TYPE(Render_Batch_Group, Render_Batch_Group_Array);
@@ -752,7 +664,7 @@ typedef struct Render_Batch_Mesh {
     Render_Batch_Group_Array groups;
 } Render_Batch_Mesh;
 
-GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, const char* const* querried_names, GLint* offsets_or_null, GLint* sizes_or_null, GLuint querried_count, GLint* block_size_or_null)
+GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, const char* const* querried_names, GLint* offsets_or_null, GLint* sizes_or_null, GLint* strides_or_null, GLuint querried_count, GLint* block_size_or_null)
 {
     GLuint blockIndex = glGetUniformBlockIndex(program_handle, block_name);
     if(block_size_or_null)
@@ -771,38 +683,411 @@ GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, con
     if(sizes_or_null)
         glGetActiveUniformsiv(program_handle, querried_count, indices, GL_UNIFORM_SIZE, sizes_or_null);
 
+    if(strides_or_null)
+        glGetActiveUniformsiv(program_handle, querried_count, indices, GL_UNIFORM_ARRAY_STRIDE, strides_or_null);
+
     return blockIndex;
 }
 
-GLint print_all_active_uniforms(GLuint program)
+typedef struct Uniform_Block {
+    GLuint index;
+    GLuint handle;
+    GLint  buffer_size;
+    GLuint binding_point;
+} Uniform_Block;
+
+Uniform_Block uniform_block_make(GLuint program_handle, const char* name, GLuint binding_point)
 {
-    GLint count = 0;
+    Uniform_Block out = {0};
+    out.index = glGetUniformBlockIndex(program_handle, name);
+                
+    glGetActiveUniformBlockiv(program_handle, out.index , GL_UNIFORM_BLOCK_DATA_SIZE, &out.buffer_size);
 
-    GLint size = 0; // size of the variable
-    GLenum type = 0; // type of the variable (float, vec3 or mat4, etc)
+    glUniformBlockBinding(program_handle, out.index, binding_point);
+    glGenBuffers(1, &out.handle);
 
-    enum { bufSize = 16 }; // maximum name length
-    GLchar name[bufSize] = {0}; // variable name in GLSL
-    GLsizei length = 0; // name length
+    glBindBuffer(GL_UNIFORM_BUFFER, out.handle);
+    glBufferData(GL_UNIFORM_BUFFER, out.buffer_size, NULL, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, out.handle);
+    
+    return out;
+}
 
-    glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
-    printf("Active Uniforms: %d\n", count);
+#include "gl_utils/gl_pixel_format.h"
 
-    for (GLint i = 0; i < count; i++)
+typedef struct Render_Texture_Array_Info {
+    i32 width;
+    i32 height;
+    i32 layer_count;
+
+    i32 mip_level_count;
+    GL_Pixel_Format pixel_format;
+
+    GLuint mag_filter;
+    GLuint min_filter;
+    GLuint wrap_s;
+    GLuint wrap_t;
+} Render_Texture_Array_Info;
+
+typedef struct Render_Texture_Array {
+    GLuint handle;
+    Render_Texture_Array_Info info;
+} Render_Texture_Array;
+
+void render_texture_array_deinit(Render_Texture_Array* array)
+{
+    glDeleteTextures(1, &array->handle);
+    memset(array, 0, sizeof *array);
+}
+
+bool render_texture_array_init(Render_Texture_Array* array, Render_Texture_Array_Info info, void* data_or_null)
+{
+    //source: https://www.khronos.org/opengl/wiki/Array_Texture#Creation_and_Management
+    render_texture_array_deinit(array);
+    
+    Render_Texture_Array_Info copied = info;
+    GL_Pixel_Format* p = &copied.pixel_format;
+    if(p->equivalent != 0 && p->access_format == 0)
+        *p = gl_pixel_format_from_pixel_format(p->equivalent, p->channels);
+    else if(p->equivalent == 0 && p->access_format != 0)
     {
-        glGetActiveUniform(program, (GLuint)i, bufSize, &length, &size, &type, name);
-
-        printf("Uniform #%d Type: %u Name: %s\n", i, type, name);
+        isize channels = 0;
+        p->equivalent = pixel_format_from_gl_pixel_format(*p, &channels);
+        p->channels = (i32) channels;
+    }
+    else if((p->equivalent == 0 && p->access_format == 0) || p->unrepresentable)
+    {
+        LOG_ERROR("render", "missing pixel_format in call to render_texture_array_init()");
+        ASSERT(false);
+        return false;
     }
 
-    return count;
+    if(copied.layer_count == 0) copied.layer_count = 0;
+    if(copied.mip_level_count == 0) copied.mip_level_count = 1;
+    if(copied.min_filter == 0) copied.min_filter = GL_LINEAR_MIPMAP_LINEAR;
+    if(copied.mag_filter == 0) copied.mag_filter = GL_LINEAR;
+    if(copied.wrap_s == 0) copied.wrap_s = GL_CLAMP_TO_EDGE;
+    if(copied.wrap_t == 0) copied.wrap_t = GL_CLAMP_TO_EDGE;
+    
+    array->info = copied;
+
+    glGenTextures(1, &array->handle);
+
+    glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, copied.mip_level_count, p->storage_format, copied.width, copied.height, copied.layer_count);
+
+    if(data_or_null)
+    {
+        //                                   1. 2. 3. 4.
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, copied.width, copied.height, copied.layer_count, p->access_format, p->channel_type, data_or_null);
+        // 1. Mip level
+        // 2. x of subrectangle
+        // 3. y of subrectangle
+        // 4. layer to which to write
+
+        if(copied.mip_level_count > 0)
+            glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    }
+
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MIN_FILTER, copied.min_filter);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MAG_FILTER, copied.mag_filter);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_S, copied.wrap_s);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_T, copied.wrap_t);
+
+    gl_check_error();
+    return true;
+}
+
+void render_texture_array_generate_mips(Render_Texture_Array* array)
+{
+    glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
+    if(array->info.mip_level_count > 0)
+        glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+}
+
+void render_texture_array_set(Render_Texture_Array* array, i32 layer, i32 x, i32 y, Image_Builder image, bool regenerate_mips)
+{
+    glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
+    if(image.width > 0 && image.height > 0)
+    {
+        GL_Pixel_Format format = gl_pixel_format_from_pixel_format(image.pixel_format, image_builder_channel_count(image));
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, x, y, layer, image.width, image.height, 1, format.access_format, format.channel_type, image.pixels);
+    }
+
+    if(regenerate_mips)
+        glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 }
 
 
+isize _gcd(isize a, isize b)
+{
+    while(b != 0) 
+    {
+        isize rem = a % b;
+        a = b;
+        b = rem;
+    }
+
+    return a;
+}
+
+void test_gcd()
+{
+    TEST(_gcd(0, 0) == 0);
+    TEST(_gcd(0, 12) == 12);
+    TEST(_gcd(12, 0) == 12);
+    TEST(_gcd(12, 1) == 1);
+    TEST(_gcd(1, 12) == 1);
+    TEST(_gcd(6, 12) == 6);
+    TEST(_gcd(6, 12) == 6);
+    TEST(_gcd(12, 12) == 12);
+    TEST(_gcd(10, 12) == 2);
+}
+
+void test_memset_pattern()
+{
+    typedef struct  {
+        const char* pattern;
+        int field_size;
+        const char* expected;
+    } Test_Case;
+    
+    Test_Case test_cases[] = {
+        {"",            0,  ""},
+        {"a",           0,  ""},
+        {"ba",          1,  "b"},
+        {"hahe",        7,  "hahehah"},
+        {"xxxxyyyy",    7,  "xxxxyyy"},
+        {"hahe",        9,  "hahehaheh"},
+        {"hahe",        24, "hahehahehahehahehahehahe"},
+        {"hahe",        25, "hahehahehahehahehahehaheh"},
+        {"hahe",        26, "hahehahehahehahehahehaheha"},
+        {"hahe",        27, "hahehahehahehahehahehahehah"},
+    };
+    
+    char field[128] = {0};
+    char expected[128] = {0};
+    for(isize i = 0; i < STATIC_ARRAY_SIZE(test_cases); i++)
+    {
+        Test_Case test_case = test_cases[i];
+        isize pattern_len = strlen(test_case.pattern);
+
+        memset(field, 0, sizeof field);
+        memset(expected, 0, sizeof expected);
+
+        memset_pattern(field, test_case.field_size, test_case.pattern, pattern_len);
+
+        memcpy(expected, test_case.expected, strlen(test_case.expected));
+        TEST(memcmp(field, expected, sizeof field) == 0);
+    }
+}
+
+void log_perf_counter_stats(const char* log_module, Log_Type log_type, const char* name, Perf_Counter_Stats stats)
+{
+    LOG(log_module, log_type, "%20s total: %15.8lf avg: %12.8lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms)", 
+        name,
+		stats.total_s*1000,
+		stats.average_s*1000,
+        (lli) stats.runs,
+        stats.normalized_standard_deviation_s,
+		stats.min_s*1000,
+		stats.max_s*1000
+	);
+}
+
+typedef bool (*Benchamrk_Func)(void* context);
+
+Perf_Counter_Stats benchmark(f64 warmup, f64 time, isize repeats, Benchamrk_Func func, void* context)
+{
+    Perf_Counter counter = {0};
+    for(f64 start = clock_s();; )
+    {
+        f64 now = clock_s();
+        if(now > start + time)
+            break;
+
+        Perf_Counter_Running running = perf_counter_start();
+        u8 keep = true;
+        for(isize i = 0; i < repeats; i++)
+            keep &= (u8) func(context);
+
+        if(keep && now >= warmup + start)
+            perf_counter_end(&counter, running);
+    }
+
+    return perf_counter_get_stats(counter, repeats);
+}
+
+typedef struct Fill_Ascii_Context {
+    char* buffer;
+    isize size;
+} Fill_Ascii_Context;
+
+void fill_random_ascii(char* buffer, isize size)
+{
+    const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    isize i = 0;
+    for(; i < size; i += 10)
+    {
+        //64 = 2^6 => x^64 can fit 10 random chars from a single
+        //random number
+        u64 random = random_u64();
+        u8 rs[12] = {0};
+        #define steps3(k) \
+            rs[k + 0] = (u8) random % 64; random /= 64; \
+            rs[k + 1] = (u8) random % 64; random /= 64; \
+
+        steps3(0);
+        steps3(2);
+        steps3(4);
+        steps3(6);
+        steps3(8);
+        #undef steps3
+
+        isize remaining = MIN(size - i, 10);
+        for(isize k = 0; k < remaining; k++)
+        {
+            char c = chars[rs[k]];
+            buffer[k + i] = c;
+        }
+    }
+
+    return;
+}
+
+char random_ascii()
+{
+    u64 random = random_u64();
+    u64 random_capped = random % 64;
+    const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    return chars[random_capped];
+}
+
+char random_char()
+{
+    return (char) (random_u64());
+}
+
+bool _benchmark_fill_ascii(void* context)
+{
+    Fill_Ascii_Context* c = (Fill_Ascii_Context*) context; 
+    fill_random_ascii(c->buffer, c->size);
+    return true;
+}
+
+bool _benchmark_fill_ascii_by_one(void* context)
+{
+    Fill_Ascii_Context* c = (Fill_Ascii_Context*) context; 
+    for(isize i = 0; i < c->size; i++)
+        c->buffer[i] = random_ascii();
+
+    return true;
+}
+
+void benchmark_random_cached(f64 discard, f64 time)
+{
+    f64 w = discard;
+    f64 t = time;
+    isize r = 16;
+    
+    char buffer[2048 + 1] = {0};
+    Fill_Ascii_Context context = {buffer, 2048};
+
+    log_perf_counter_stats("TEST", LOG_TYPE_INFO, "fill", benchmark(w, t, r, _benchmark_fill_ascii, &context));
+    log_perf_counter_stats("TEST", LOG_TYPE_INFO, "by_one", benchmark(w, t, r, _benchmark_fill_ascii_by_one, &context));
+
+    return;
+}
+
+//Fills txture array layer in such a way that mipmapping wont effect the edges of the image. 
+//The image needs to be smaller than the texture array.
+//That is the corner pixels will be expanded to fill the remianing size around the image.
+//If the image is exactly the size of the array jsut copies it over.
+bool render_texture_array_fill_layer(Render_Texture_Array* array, i32 layer, Image_Builder image, bool regenerate_mips, Image_Builder* temp_builder_or_null)
+{
+    bool state = true;
+    if(image.width > array->info.width || image.height > array->info.height)
+    {
+        ASSERT(false);
+        LOG_ERROR("render", "invalid texture size filled to array");
+        state = false;
+    }
+    else if(image.width <= 0 || image.height <= 0)
+    {
+        if(regenerate_mips)
+            render_texture_array_generate_mips(array);
+    }
+    else if(image.width == array->info.width && image.height == array->info.height)
+    {
+        render_texture_array_set(array, layer, 0, 0, image, regenerate_mips);
+    }
+    else
+    {
+        Image_Builder temp_storage = {0};
+        Image_Builder* temp_builder = temp_builder_or_null;
+
+        if(temp_builder_or_null == NULL)
+        {
+            image_builder_init_from_pixel_size(&temp_storage, allocator_get_scratch(), image.pixel_size, image.pixel_format);
+            temp_builder = &temp_storage;
+        }
+
+        ASSERT(image.height > 0 && image.width > 0);
+
+        image_builder_resize(temp_builder, array->info.width, array->info.height);
+        image_builder_copy(temp_builder, image_from_builder(image), 0, 0);
+        
+        isize stride = image_builder_byte_stride(*temp_builder);
+        i32 pixel_size = temp_builder->pixel_size;
+
+        u8 color[3] = {0xff, 0, 0xff};
+        //Extend sideways
+        for(i32 y = 0; y < image.height; y++)
+        {
+            u8* curr_row = temp_builder->pixels + stride*y;
+            u8* last_pixel = curr_row + pixel_size*(image.width - 1);
+
+            //memset_pattern(curr_row + pixel_size*image.width, (array->info.width - image.width)*pixel_size, color, pixel_size);
+            memset_pattern(curr_row + pixel_size*image.width, (array->info.width - image.width)*pixel_size, last_pixel, pixel_size);
+        }
+
+        //Extend downwards
+        u8* last_row = temp_builder->pixels + stride*(image.height - 1);
+        for(i32 y = image.height; y < temp_builder->height; y++)
+        {
+            u8* curr_row = temp_builder->pixels + stride*y;
+            memmove(curr_row, last_row, stride);
+        }
+        
+        //memset_pattern(temp_builder->pixels, image_builder_all_pixels_size(*temp_builder), color, sizeof(color));
+
+        render_texture_array_set(array, layer, 0, 0, *temp_builder, regenerate_mips);
+
+        image_builder_deinit(&temp_storage);
+    }
+
+    return state;
+}
+
+Error render_texture_array_fill_layer_from_disk(Render_Texture_Array* array, i32 layer, String path, bool regenerate_mips, Image_Builder* temp_builder_or_null)
+{
+    Image_Builder temp_storage = {allocator_get_scratch()};
+    Error error = image_read_from_file(&temp_storage, path, 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+    ASSERT_MSG(error_is_ok(error), ERROR_FMT, ERROR_PRINT(error));
+    
+    if(error_is_ok(error))
+    {
+        if(render_texture_array_fill_layer(array, layer, temp_storage, regenerate_mips, temp_builder_or_null) == false)
+            error.code = 1;
+    }
+        
+    image_builder_deinit(&temp_storage);
+    return error;
+}
+
 void run_func(void* context)
 {
-    test_mdump();
-    log_todos("APP", LOG_TYPE_DEBUG, "@TODO @TOOD @TEMP @SPEED @PERF");
+    test_memset_pattern();
 
     LOG_INFO("APP", "run_func enter");
     Allocator* upstream_alloc = allocator_get_default();
@@ -849,7 +1134,6 @@ void run_func(void* context)
     resources_set(&resources);
 
     render_init(&renderer, &renderer_alloc.allocator);
-    
 
     Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
 
@@ -871,6 +1155,7 @@ void run_func(void* context)
 
     Render_Image image_floor = {0};
     Render_Image image_debug = {0};
+    Render_Image image_rusted_iron_metallic = {0};
 
     Render_Cubeimage cubemap_skybox = {0};
 
@@ -886,14 +1171,15 @@ void run_func(void* context)
     Render_Mesh* render_indirect_meshes[] = {&render_cube, &render_uv_sphere};
     Render_Mesh render_indirect_mesh = {0};
 
+
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
 
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     
     enum { 
-        num_instances_x = 10,
-        num_instances_y = 10,
+        num_instances_x = 40,
+        num_instances_y = 40,
         num_instances = num_instances_x * num_instances_y, 
         max_commands = 128,
         model_slot = 5 
@@ -920,6 +1206,7 @@ void run_func(void* context)
             array_push(&models, mat);
         }
 
+        //@TODO: dont do named since that requires opengl 4.5
         glCreateBuffers(1, &instanceVBO);
         glNamedBufferData(instanceVBO, sizeof(Mat4) * models.size, models.data, GL_STATIC_DRAW);
 
@@ -935,22 +1222,19 @@ void run_func(void* context)
     } Draw_Elements_Indirect_Command;
     
     GLuint command_buffer = 0;
-    {
-        glCreateBuffers(1, &command_buffer);
-        glNamedBufferData(command_buffer, sizeof(Draw_Elements_Indirect_Command) * max_commands, NULL, GL_DYNAMIC_DRAW);
-    }
-    
-    typedef  struct {
-        Mat4 view;
-        Mat4 projection;
-    } Uniform_Buffer_Data;
+    Uniform_Block uniform_block_params = {0};
+    Uniform_Block uniform_block_environment = {0};
 
-    GLuint uniform_buffer = 0;
-    const char *uniform_names[] = { "u_projection", "u_view"};
-    GLint uniform_offsets[2] = {0};
-    GLuint uniform_block_index = 0;
-    u8 uniform_block_buffer[512] = {0};
-    GLint uniform_block_size = 0;
+    Render_Texture_Array texture_array = {0};
+    Render_Texture_Array_Info tex_arr_info = {0};
+    tex_arr_info.width = 1024;
+    tex_arr_info.height = 1024;
+    tex_arr_info.layer_count = 3;
+    tex_arr_info.pixel_format.channels = 3;
+    tex_arr_info.mip_level_count = 2;
+    tex_arr_info.pixel_format.equivalent = PIXEL_FORMAT_U8;
+
+    TEST(render_texture_array_init(&texture_array, tex_arr_info, NULL));
 
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
@@ -967,6 +1251,12 @@ void run_func(void* context)
             LOG_INFO("APP", "Resizing");
             render_screen_frame_buffers_msaa_deinit(&screen_buffers);
             render_screen_frame_buffers_msaa_init(&screen_buffers, app->window_framebuffer_width, app->window_framebuffer_height, settings->MSAA_samples);
+
+            //For some reason gets reset on change of frame buffers so we reset it as well
+            glDeleteBuffers(1, &command_buffer);
+            glCreateBuffers(1, &command_buffer);
+            glNamedBufferData(command_buffer, sizeof(Draw_Elements_Indirect_Command) * max_commands, NULL, GL_DYNAMIC_DRAW);
+
             glViewport(0, 0, screen_buffers.width, screen_buffers.height);
         }
         
@@ -987,25 +1277,17 @@ void run_func(void* context)
             error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.frag_vert"));
             error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.frag_vert"));
 
+            ASSERT(error_is_ok(error));
             {
-                uniform_block_index = get_uniform_block_info(shader_instanced_batched.shader, "Environment", uniform_names, uniform_offsets, NULL, STATIC_ARRAY_SIZE(uniform_names), &uniform_block_size);
+                uniform_block_params = uniform_block_make(shader_instanced_batched.shader, "Params", 0);
+                uniform_block_environment = uniform_block_make(shader_instanced_batched.shader, "Environment", 1);
+
                 GLint max_textures = 0;
                 glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_textures);
-                LOG_INFO("app", "max textures %i", max_textures);
-
-                ASSERT(uniform_block_size <= sizeof(uniform_block_buffer));
-
-                GLuint binding_point = 10;
-                glUniformBlockBinding(shader_instanced_batched.shader, uniform_block_index, binding_point);
-
-                glGenBuffers(1, &uniform_buffer);
-                glBindBuffer(GL_UNIFORM_BUFFER, uniform_buffer);
-                glBufferData(GL_UNIFORM_BUFFER, uniform_block_size, NULL, GL_DYNAMIC_DRAW);
-                glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, uniform_buffer);
+                LOG_WARN("app", "max textures %i", max_textures);
             }
 
             PERF_COUNTER_END(shader_load_counter);
-            ASSERT(error_is_ok(error));
         }
 
 
@@ -1038,8 +1320,11 @@ void run_func(void* context)
             render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
             
+            error = ERROR_AND(error) render_texture_array_fill_layer_from_disk(&texture_array, 0, STRING("resources/floor.jpg"), true, NULL);
+
             error = ERROR_AND(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
             error = ERROR_AND(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
+            error = ERROR_AND(error) render_image_init_from_disk(&image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2"));
             error = ERROR_AND(error) render_cubeimage_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
                 STRING("resources/skybox_back.jpg"), 
@@ -1054,10 +1339,6 @@ void run_func(void* context)
             {
                 shape_deinit(&combined_shape);
 
-                //Shape combined_shape_other = {0};
-                //shape_append(&combined_shape_other, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.triangles.data, unit_cube.triangles.size);
-                //shape_append(&combined_shape_other, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.triangles.data, cube_sphere.triangles.size);
-
                 Render_Batch_Group group_cube_sphere = {0};
                 group_cube_sphere.indeces_from = (i32) combined_shape.triangles.size*3;
                 shape_append(&combined_shape, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.triangles.data, cube_sphere.triangles.size);
@@ -1068,11 +1349,22 @@ void run_func(void* context)
                 shape_append(&combined_shape, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.triangles.data, unit_cube.triangles.size);
                 group_unit_cube.indeces_to = (i32) combined_shape.triangles.size*3;
 
-                //array_last(combined_shape.vertices)->tan = vec3_of(0);
                 render_mesh_init_from_shape(&render_batch.mesh, combined_shape, STRING("render_batch.mesh"));
+                
+                group_cube_sphere.diffuse = image_debug;
+                //group_cube_sphere.specular = image_rusted_iron_metallic;
+                group_cube_sphere.diffuse_color = vec4(1, 1, 1, 1);
+                group_cube_sphere.ambient_color = vec4(0, 0, 0, 1);
+                group_cube_sphere.specular_color = vec4(0.9f, 0.9f, 0.9f, 0);
+                group_cube_sphere.specular_exponent = 256;
+                group_cube_sphere.metallic = 0.95f;
 
-                group_unit_cube.texture = image_floor;
-                group_cube_sphere.texture = image_debug;
+                group_unit_cube.diffuse = image_floor;
+                //group_unit_cube.specular = image_rusted_iron_metallic;
+                group_unit_cube.diffuse_color = vec4(1, 1, 1, 1);
+                group_unit_cube.ambient_color = vec4(0, 0, 0, 1);
+                group_unit_cube.specular_color = vec4(0.5f, 0.5f, 0.5f, 0);
+                group_unit_cube.specular_exponent = 3;
 
                 array_push(&render_batch.groups, group_cube_sphere);
                 array_push(&render_batch.groups, group_unit_cube);
@@ -1124,8 +1416,8 @@ void run_func(void* context)
 
         
         app->camera.fov = settings->fov;
-        app->camera.near = 0.1f;
-        app->camera.far = 100.0f;
+        app->camera.near = 0.01f;
+        app->camera.far = 1000.0f;
         app->camera.is_ortographic = false;
         app->camera.is_position_relative = true;
         app->camera.aspect_ratio = (f32) app->window_framebuffer_width / (f32) app->window_framebuffer_height;
@@ -1143,6 +1435,41 @@ void run_func(void* context)
 
             //render instanced sphere
             {
+                #define MAX_LIGHTS 32
+                #define MAX_BATCH 8
+                #define MAP_BIT_DIFFUSE 1
+                #define MAP_BIT_AMBIENT 2
+                #define MAP_BIT_SPCULAR 4
+                #define MAP_BIT_NORMAL 8
+                
+                typedef struct  {
+                    MODIFIER_ALIGNED(16) Vec4 diffuse_color;
+                    MODIFIER_ALIGNED(16) Vec4 ambient_color;
+                    MODIFIER_ALIGNED(16) Vec4 specular_color;
+                    MODIFIER_ALIGNED(4) float specular_exponent;
+                    MODIFIER_ALIGNED(4) float metallic;
+                    MODIFIER_ALIGNED(4) int map_flags;
+                } Params;
+
+                typedef struct {
+                    MODIFIER_ALIGNED(16) Vec4 pos_and_range;
+                    MODIFIER_ALIGNED(16) Vec4 color_and_radius;
+                } Light;
+
+                typedef struct {
+                    MODIFIER_ALIGNED(16) Mat4 projection;
+                    MODIFIER_ALIGNED(16) Mat4 view;
+                    MODIFIER_ALIGNED(16) Vec4 view_pos;
+                    MODIFIER_ALIGNED(16) Vec4 base_illumination;
+
+                    MODIFIER_ALIGNED(4) float light_linear_attentuation;
+                    MODIFIER_ALIGNED(4) float light_quadratic_attentuation;
+                    MODIFIER_ALIGNED(4) float gamma;
+                    MODIFIER_ALIGNED(4) int lights_count;
+
+                    MODIFIER_ALIGNED(16) Light lights[MAX_LIGHTS];
+                } Environment;
+
                 Draw_Elements_Indirect_Command commands[2] = {0};
 
                 u32 instance_step = num_instances / (u32) render_batch.groups.size;
@@ -1155,27 +1482,82 @@ void run_func(void* context)
                     commands[i].instance_count = instance_step;
                     commands[i].base_vertex = 0;
                 }
+                
+                Params params[MAX_BATCH] = {0};
+                Environment environment = {0};
 
                 render_shader_use(&shader_instanced_batched);
-
-                memcpy(uniform_block_buffer + uniform_offsets[0], &projection, sizeof(projection));
-                memcpy(uniform_block_buffer + uniform_offsets[1], &view, sizeof(view));
                 
-                glBindBuffer(GL_UNIFORM_BUFFER, uniform_buffer);
-                glBufferSubData(GL_UNIFORM_BUFFER, 0, uniform_block_size, uniform_block_buffer);
+                GLuint map_diffuse_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_maps_diffuse");
+                GLuint map_specular_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_maps_specular");
+                GLuint map_array_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_map_array_test");
 
-                //render_shader_set_mat4(&shader_instanced_batched, "u_projection", projection);
-                //render_shader_set_mat4(&shader_instanced_batched, "u_view", view);
-
-                GLuint map_location = render_shader_get_uniform_location(&shader_instanced_batched, "u_map_diffuses");
-                GLint map_slots[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, /* ... */};
-                glUniform1iv(map_location, (GLsizei) render_batch.groups.size, map_slots);
+                GLint map_slots[MAX_BATCH] = {0};
+                GLint slot_i = 0;
 
                 for(isize i = 0; i < render_batch.groups.size; i++)
                 {
                     Render_Batch_Group* group = &render_batch.groups.data[i];
-                    render_image_use(&group->texture, i);
+                    if(group->diffuse.map != 0)
+                        render_image_use(&group->diffuse, slot_i);
+                    map_slots[i] = slot_i++;
                 }
+                glUniform1iv(map_diffuse_loc, (GLsizei) render_batch.groups.size, map_slots);
+                
+                for(isize i = 0; i < render_batch.groups.size; i++)
+                {
+                    Render_Batch_Group* group = &render_batch.groups.data[i];
+                    if(group->specular.map != 0)
+                        render_image_use(&group->specular, slot_i);
+
+                    map_slots[i] = slot_i++;
+                }
+                glUniform1iv(map_specular_loc, (GLsizei) render_batch.groups.size, map_slots);
+
+                glActiveTexture(GL_TEXTURE0 + slot_i);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, texture_array.handle);
+                glUniform1i(map_array_loc, slot_i++);
+
+                for(isize i = 0; i < render_batch.groups.size; i++)
+                {
+                    Render_Batch_Group* group = &render_batch.groups.data[i];
+                    params[i].diffuse_color = group->diffuse_color;
+                    params[i].specular_color = group->specular_color;
+                    params[i].ambient_color = group->ambient_color;
+                    params[i].specular_exponent = group->specular_exponent;
+                    params[i].metallic = group->metallic;
+
+                    if(group->specular.map)
+                        params[i].map_flags |= MAP_BIT_SPCULAR;
+                            
+                    if(group->diffuse.map)
+                        params[i].map_flags |= MAP_BIT_DIFFUSE;
+                }
+
+                {
+                    //This would also get abstarcted away to be asigned in the same place as render_batch.groups
+                    environment.light_quadratic_attentuation = 0.05f;
+                    environment.base_illumination = vec4_of(0.05f);
+                    environment.projection = projection; 
+                    environment.view = view; 
+                    environment.view_pos = vec4_from_vec3(app->camera.pos);
+
+                    environment.lights_count = 2;
+                    environment.lights[0].color_and_radius = vec4(10, 8, 7, 0);
+                    environment.lights[0].pos_and_range = vec4(40, 20, -10, 100);
+                    
+                    environment.lights[1].color_and_radius = vec4(8, 10, 8.5f, 0);
+                    environment.lights[1].pos_and_range = vec4(0, 0, 10, 100);
+                }
+
+                ASSERT(sizeof(environment) == uniform_block_environment.buffer_size);
+                ASSERT(sizeof(params) == uniform_block_params.buffer_size);
+                
+                glBindBuffer(GL_UNIFORM_BUFFER, uniform_block_environment.handle);
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(environment), &environment);
+                
+                glBindBuffer(GL_UNIFORM_BUFFER, uniform_block_params.handle);
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(params), &params);
                 
                 glBindBuffer(GL_DRAW_INDIRECT_BUFFER , command_buffer);
                 glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(commands), commands);
@@ -1184,7 +1566,6 @@ void run_func(void* context)
                 glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
 
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) render_batch.groups.size, 0);
-                //glDrawElementsInstanced(GL_TRIANGLES, render_batch.mesh.triangle_count*3, GL_UNSIGNED_INT, NULL, num_instances);
                 
             }
 
@@ -1250,7 +1631,7 @@ void run_func(void* context)
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
     log_group_push();
-        log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
+        allocator_log_stats_get(&resources_alloc.allocator, "RESOURCES", LOG_TYPE_INFO);
     log_group_pop();
 
     debug_allocator_deinit(&resources_alloc);
@@ -1285,8 +1666,12 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 void run_test_func(void* context)
 {
+    test_gcd();
+    test_memset_pattern();
 
+    benchmark_random_cached(0.3, 1);
     (void) context;
+
     test_unicode(3.0);
     test_format_lpf();
     test_stable_array();

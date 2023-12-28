@@ -223,6 +223,7 @@
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
+    <ClInclude Include="lib\_test_string.h" />
     <ClInclude Include="run.h" />
     <ClInclude Include="run_default.h" />
     <ClInclude Include="engine_types.h" />

@@ -275,6 +275,9 @@
     <ClInclude Include="run.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="lib\_test_string.h">
+      <Filter>lib</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\_template.frag_vert">
