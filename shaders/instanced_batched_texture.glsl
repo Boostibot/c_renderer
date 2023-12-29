@@ -1,11 +1,9 @@
 ﻿#version 460 core
+#extension GL_ARB_shader_draw_parameters : require
 
-#define MAX_LIGHTS 32
 #define MAX_BATCH 8
-#define MAP_BIT_DIFFUSE 1
-#define MAP_BIT_AMBIENT 2
-#define MAP_BIT_SPCULAR 4
-#define MAP_BIT_NORMAL 8
+#define MAX_LIGHTS 32
+#define MAX_RESOULTIONS 7
 
 struct Light{
     vec4 pos_and_range;
@@ -33,17 +31,34 @@ struct Params_Data {
     float specular_exponent;    
     float metallic;             
 
-    int map_flags;
+    int map_diffuse; 
+    int map_specular; 
+    int map_normal; 
+    int map_ambient; 
+
+    //mat3x2 map_diffuse_transform;
+    //mat3x2 map_specular_transform;
+    //mat3x2 map_normal_transform;
 };
 
 layout(std140) uniform Params {
     Params_Data params[MAX_BATCH];  
 };
 
-uniform sampler2D u_maps_diffuse[MAX_BATCH];
-uniform sampler2D u_maps_specular[MAX_BATCH];
-uniform sampler2D u_maps_normal[MAX_BATCH];
-uniform sampler2DArray u_map_array_test;
+uniform sampler2DArray u_map_resolutions[MAX_RESOULTIONS];
+
+struct Map {
+    int resolution;
+    int layer;
+};
+
+Map map_decode(int map)
+{
+    Map res;
+    res.resolution = map >> 16;
+    res.layer = map & 0xFFFF;
+    return res;
+}
 
 #ifdef FRAG
     out vec4 o_color;
@@ -55,6 +70,20 @@ uniform sampler2DArray u_map_array_test;
         flat int batch_index;
     } _in;
 
+    vec4 map_sample(Map map)
+    {
+        return texture(u_map_resolutions[map.resolution - 1], vec3(_in.uv.xy, map.layer));
+    }
+
+    vec4 map_sample_or(int map, vec4 if_not_found)
+    {
+        Map map_ = map_decode(map);
+        if(map_.resolution > 0)
+            return map_sample(map_);
+        else
+            return if_not_found;
+    }
+
     void main()
     {
         int bi = _in.batch_index;
@@ -63,21 +92,12 @@ uniform sampler2DArray u_map_array_test;
 
         Params_Data param = params[bi];
 
-        vec3  diffuse_color = param.diffuse_color.xyz;
-        vec3  specular_color = param.specular_color.xyz;
-        vec3  ambient_color = param.ambient_color.xyz;
+        vec3  diffuse_color = map_sample_or(param.map_diffuse, param.diffuse_color).xyz;
+        vec3  specular_color = map_sample_or(param.map_specular, param.specular_color).xyz;
+        vec3  ambient_color = map_sample_or(param.map_ambient, param.ambient_color).xyz;
+
         float metallic = sqrt(param.metallic); //to better follow the intuitive linearity of this parameter
         float specular_exponent = param.specular_exponent;
-        int   map_flags = param.map_flags;
-
-        if((map_flags & MAP_BIT_DIFFUSE) != 0)
-        {
-            //diffuse_color = texture(u_maps_diffuse[bi], _in.uv).xyz;
-            diffuse_color = texture(u_map_array_test, vec3(_in.uv.xy, 0)).xyz;
-        }
-            
-        if((map_flags & MAP_BIT_SPCULAR) != 0)
-            specular_color = texture(u_maps_specular[bi], _in.uv).xyz;
 
         //so that when extra expontiated extra shiny!
         float specular_intensity = log(specular_exponent / base_specular_exponent + 1);

@@ -17,9 +17,10 @@
 
 #include "mdump.h"
 
+#include "lib/profile_utils.h"
+#include "lib/string.h"
 #include "lib/platform.h"
 #include "lib/allocator.h"
-#include "lib/string.h"
 #include "lib/hash_index.h"
 #include "lib/logger_file.h"
 #include "lib/file.h"
@@ -118,6 +119,90 @@ Vec3 inv_gamma_correct(Vec3 color, f32 gamma)
 {
     return gamma_correct(color, 1.0f/gamma);
 }
+
+
+
+typedef struct Fill_Ascii_Context {
+    char* buffer;
+    isize size;
+} Fill_Ascii_Context;
+
+void fill_random_ascii(char* buffer, isize size)
+{
+    const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    isize i = 0;
+    for(; i < size; i += 10)
+    {
+        //64 = 2^6 => x^64 can fit 10 random chars from a single
+        //random number
+        u64 random = random_u64();
+        u8 rs[12] = {0};
+        #define steps3(k) \
+            rs[k + 0] = (u8) random % 64; random /= 64; \
+            rs[k + 1] = (u8) random % 64; random /= 64; \
+
+        steps3(0);
+        steps3(2);
+        steps3(4);
+        steps3(6);
+        steps3(8);
+        #undef steps3
+
+        isize remaining = MIN(size - i, 10);
+        for(isize k = 0; k < remaining; k++)
+        {
+            char c = chars[rs[k]];
+            buffer[k + i] = c;
+        }
+    }
+
+    return;
+}
+
+char random_ascii()
+{
+    u64 random = random_u64();
+    u64 random_capped = random % 64;
+    const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    return chars[random_capped];
+}
+
+char random_char()
+{
+    return (char) (random_u64());
+}
+
+bool _benchmark_fill_ascii(void* context)
+{
+    Fill_Ascii_Context* c = (Fill_Ascii_Context*) context; 
+    fill_random_ascii(c->buffer, c->size);
+    return true;
+}
+
+bool _benchmark_fill_ascii_by_one(void* context)
+{
+    Fill_Ascii_Context* c = (Fill_Ascii_Context*) context; 
+    for(isize i = 0; i < c->size; i++)
+        c->buffer[i] = random_ascii();
+
+    return true;
+}
+
+void benchmark_random_cached(f64 discard, f64 time)
+{
+    f64 w = discard;
+    f64 t = time;
+    isize r = 16;
+    
+    char buffer[2048 + 1] = {0};
+    Fill_Ascii_Context context = {buffer, 2048};
+
+    log_perf_stats("TEST", LOG_TYPE_INFO, "fill  ", perf_benchmark(w, t, r, _benchmark_fill_ascii, &context));
+    log_perf_stats("TEST", LOG_TYPE_INFO, "by_one", perf_benchmark(w, t, r, _benchmark_fill_ascii_by_one, &context));
+
+    return;
+}
+
 
 void* glfw_malloc_func(size_t size, void* user);
 void* glfw_realloc_func(void* block, size_t size, void* user);
@@ -280,110 +365,6 @@ void run_test_func(void* context);
 void error_func(void* context, Platform_Sandbox_Error error);
 
 
-int perf_counter_compare_total_time_func(const void* a_, const void* b_)
-{
-    Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
-    Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
-    
-    if(profile_get_counter_total_running_time_s(*a) > profile_get_counter_total_running_time_s(*b))
-        return -1;
-    else 
-        return 1;
-}
-
-int perf_counter_compare_file_func(const void* a_, const void* b_)
-{
-    Global_Perf_Counter* a = (Global_Perf_Counter*) a_;
-    Global_Perf_Counter* b = (Global_Perf_Counter*) b_;
-    
-    int res = strcmp(a->file, b->file);
-    if(res == 0)
-        res = strcmp(a->function, b->function);
-    if(res == 0)
-        res = strcmp(a->name, b->name);
-
-    return res;
-}
-
-void log_perf_counters(const char* log_module, Log_Type log_type, bool sort_by_name)
-{
-    DEFINE_ARRAY_TYPE(Global_Perf_Counter, _Global_Perf_Counter_Array);
-
-    String common_prefix = {0};
-
-    _Global_Perf_Counter_Array counters = {0};
-    for(Global_Perf_Counter* counter = profile_get_counters(); counter != NULL; counter = counter->next)
-    {
-
-        String curent_file = string_make(counter->file);
-        if(common_prefix.data == NULL)
-            common_prefix = curent_file;
-        else
-        {
-            isize matches_to = 0;
-            isize min_size = MIN(common_prefix.size, curent_file.size);
-            for(; matches_to < min_size; matches_to++)
-            {
-                if(common_prefix.data[matches_to] != curent_file.data[matches_to])
-                    break;
-            }
-
-            common_prefix = string_safe_head(common_prefix, matches_to);
-        }
-
-        array_push(&counters, *counter);
-    }
-    
-    if(sort_by_name)
-        qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_file_func);
-    else
-        qsort(counters.data, counters.size, sizeof(Global_Perf_Counter), perf_counter_compare_total_time_func);
-    
-    LOG(log_module, log_type, "Logging perf counters (still running %lli):", (lli) profile_get_total_running_counters_count());
-    log_group_push();
-    for(isize i = 0; i < counters.size; i++)
-    {
-        Global_Perf_Counter counter = counters.data[i];
-        Perf_Counter_Stats stats = perf_counter_get_stats(counter.counter, 1);
-
-        if(counter.is_detailed)
-        {
-		    LOG(log_module, log_type, "total: %15.7lf avg: %13.6lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms) from %20s %-4lli %s \"%s\"", 
-			    stats.total_s*1000,
-			    stats.average_s*1000,
-                (lli) stats.runs,
-                stats.normalized_standard_deviation_s,
-			    stats.min_s*1000,
-			    stats.max_s*1000,
-                counter.file + common_prefix.size,
-			    (lli) counter.line,
-			    counter.function,
-			    counter.name
-		    );
-        }
-        else
-        {
-		    LOG(log_module, log_type, "total: %15.8lf avg: %13.6lf runs: %-8lli (ms) from %20s %-4lli %s \"%s\"", 
-			    stats.total_s*1000,
-			    stats.average_s*1000,
-                (lli) stats.runs,
-                counter.file + common_prefix.size,
-			    (lli) counter.line,
-			    counter.function,
-			    counter.name
-		    );
-        }
-        if(counter.concurrent_running_counters > 0)
-        {
-            log_group_push();
-            LOG(log_module, log_type, "COUNTER LEAKS! Still running %lli", (lli) counter.concurrent_running_counters);
-            log_group_pop();
-        }
-    }
-    log_group_pop();
-
-    array_deinit(&counters);
-}
 
 int main()
 {
@@ -643,26 +624,6 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
         //shape->triangles.data[vertex_count_before + i] = offset_index;
     }
 }
-typedef struct Render_Batch_Group {
-    i32 indeces_from;
-    i32 indeces_to;
-
-    Render_Image diffuse;
-    Render_Image specular;
-    
-    Vec4 diffuse_color;
-    Vec4 ambient_color;
-    Vec4 specular_color;
-    f32 specular_exponent;
-    f32 metallic;
-} Render_Batch_Group;
-
-DEFINE_ARRAY_TYPE(Render_Batch_Group, Render_Batch_Group_Array);
-
-typedef struct Render_Batch_Mesh {
-    Render_Mesh mesh;
-    Render_Batch_Group_Array groups;
-} Render_Batch_Mesh;
 
 GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, const char* const* querried_names, GLint* offsets_or_null, GLint* sizes_or_null, GLint* strides_or_null, GLuint querried_count, GLint* block_size_or_null)
 {
@@ -715,38 +676,36 @@ Uniform_Block uniform_block_make(GLuint program_handle, const char* name, GLuint
 
 #include "gl_utils/gl_pixel_format.h"
 
-typedef struct Render_Texture_Array_Info {
-    i32 width;
-    i32 height;
-    i32 layer_count;
-
-    i32 mip_level_count;
-    GL_Pixel_Format pixel_format;
-
-    GLuint mag_filter;
-    GLuint min_filter;
-    GLuint wrap_s;
-    GLuint wrap_t;
-} Render_Texture_Array_Info;
-
 typedef struct Render_Texture_Array {
     GLuint handle;
-    Render_Texture_Array_Info info;
+    i32 width;
+    i32 height;
+    i32 layer_count; 
+
+    i32 mip_level_count; //defaults to 1
+    GL_Pixel_Format type; //needs to be specified or specified with .equivalent
+
+    GLuint mag_filter; //defaults to GL_LINEAR_MIPMAP_LINEAR
+    GLuint min_filter; //defaults to GL_LINEAR
+    GLuint wrap_s;     //defaults to GL_CLAMP_TO_EDGE
+    GLuint wrap_t;     //defaults to GL_CLAMP_TO_EDGE
+    
 } Render_Texture_Array;
 
 void render_texture_array_deinit(Render_Texture_Array* array)
 {
     glDeleteTextures(1, &array->handle);
-    memset(array, 0, sizeof *array);
+    array->handle = 0;
+    //memset(array, 0, sizeof *array);
 }
 
-bool render_texture_array_init(Render_Texture_Array* array, Render_Texture_Array_Info info, void* data_or_null)
+bool render_texture_array_init(Render_Texture_Array* partially_filled, void* data_or_null)
 {
+    render_texture_array_deinit(partially_filled);
+
     //source: https://www.khronos.org/opengl/wiki/Array_Texture#Creation_and_Management
-    render_texture_array_deinit(array);
     
-    Render_Texture_Array_Info copied = info;
-    GL_Pixel_Format* p = &copied.pixel_format;
+    GL_Pixel_Format* p = &partially_filled->type;
     if(p->equivalent != 0 && p->access_format == 0)
         *p = gl_pixel_format_from_pixel_format(p->equivalent, p->channels);
     else if(p->equivalent == 0 && p->access_format != 0)
@@ -757,42 +716,41 @@ bool render_texture_array_init(Render_Texture_Array* array, Render_Texture_Array
     }
     else if((p->equivalent == 0 && p->access_format == 0) || p->unrepresentable)
     {
-        LOG_ERROR("render", "missing pixel_format in call to render_texture_array_init()");
+        LOG_ERROR("render", "missing type in call to render_texture_array_init()");
         ASSERT(false);
         return false;
     }
-
-    if(copied.layer_count == 0) copied.layer_count = 0;
-    if(copied.mip_level_count == 0) copied.mip_level_count = 1;
-    if(copied.min_filter == 0) copied.min_filter = GL_LINEAR_MIPMAP_LINEAR;
-    if(copied.mag_filter == 0) copied.mag_filter = GL_LINEAR;
-    if(copied.wrap_s == 0) copied.wrap_s = GL_CLAMP_TO_EDGE;
-    if(copied.wrap_t == 0) copied.wrap_t = GL_CLAMP_TO_EDGE;
     
-    array->info = copied;
+    ASSERT_MSG(partially_filled->layer_count > 0 && partially_filled->width > 0 && partially_filled->height > 0, "No default!");
 
-    glGenTextures(1, &array->handle);
+    if(partially_filled->mip_level_count == 0) partially_filled->mip_level_count = 1;
+    if(partially_filled->min_filter == 0) partially_filled->min_filter = GL_LINEAR_MIPMAP_LINEAR;
+    if(partially_filled->mag_filter == 0) partially_filled->mag_filter = GL_LINEAR;
+    if(partially_filled->wrap_s == 0) partially_filled->wrap_s = GL_CLAMP_TO_EDGE;
+    if(partially_filled->wrap_t == 0) partially_filled->wrap_t = GL_CLAMP_TO_EDGE;
 
-    glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
-    glTexStorage3D(GL_TEXTURE_2D_ARRAY, copied.mip_level_count, p->storage_format, copied.width, copied.height, copied.layer_count);
+    glGenTextures(1, &partially_filled->handle);
+
+    glBindTexture(GL_TEXTURE_2D_ARRAY, partially_filled->handle);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, partially_filled->mip_level_count, p->storage_format, partially_filled->width, partially_filled->height, partially_filled->layer_count);
 
     if(data_or_null)
     {
         //                                   1. 2. 3. 4.
-        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, copied.width, copied.height, copied.layer_count, p->access_format, p->channel_type, data_or_null);
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, partially_filled->width, partially_filled->height, partially_filled->layer_count, p->access_format, p->channel_type, data_or_null);
         // 1. Mip level
         // 2. x of subrectangle
         // 3. y of subrectangle
         // 4. layer to which to write
 
-        if(copied.mip_level_count > 0)
+        if(partially_filled->mip_level_count > 0)
             glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
     }
 
-    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MIN_FILTER, copied.min_filter);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MAG_FILTER, copied.mag_filter);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_S, copied.wrap_s);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_T, copied.wrap_t);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MIN_FILTER, partially_filled->min_filter);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MAG_FILTER, partially_filled->mag_filter);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_S, partially_filled->wrap_s);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_T, partially_filled->wrap_t);
 
     gl_check_error();
     return true;
@@ -800,17 +758,22 @@ bool render_texture_array_init(Render_Texture_Array* array, Render_Texture_Array
 
 void render_texture_array_generate_mips(Render_Texture_Array* array)
 {
-    glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
-    if(array->info.mip_level_count > 0)
+    if(array->mip_level_count > 0)
+    {
+        glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
         glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    }
 }
 
-void render_texture_array_set(Render_Texture_Array* array, i32 layer, i32 x, i32 y, Image_Builder image, bool regenerate_mips)
+void render_texture_array_set(Render_Texture_Array* array, i32 layer, i32 x, i32 y, Image image, bool regenerate_mips)
 {
     glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
+    //@TODO: change from check bounds to error notify
+    CHECK_BOUNDS(layer, array->layer_count);
+
     if(image.width > 0 && image.height > 0)
     {
-        GL_Pixel_Format format = gl_pixel_format_from_pixel_format(image.pixel_format, image_builder_channel_count(image));
+        GL_Pixel_Format format = gl_pixel_format_from_pixel_format(image.type, image_channel_count(image));
         glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, x, y, layer, image.width, image.height, 1, format.access_format, format.channel_type, image.pixels);
     }
 
@@ -818,195 +781,16 @@ void render_texture_array_set(Render_Texture_Array* array, i32 layer, i32 x, i32
         glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 }
 
-
-isize _gcd(isize a, isize b)
-{
-    while(b != 0) 
-    {
-        isize rem = a % b;
-        a = b;
-        b = rem;
-    }
-
-    return a;
-}
-
-void test_gcd()
-{
-    TEST(_gcd(0, 0) == 0);
-    TEST(_gcd(0, 12) == 12);
-    TEST(_gcd(12, 0) == 12);
-    TEST(_gcd(12, 1) == 1);
-    TEST(_gcd(1, 12) == 1);
-    TEST(_gcd(6, 12) == 6);
-    TEST(_gcd(6, 12) == 6);
-    TEST(_gcd(12, 12) == 12);
-    TEST(_gcd(10, 12) == 2);
-}
-
-void test_memset_pattern()
-{
-    typedef struct  {
-        const char* pattern;
-        int field_size;
-        const char* expected;
-    } Test_Case;
-    
-    Test_Case test_cases[] = {
-        {"",            0,  ""},
-        {"a",           0,  ""},
-        {"ba",          1,  "b"},
-        {"hahe",        7,  "hahehah"},
-        {"xxxxyyyy",    7,  "xxxxyyy"},
-        {"hahe",        9,  "hahehaheh"},
-        {"hahe",        24, "hahehahehahehahehahehahe"},
-        {"hahe",        25, "hahehahehahehahehahehaheh"},
-        {"hahe",        26, "hahehahehahehahehahehaheha"},
-        {"hahe",        27, "hahehahehahehahehahehahehah"},
-    };
-    
-    char field[128] = {0};
-    char expected[128] = {0};
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(test_cases); i++)
-    {
-        Test_Case test_case = test_cases[i];
-        isize pattern_len = strlen(test_case.pattern);
-
-        memset(field, 0, sizeof field);
-        memset(expected, 0, sizeof expected);
-
-        memset_pattern(field, test_case.field_size, test_case.pattern, pattern_len);
-
-        memcpy(expected, test_case.expected, strlen(test_case.expected));
-        TEST(memcmp(field, expected, sizeof field) == 0);
-    }
-}
-
-void log_perf_counter_stats(const char* log_module, Log_Type log_type, const char* name, Perf_Counter_Stats stats)
-{
-    LOG(log_module, log_type, "%20s total: %15.8lf avg: %12.8lf runs: %-8lli σ/μ %13.6lf [%13.6lf %13.6lf] (ms)", 
-        name,
-		stats.total_s*1000,
-		stats.average_s*1000,
-        (lli) stats.runs,
-        stats.normalized_standard_deviation_s,
-		stats.min_s*1000,
-		stats.max_s*1000
-	);
-}
-
-typedef bool (*Benchamrk_Func)(void* context);
-
-Perf_Counter_Stats benchmark(f64 warmup, f64 time, isize repeats, Benchamrk_Func func, void* context)
-{
-    Perf_Counter counter = {0};
-    for(f64 start = clock_s();; )
-    {
-        f64 now = clock_s();
-        if(now > start + time)
-            break;
-
-        Perf_Counter_Running running = perf_counter_start();
-        u8 keep = true;
-        for(isize i = 0; i < repeats; i++)
-            keep &= (u8) func(context);
-
-        if(keep && now >= warmup + start)
-            perf_counter_end(&counter, running);
-    }
-
-    return perf_counter_get_stats(counter, repeats);
-}
-
-typedef struct Fill_Ascii_Context {
-    char* buffer;
-    isize size;
-} Fill_Ascii_Context;
-
-void fill_random_ascii(char* buffer, isize size)
-{
-    const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
-    isize i = 0;
-    for(; i < size; i += 10)
-    {
-        //64 = 2^6 => x^64 can fit 10 random chars from a single
-        //random number
-        u64 random = random_u64();
-        u8 rs[12] = {0};
-        #define steps3(k) \
-            rs[k + 0] = (u8) random % 64; random /= 64; \
-            rs[k + 1] = (u8) random % 64; random /= 64; \
-
-        steps3(0);
-        steps3(2);
-        steps3(4);
-        steps3(6);
-        steps3(8);
-        #undef steps3
-
-        isize remaining = MIN(size - i, 10);
-        for(isize k = 0; k < remaining; k++)
-        {
-            char c = chars[rs[k]];
-            buffer[k + i] = c;
-        }
-    }
-
-    return;
-}
-
-char random_ascii()
-{
-    u64 random = random_u64();
-    u64 random_capped = random % 64;
-    const char* chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
-    return chars[random_capped];
-}
-
-char random_char()
-{
-    return (char) (random_u64());
-}
-
-bool _benchmark_fill_ascii(void* context)
-{
-    Fill_Ascii_Context* c = (Fill_Ascii_Context*) context; 
-    fill_random_ascii(c->buffer, c->size);
-    return true;
-}
-
-bool _benchmark_fill_ascii_by_one(void* context)
-{
-    Fill_Ascii_Context* c = (Fill_Ascii_Context*) context; 
-    for(isize i = 0; i < c->size; i++)
-        c->buffer[i] = random_ascii();
-
-    return true;
-}
-
-void benchmark_random_cached(f64 discard, f64 time)
-{
-    f64 w = discard;
-    f64 t = time;
-    isize r = 16;
-    
-    char buffer[2048 + 1] = {0};
-    Fill_Ascii_Context context = {buffer, 2048};
-
-    log_perf_counter_stats("TEST", LOG_TYPE_INFO, "fill", benchmark(w, t, r, _benchmark_fill_ascii, &context));
-    log_perf_counter_stats("TEST", LOG_TYPE_INFO, "by_one", benchmark(w, t, r, _benchmark_fill_ascii_by_one, &context));
-
-    return;
-}
-
 //Fills txture array layer in such a way that mipmapping wont effect the edges of the image. 
 //The image needs to be smaller than the texture array.
 //That is the corner pixels will be expanded to fill the remianing size around the image.
 //If the image is exactly the size of the array jsut copies it over.
-bool render_texture_array_fill_layer(Render_Texture_Array* array, i32 layer, Image_Builder image, bool regenerate_mips, Image_Builder* temp_builder_or_null)
+bool render_texture_array_fill_layer(Render_Texture_Array* array, i32 layer, Image image, bool regenerate_mips, Image* temp_builder_or_null)
 {
     bool state = true;
-    if(image.width > array->info.width || image.height > array->info.height)
+    CHECK_BOUNDS(layer, array->layer_count);
+    
+    if(image.width > array->width || image.height > array->height)
     {
         ASSERT(false);
         LOG_ERROR("render", "invalid texture size filled to array");
@@ -1017,27 +801,28 @@ bool render_texture_array_fill_layer(Render_Texture_Array* array, i32 layer, Ima
         if(regenerate_mips)
             render_texture_array_generate_mips(array);
     }
-    else if(image.width == array->info.width && image.height == array->info.height)
+    else if(image.width == array->width && image.height == array->height)
     {
         render_texture_array_set(array, layer, 0, 0, image, regenerate_mips);
     }
     else
     {
-        Image_Builder temp_storage = {0};
-        Image_Builder* temp_builder = temp_builder_or_null;
+        LOG_WARN("render", "image of size %d x %d doesnt fit exactly. Resorting back to extending it.", image.width, image.height);
+
+        Image temp_storage = {0};
+        Image* temp_builder = temp_builder_or_null;
 
         if(temp_builder_or_null == NULL)
         {
-            image_builder_init_from_pixel_size(&temp_storage, allocator_get_scratch(), image.pixel_size, image.pixel_format);
+            image_init_unshaped(&temp_storage, allocator_get_scratch());
             temp_builder = &temp_storage;
         }
 
         ASSERT(image.height > 0 && image.width > 0);
 
-        image_builder_resize(temp_builder, array->info.width, array->info.height);
-        image_builder_copy(temp_builder, image_from_builder(image), 0, 0);
+        image_assign(temp_builder, image);
         
-        isize stride = image_builder_byte_stride(*temp_builder);
+        isize stride = image_byte_stride(*temp_builder);
         i32 pixel_size = temp_builder->pixel_size;
 
         u8 color[3] = {0xff, 0, 0xff};
@@ -1047,8 +832,8 @@ bool render_texture_array_fill_layer(Render_Texture_Array* array, i32 layer, Ima
             u8* curr_row = temp_builder->pixels + stride*y;
             u8* last_pixel = curr_row + pixel_size*(image.width - 1);
 
-            //memset_pattern(curr_row + pixel_size*image.width, (array->info.width - image.width)*pixel_size, color, pixel_size);
-            memset_pattern(curr_row + pixel_size*image.width, (array->info.width - image.width)*pixel_size, last_pixel, pixel_size);
+            //memset_pattern(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, color, pixel_size);
+            memset_pattern(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, last_pixel, pixel_size);
         }
 
         //Extend downwards
@@ -1059,36 +844,357 @@ bool render_texture_array_fill_layer(Render_Texture_Array* array, i32 layer, Ima
             memmove(curr_row, last_row, stride);
         }
         
-        //memset_pattern(temp_builder->pixels, image_builder_all_pixels_size(*temp_builder), color, sizeof(color));
+        //memset_pattern(temp_builder->pixels, image_all_pixels_size(*temp_builder), color, sizeof(color));
 
         render_texture_array_set(array, layer, 0, 0, *temp_builder, regenerate_mips);
 
-        image_builder_deinit(&temp_storage);
+        image_deinit(&temp_storage);
     }
 
     return state;
 }
 
-Error render_texture_array_fill_layer_from_disk(Render_Texture_Array* array, i32 layer, String path, bool regenerate_mips, Image_Builder* temp_builder_or_null)
-{
-    Image_Builder temp_storage = {allocator_get_scratch()};
-    Error error = image_read_from_file(&temp_storage, path, 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
-    ASSERT_MSG(error_is_ok(error), ERROR_FMT, ERROR_PRINT(error));
+typedef struct Render_Texture_Layer {
+    i32 width;
+    i32 height;
+
+    i32 layer;
+    i32 resolution_index;
+} Render_Texture_Layer;
+
+typedef struct Render_Texture_Layer_Info {
+    i32 used_width;
+    i32 used_height;
+    bool is_used;
+} Render_Texture_Layer_Info;
+
+DEFINE_ARRAY_TYPE(Render_Texture_Layer_Info, Render_Texture_Layer_Info_Array);
+
+typedef struct Render_Texture_Resolution {
+    Render_Texture_Array array;
+    Render_Texture_Layer_Info_Array layers;
+    i32 used_layers;
+    i32 grow_by;
     
-    if(error_is_ok(error))
+} Render_Texture_Resolution;
+
+DEFINE_ARRAY_TYPE(Render_Texture_Resolution, Render_Texture_Resolution_Array);
+
+//@TODO: what to do with outliers?
+//@TODO: what to do with different formats?
+//@TODO: rework images so that they have capacity! Add rehsape!
+
+typedef struct Render_Texture_Manager {
+    Render_Texture_Resolution_Array resolutions;
+    Allocator* allocator;
+} Render_Texture_Manager;
+
+i32 int_log2_lower_bound(i32 val)
+{
+    if(val <= 0)
+        return 0;
+    return platform_find_last_set_bit32(val);
+}
+
+i32 int_log2_upper_bound(i32 val)
+{
+    ASSERT(val >= 0);
+    i32 upper = int_log2_lower_bound(val);
+    if(val > (1 << upper))
+        upper += 1;
+
+    return upper;
+}
+
+void render_texture_manager_generate_mips(Render_Texture_Manager* manager)
+{
+    for(isize i = 0; i < manager->resolutions.size; i++)
     {
-        if(render_texture_array_fill_layer(array, layer, temp_storage, regenerate_mips, temp_builder_or_null) == false)
-            error.code = 1;
+        Render_Texture_Resolution* res = &manager->resolutions.data[i];
+        render_texture_array_generate_mips(&res->array);
+    }
+}
+ 
+isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32 width, i32 height, i32 layers, i32 grow_by, Pixel_Type format, i32 channel_count)
+{
+    i32 max_dim = MAX(width, height);
+    i32 log_2_resolution = int_log2_upper_bound(max_dim);
+
+    Render_Texture_Resolution resolution = {0};
+    resolution.array.mip_level_count = MAX(log_2_resolution - 1, 1);
+    resolution.array.type = gl_pixel_format_from_pixel_format(format, channel_count);
+    resolution.array.layer_count = layers;
+    resolution.array.width = width;
+    resolution.array.height = height;
+    resolution.grow_by = grow_by;
+    resolution.used_layers = 0;
+
+    isize out = -1;
+    if(render_texture_array_init(&resolution.array, NULL))
+    {
+        array_init(&resolution.layers, manager->allocator);
+        array_resize(&resolution.layers, layers);
+        out = manager->resolutions.size;
+        array_push(&manager->resolutions, resolution);
+    }
+
+    return out;
+}
+
+void render_texture_manager_deinit(Render_Texture_Manager* manager)
+{
+    //@TODO
+    ASSERT(false);
+    //for(isize i = 0; i < manager->resolutions.size; i++)
+    //{
+    //    Render_Texture_Resolution* res = &manager->resolutions.data[i];
+    //    render_texture_array_generate_mips(&res->array);
+    //}
+
+    memset(manager, 0, sizeof *manager);
+}
+
+void render_texture_manager_init(Render_Texture_Manager* manager, Allocator* allocator)
+{
+    //render_texture_manager_deinit(manager);
+    if(allocator == NULL) 
+        allocator = allocator_get_scratch();
+        
+    manager->allocator = allocator;
+    array_init(&manager->resolutions, allocator);
+}
+
+void render_texture_manager_add_default_resolutions(Render_Texture_Manager* manager)
+{
+    i32 min_size = 32;
+    i32 min_res_log2 = int_log2_lower_bound(min_size);
+
+    i32 layer_counts[20] = {0};
+    layer_counts[int_log2_lower_bound(32)] = 128;
+    layer_counts[int_log2_lower_bound(64)] = 128;
+    layer_counts[int_log2_lower_bound(128)] = 128;
+    layer_counts[int_log2_lower_bound(256)] = 128;
+    layer_counts[int_log2_lower_bound(512)] = 32;
+    layer_counts[int_log2_lower_bound(1024)] = 32;
+    layer_counts[int_log2_lower_bound(2048)] = 16;
+    layer_counts[int_log2_lower_bound(4096)] = 8;
+
+    isize combined_size = 0;
+    for(i32 i = 0; i < 7; i++)
+    {
+        i32 size_log2 = (min_res_log2 + i);
+        i32 size = 1 << size_log2;
+        i32 layers = layer_counts[size_log2];
+        i32 grow_by = layers / 8;
+        i32 channels = 3;
+
+        i32 resolution_bytes_size = size*size*layers*channels;
+        combined_size += resolution_bytes_size;
+            
+        render_texture_manager_add_resolution(manager, size, size, layers, grow_by, PIXEL_TYPE_U8, channels);
+    }
+
+    LOG_WARN("render", "using %lli combined VRAM on textures", combined_size);
+}
+
+typedef enum Found_Type{
+    NOT_FOUND = 0,
+    FOUND_EXACT,
+    FOUND_APPROXIMATE,
+    FOUND_APPROXIMATE_BAD_FORMAT,
+} Found_Type;
+
+Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager, Found_Type* found_type_or_null, i32 width, i32 height, Pixel_Type type, i32 channel_count, bool used)
+{
+    PERF_COUNTER_START(render_texture_manager_find_counter);
+    Render_Texture_Layer out = {0};
+
+    bool state = false;
+    i32 max_dim = MAX(width, height);
+    i32 min_dim = MIN(width, height);
+    isize needed_size = width * height;
+
+    Found_Type found_type = NOT_FOUND;
+
+    if(max_dim > 0)
+    {
+        //Simple for loop to find a best fit in terms of space wasted 
+        // because this will not be called very often.
+        isize min_diff = INT64_MAX;
+        isize min_diff_index = -1;
+        for(isize i = 0; i < manager->resolutions.size; i++)
+        {
+            Render_Texture_Resolution* resolution = &manager->resolutions.data[i];
+            GL_Pixel_Format* res_format = &resolution->array.type;
+            isize max_layer_dim = MAX(resolution->array.width, resolution->array.height);
+            isize min_layer_dim = MIN(resolution->array.width, resolution->array.height);
+
+            //The layer must have:
+            // 1) image_fits: big enough (can be rotated) @TODO: IMPLEMENT FURTHER DOWN!
+            // 2) format_fits: the pixel format is the same and the number of channels is big enough
+            // 3) has_space: needs to not be full or not be empty based on what we are looking for.
+            bool image_fits = max_layer_dim >= max_dim && min_layer_dim >= min_dim;
+            bool format_fits = res_format->equivalent == type && res_format->channels >= channel_count;
+            bool has_space = true;
+         
+            if(used == false)
+                has_space = resolution->used_layers != resolution->layers.size;
+            else
+                has_space = resolution->used_layers != 0;
+
+            if(image_fits && format_fits && has_space)
+            {
+                isize layer_size = resolution->array.width * resolution->array.height;
+                isize size_diff = layer_size - needed_size;
+                isize channel_diff = res_format->channels - channel_count;
+                ASSERT(size_diff >= 0);
+
+                //If number of channels dont match we effectively also waste all the other channels 
+                // on that layer
+                size_diff += channel_diff*layer_size;
+                ASSERT(size_diff >= 0);
+
+                if(min_diff > size_diff)
+                {
+                    min_diff = size_diff;
+                    min_diff_index = i;
+                }
+            }
+        }
+        
+        //If was found
+        if(min_diff_index != -1)
+        {
+            Render_Texture_Resolution* resolution = &manager->resolutions.data[min_diff_index];
+            if(min_diff == 0)
+                found_type = FOUND_EXACT;
+            if(resolution->array.type.channels == type)
+                found_type = FOUND_APPROXIMATE;
+            else
+                found_type = FOUND_APPROXIMATE_BAD_FORMAT;
+
+            out.resolution_index = (i32) min_diff_index + 1;
+            out.layer = -1;
+            for(isize i = 0; i < resolution->layers.size; i++)
+            {
+                if(resolution->layers.data[i].is_used == used)
+                {
+                    out.layer = (i32) i;
+                    break;
+                }
+            }
+
+            ASSERT_MSG(out.layer != -1, "The resolution->used_layers must be wrong!");
+            state = true;
+        }
+    }
+
+    if(found_type == NOT_FOUND)
+        
+    
+    if(found_type_or_null)
+        *found_type_or_null = found_type;
+
+    PERF_COUNTER_END(render_texture_manager_find_counter);
+    return out;
+}
+
+//if((f64) manager->used_layers[resolution_index] >= layer_infos->size * 0.75)
+//    LOG_WARN("render", "more than 75% texture slots used of size : width: %d height: %d", width, height);
+//
+//if(out.layer == -1)
+//{
+//    out.resolution = 0;
+//    LOG_WARN("render", "out of render textures of size: width: %d height: %d", width, height);
+//}
+
+Render_Texture_Layer render_texture_manager_add(Render_Texture_Manager* manager, Image image)
+{
+    Found_Type found_type = NOT_FOUND;
+    Render_Texture_Layer empty_slot = render_texture_manager_find(manager, &found_type, image.width, image.height, (Pixel_Type) image.type, image_channel_count(image), false);
+
+    #define _ERROR_PARAMS "width: %d height: %d type: %s channel_count: %d", image.width, image.height, pixel_type_name(image.type), image_channel_count(image)
+
+    if(empty_slot.resolution_index <= 0)
+        LOG_ERROR("render", "render_texture_manager_add() Unable to find empty slot! " _ERROR_PARAMS);
+    else
+    {
+        Render_Texture_Resolution* resolution = &manager->resolutions.data[empty_slot.resolution_index - 1];
+        if(found_type == FOUND_APPROXIMATE)
+            LOG_WARN("render", "render_texture_manager_add() Found only approximate match" _ERROR_PARAMS);
+            
+        if(found_type == FOUND_APPROXIMATE_BAD_FORMAT)
+        {
+            LOG_WARN("render", "render_texture_manager_add() Found only approximate match with wrong format!" _ERROR_PARAMS);
+            log_group_push();
+            LOG_WARN("render", "found channel count: %d", resolution->array.type.channels);
+            log_group_pop();
+        }
+
+        resolution->used_layers += 1;
+
+        Render_Texture_Layer_Info* layer_info = &resolution->layers.data[empty_slot.layer];
+        layer_info->is_used = true;
+        layer_info->used_width = image.width;
+        layer_info->used_height = image.height;
+
+        bool fill_state = render_texture_array_fill_layer(&resolution->array, empty_slot.layer, image, false, NULL);
+        ASSERT(fill_state);
+    }
+
+    return empty_slot;
+}
+
+Error render_texture_manager_add_from_disk(Render_Texture_Manager* manager, String path, Render_Texture_Layer* image)
+{
+    LOG_INFO("render", "reading image at path '%s' current working dir '%s'", escape_string_ephemeral(path), platform_directory_get_current_working());
+    log_group_push();
+    PERF_COUNTER_START(image_read_counter);
+
+    Image temp_storage = {allocator_get_scratch()};
+    Error error = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+    
+    if(error_is_ok(error) == false)
+    {
+        LOG_ERROR("render", "error reading " ERROR_FMT " image!", ERROR_PRINT(error));
+        ASSERT(false);
+    }
+    else
+    {
+        *image = render_texture_manager_add(manager, temp_storage);
     }
         
-    image_builder_deinit(&temp_storage);
+    image_deinit(&temp_storage);
+    
+    PERF_COUNTER_END(image_read_counter);
+    log_group_pop();
     return error;
 }
 
+
+typedef struct Render_Batch_Group {
+    i32 indeces_from;
+    i32 indeces_to;
+
+    Render_Texture_Layer diffuse;
+    Render_Texture_Layer specular;
+    
+    Vec4 diffuse_color;
+    Vec4 ambient_color;
+    Vec4 specular_color;
+    f32 specular_exponent;
+    f32 metallic;
+} Render_Batch_Group;
+
+DEFINE_ARRAY_TYPE(Render_Batch_Group, Render_Batch_Group_Array);
+
+typedef struct Render_Batch_Mesh {
+    Render_Mesh mesh;
+    Render_Batch_Group_Array groups;
+} Render_Batch_Mesh;
+
 void run_func(void* context)
 {
-    test_memset_pattern();
-
     LOG_INFO("APP", "run_func enter");
     Allocator* upstream_alloc = allocator_get_default();
 
@@ -1178,13 +1284,12 @@ void run_func(void* context)
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     
     enum { 
-        num_instances_x = 40,
-        num_instances_y = 40,
+        num_instances_x = 20,
+        num_instances_y = 20,
         num_instances = num_instances_x * num_instances_y, 
         max_commands = 128,
         model_slot = 5 
     };
-    
 
     GLuint instanceVBO = 0;
     {
@@ -1206,7 +1311,6 @@ void run_func(void* context)
             array_push(&models, mat);
         }
 
-        //@TODO: dont do named since that requires opengl 4.5
         glCreateBuffers(1, &instanceVBO);
         glNamedBufferData(instanceVBO, sizeof(Mat4) * models.size, models.data, GL_STATIC_DRAW);
 
@@ -1225,16 +1329,13 @@ void run_func(void* context)
     Uniform_Block uniform_block_params = {0};
     Uniform_Block uniform_block_environment = {0};
 
-    Render_Texture_Array texture_array = {0};
-    Render_Texture_Array_Info tex_arr_info = {0};
-    tex_arr_info.width = 1024;
-    tex_arr_info.height = 1024;
-    tex_arr_info.layer_count = 3;
-    tex_arr_info.pixel_format.channels = 3;
-    tex_arr_info.mip_level_count = 2;
-    tex_arr_info.pixel_format.equivalent = PIXEL_FORMAT_U8;
+    Render_Texture_Manager texture_manager = {0};
+    render_texture_manager_init(&texture_manager, allocator_get_default());
+    render_texture_manager_add_default_resolutions(&texture_manager);
 
-    TEST(render_texture_array_init(&texture_array, tex_arr_info, NULL));
+    Render_Texture_Layer layer_floor = {0};
+    Render_Texture_Layer layer_debug = {0};
+    Render_Texture_Layer layer_tiles = {0};
 
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
@@ -1268,14 +1369,14 @@ void run_func(void* context)
             PERF_COUNTER_START(shader_load_counter);
             
             Error error = {0};
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.frag_vert"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.frag_vert"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl"));
 
             ASSERT(error_is_ok(error));
             {
@@ -1320,11 +1421,19 @@ void run_func(void* context)
             render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
             
-            error = ERROR_AND(error) render_texture_array_fill_layer_from_disk(&texture_array, 0, STRING("resources/floor.jpg"), true, NULL);
+            //@TODO: use!
+            Image temp_builder = {allocator_get_scratch()};
 
-            error = ERROR_AND(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
-            error = ERROR_AND(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
-            error = ERROR_AND(error) render_image_init_from_disk(&image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2"));
+            error = ERROR_AND(error) render_texture_manager_add_from_disk(&texture_manager, STRING("resources/floor.jpg"), &layer_floor);
+            error = ERROR_AND(error) render_texture_manager_add_from_disk(&texture_manager, STRING("resources/debug.png"), &layer_debug);
+
+            render_texture_manager_generate_mips(&texture_manager);
+
+            image_deinit(&temp_builder);
+
+            //error = ERROR_AND(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            //error = ERROR_AND(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
+            //error = ERROR_AND(error) render_image_init_from_disk(&image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2"));
             error = ERROR_AND(error) render_cubeimage_init_from_disk(&cubemap_skybox, 
                 STRING("resources/skybox_front.jpg"), 
                 STRING("resources/skybox_back.jpg"), 
@@ -1351,16 +1460,14 @@ void run_func(void* context)
 
                 render_mesh_init_from_shape(&render_batch.mesh, combined_shape, STRING("render_batch.mesh"));
                 
-                group_cube_sphere.diffuse = image_debug;
-                //group_cube_sphere.specular = image_rusted_iron_metallic;
+                group_cube_sphere.diffuse = layer_debug;
                 group_cube_sphere.diffuse_color = vec4(1, 1, 1, 1);
                 group_cube_sphere.ambient_color = vec4(0, 0, 0, 1);
                 group_cube_sphere.specular_color = vec4(0.9f, 0.9f, 0.9f, 0);
                 group_cube_sphere.specular_exponent = 256;
-                group_cube_sphere.metallic = 0.95f;
+                group_cube_sphere.metallic = 0;
 
-                group_unit_cube.diffuse = image_floor;
-                //group_unit_cube.specular = image_rusted_iron_metallic;
+                group_unit_cube.diffuse = layer_floor;
                 group_unit_cube.diffuse_color = vec4(1, 1, 1, 1);
                 group_unit_cube.ambient_color = vec4(0, 0, 0, 1);
                 group_unit_cube.specular_color = vec4(0.5f, 0.5f, 0.5f, 0);
@@ -1437,10 +1544,7 @@ void run_func(void* context)
             {
                 #define MAX_LIGHTS 32
                 #define MAX_BATCH 8
-                #define MAP_BIT_DIFFUSE 1
-                #define MAP_BIT_AMBIENT 2
-                #define MAP_BIT_SPCULAR 4
-                #define MAP_BIT_NORMAL 8
+                #define MAX_RESOULTIONS 7
                 
                 typedef struct  {
                     MODIFIER_ALIGNED(16) Vec4 diffuse_color;
@@ -1448,7 +1552,10 @@ void run_func(void* context)
                     MODIFIER_ALIGNED(16) Vec4 specular_color;
                     MODIFIER_ALIGNED(4) float specular_exponent;
                     MODIFIER_ALIGNED(4) float metallic;
-                    MODIFIER_ALIGNED(4) int map_flags;
+                    MODIFIER_ALIGNED(4) int map_diffuse; 
+                    MODIFIER_ALIGNED(4) int map_specular; 
+                    MODIFIER_ALIGNED(4) int map_normal; 
+                    MODIFIER_ALIGNED(4) int map_ambient; 
                 } Params;
 
                 typedef struct {
@@ -1488,35 +1595,20 @@ void run_func(void* context)
 
                 render_shader_use(&shader_instanced_batched);
                 
-                GLuint map_diffuse_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_maps_diffuse");
-                GLuint map_specular_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_maps_specular");
-                GLuint map_array_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_map_array_test");
-
-                GLint map_slots[MAX_BATCH] = {0};
-                GLint slot_i = 0;
-
-                for(isize i = 0; i < render_batch.groups.size; i++)
+                GLuint map_array_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_map_resolutions");
+                GLint slot_index = 0;
+                GLint map_slots[MAX_RESOULTIONS] = {0};
+                for(GLint i = 0; i < MAX_RESOULTIONS && i < texture_manager.resolutions.size; i++)
                 {
-                    Render_Batch_Group* group = &render_batch.groups.data[i];
-                    if(group->diffuse.map != 0)
-                        render_image_use(&group->diffuse, slot_i);
-                    map_slots[i] = slot_i++;
+                    Render_Texture_Array* resolution_array = &texture_manager.resolutions.data[i].array;
+                    glActiveTexture(GL_TEXTURE0 + slot_index);
+                    glBindTexture(GL_TEXTURE_2D_ARRAY, resolution_array->handle);
+                    map_slots[i] = slot_index;
+                    slot_index += 1;
                 }
-                glUniform1iv(map_diffuse_loc, (GLsizei) render_batch.groups.size, map_slots);
                 
-                for(isize i = 0; i < render_batch.groups.size; i++)
-                {
-                    Render_Batch_Group* group = &render_batch.groups.data[i];
-                    if(group->specular.map != 0)
-                        render_image_use(&group->specular, slot_i);
+                glUniform1iv(map_array_loc, (GLsizei) MAX_RESOULTIONS, map_slots);
 
-                    map_slots[i] = slot_i++;
-                }
-                glUniform1iv(map_specular_loc, (GLsizei) render_batch.groups.size, map_slots);
-
-                glActiveTexture(GL_TEXTURE0 + slot_i);
-                glBindTexture(GL_TEXTURE_2D_ARRAY, texture_array.handle);
-                glUniform1i(map_array_loc, slot_i++);
 
                 for(isize i = 0; i < render_batch.groups.size; i++)
                 {
@@ -1527,11 +1619,10 @@ void run_func(void* context)
                     params[i].specular_exponent = group->specular_exponent;
                     params[i].metallic = group->metallic;
 
-                    if(group->specular.map)
-                        params[i].map_flags |= MAP_BIT_SPCULAR;
-                            
-                    if(group->diffuse.map)
-                        params[i].map_flags |= MAP_BIT_DIFFUSE;
+                    #define COMPRESS_TEXTURE_LAYER(tex_layer) (tex_layer).layer | ((tex_layer).resolution_index << 16)
+
+                    params[i].map_specular = COMPRESS_TEXTURE_LAYER(group->specular);
+                    params[i].map_diffuse = COMPRESS_TEXTURE_LAYER(group->diffuse);
                 }
 
                 {
@@ -1629,6 +1720,8 @@ void run_func(void* context)
     log_perf_counters("APP", LOG_TYPE_INFO, true);
     render_world_deinit();
 
+    #define LOG_GROUP(module, log_type, format, ...) LOG(module, log_type,  ##__VA_ARGS__), log_group_push()
+
     LOG_INFO("RESOURCES", "Resources allocation stats:");
     log_group_push();
         allocator_log_stats_get(&resources_alloc.allocator, "RESOURCES", LOG_TYPE_INFO);
@@ -1648,42 +1741,13 @@ void error_func(void* context, Platform_Sandbox_Error error)
     LOG_ERROR("APP", "%s exception occured", msg);
     LOG_TRACE("APP", "printing trace:");
     log_group_push();
-    log_translated_callstack("APP", LOG_TYPE_ERROR, error.call_stack, error.call_stack_size);
+    log_captured_callstack("APP", LOG_TYPE_ERROR, error.call_stack, error.call_stack_size);
     log_group_pop();
 }
 
-#include "lib/_test_unicode.h"
-#include "lib/_test_random.h"
-#include "lib/_test_array.h"
-#include "lib/_test_hash_index.h"
-#include "lib/_test_log.h"
-#include "lib/_test_hash_table.h"
-#include "lib/_test_math.h"
-#include "lib/_test_base64.h"
-#include "lib/_test_hash_index.h"
-#include "lib/_test_stable_array.h"
-#include "lib/_test_lpf.h"
-
+#include "lib/_test_all.h"
 void run_test_func(void* context)
 {
-    test_gcd();
-    test_memset_pattern();
-
-    benchmark_random_cached(0.3, 1);
     (void) context;
-
-    test_unicode(3.0);
-    test_format_lpf();
-    test_stable_array();
-    test_hash_index(3.0);
-    test_stable_array();
-    test_base64(3.0);
-    test_array(3.0);
-    test_math(3.0);
-    test_hash_table_stress(3.0);
-    test_log();
-    test_hash_index(3.0);
-    test_random();
-    LOG_INFO("TEST", "All tests passed! uwu");
-    return;
+    test_all();
 }

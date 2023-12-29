@@ -824,7 +824,7 @@ bool render_map_from_map(Id map_id, Render_Ptr* render_map, Render* render)
             out.map_info = map->info;
             out.height = image->height;
             out.width = image->width;
-            out.pixel_format = gl_pixel_format_from_pixel_format((Image_Pixel_Format) image->pixel_format, image_builder_channel_count(*image));
+            out.pixel_format = gl_pixel_format_from_pixel_format((Pixel_Type) image->pixel_format, image_builder_channel_count(*image));
 
             if(out.pixel_format.unrepresentable)
                 LOG_ERROR("render", "map with invalid pixel format %i given. Map{name: %s, path: %s}", image->pixel_format, info->name.data, info->path.data);
@@ -887,7 +887,7 @@ bool render_cubemap_from_cubemap(Id cubemap_id, Render_Ptr* render_cubemap, Rend
                 out.map_infos[i] = cubemap->maps.faces[i].info;
                 out.heights[i] = face->height;
                 out.widths[i] = face->width;
-                out.pixel_formats[i] = gl_pixel_format_from_pixel_format((Image_Pixel_Format) face->pixel_format, image_builder_channel_count(*face));
+                out.pixel_formats[i] = gl_pixel_format_from_pixel_format((Pixel_Type) face->pixel_format, image_builder_channel_count(*face));
             
                 had_null = had_null || out.pixel_formats[i].unrepresentable;
             }

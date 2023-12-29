@@ -27,12 +27,12 @@ enum {
 
 EXPORT Image_File_Format image_file_format_from_extension(String extension_without_dot);
 
-EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize desired_channels, Image_Pixel_Format format, i32 flags);
-EXPORT Error image_read_from_file(Image_Builder* image, String path, isize desired_channels, Image_Pixel_Format format, i32 flags);
+EXPORT Error image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags);
+EXPORT Error image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags);
 
-EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File_Format format);
-EXPORT Error image_write_to_file_formatted(Image image, String path, Image_File_Format format);
-EXPORT Error image_write_to_file(Image image, String path);
+EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format format);
+EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_File_Format format);
+EXPORT Error image_write_to_file(Subimage image, String path);
 
 #endif
 
@@ -95,7 +95,7 @@ INTERNAL Error _image_loader_to_error(const char* error_string)
 }
 
 
-EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize desired_channels, Image_Pixel_Format format, i32 flags)
+EXPORT Error image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags)
 {
     Error error = {0};
     
@@ -130,30 +130,33 @@ EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize des
         void* allocated = NULL;
         stbi_set_flip_vertically_on_load((flags & IMAGE_LOAD_FLAG_FLIP_Y) > 0);
 
+        #pragma warning(disable:4061) //Dissables "'PIXEL_TYPE_I24' in switch of enum 'Pixel_Type' is not explicitly handled by a case label"
         switch(format)
         {
-            case PIXEL_FORMAT_U8:
+            case PIXEL_TYPE_U8:
                 allocated = stbi_load_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
                 break;
 
-            case PIXEL_FORMAT_U16:
+            case PIXEL_TYPE_U16:
                 allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
                 break;
 
-            case PIXEL_FORMAT_F32:
+            case PIXEL_TYPE_F32:
                 allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
                 break;
 
-            case PIXEL_FORMAT_U24:
-            case PIXEL_FORMAT_U32:
+            case PIXEL_TYPE_U24:
+            case PIXEL_TYPE_U32:
             default: 
                 ASSERT(false);
                 break;
         }
-        
+        #pragma warning(default:4061)
+
+
         if(allocated)
         {
-            image_builder_init(image, wrapper_allocator_get_default(), channels, format);
+            image_init(image, wrapper_allocator_get_default(), channels, format);
             image->pixels = (u8*) allocated;
             image->width = (i32) width;
             image->height = (i32) height;
@@ -168,7 +171,7 @@ EXPORT Error image_read_from_memory(Image_Builder* image, String data, isize des
     return error;
 }
 
-EXPORT Error image_read_from_file(Image_Builder* image, String path, isize desired_channels, Image_Pixel_Format format, i32 flags)
+EXPORT Error image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
     String_Builder file_content = {allocator_get_scratch()};
     Error file_error = file_read_entire(path, &file_content);
@@ -187,7 +190,7 @@ EXPORT INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
     array_append(append_into, (char*) data, size);
 }
 
-EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File_Format file_format)
+EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
 {
     const char* error_msg_unspecfied =          "Unspecified error while formatting into memory (Zero sized image?)";
     const char* error_msg_bad_type =            "Output format does not support the representation format data type";
@@ -198,73 +201,73 @@ EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File
 
     array_clear(into);
 
-    Image_Builder contiguous = {0};
+    Image contiguous = {0};
 
     //not contigous in memory => make contiguous copy
-    if(image_is_contiguous(image) == false)
+    if(subimage_is_contiguous(image) == false)
     {
-        image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
-        image = image_from_builder(contiguous);
+        contiguous = image_from_subimage(image, allocator_get_scratch());
+        image = subimage_make(contiguous);
     }
 
     Error out_error = {0};
-    isize channel_count = image_channel_count(image);
+    isize channel_count = subimage_channel_count(image);
     bool had_internal_error = false;
     switch(file_format)
     {
         case IMAGE_LOAD_FILE_FORMAT_PNG: {
-            isize stride = image_byte_stride(image);;
-            if(image.pixel_format != PIXEL_FORMAT_U8)
+            isize stride = subimage_byte_stride(image);;
+            if(image.type != PIXEL_TYPE_U8)
                 out_error = _image_loader_to_error(error_msg_bad_type);
             else
                 had_internal_error = !stbi_write_png_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, (int) stride);
         } break;
         
         case IMAGE_LOAD_FILE_FORMAT_BMP: {
-            if(image.pixel_format != PIXEL_FORMAT_U8)
+            if(image.type != PIXEL_TYPE_U8)
                 out_error = _image_loader_to_error(error_msg_bad_type);
             else
                 had_internal_error = !stbi_write_bmp_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
         } break;
         
         case IMAGE_LOAD_FILE_FORMAT_TGA: {
-            if(image.pixel_format != PIXEL_FORMAT_U8)
+            if(image.type != PIXEL_TYPE_U8)
                 out_error = _image_loader_to_error(error_msg_bad_type);
             else
                 had_internal_error = !stbi_write_tga_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
         } break;
         
         case IMAGE_LOAD_FILE_FORMAT_JPG: {
-            if(image.pixel_format != PIXEL_FORMAT_U8)
+            if(image.type != PIXEL_TYPE_U8)
                 out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(image_channel_count(image) > 3)
+            else if(channel_count > 3)
                 out_error = _image_loader_to_error(error_msg_bad_chanel_count);
             else
                 had_internal_error = !stbi_write_jpg_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, jpg_compression_quality);
         } break;
         
         case IMAGE_LOAD_FILE_FORMAT_HDR: {
-            if(image.pixel_format != PIXEL_FORMAT_F32)
+            if(image.type != PIXEL_TYPE_F32)
                 out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(image_channel_count(image) > 3)
+            else if(channel_count > 3)
                 out_error = _image_loader_to_error(error_msg_bad_chanel_count);
             else
                 had_internal_error = !stbi_write_hdr_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, (float*) (void*) image.pixels);
         } break;
 
         case IMAGE_LOAD_FILE_FORMAT_PFM: {
-            if(image.pixel_format != PIXEL_FORMAT_F32)
+            if(image.type != PIXEL_TYPE_F32)
                 out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(image_channel_count(image) > 3)
+            else if(channel_count > 3)
                 out_error = _image_loader_to_error(error_msg_bad_chanel_count);
             else
                 out_error = netbpm_format_pfm_write_into(into, image, 1.0f);
         } break;
 
         case IMAGE_LOAD_FILE_FORMAT_PPM: {
-            if(image.pixel_format != PIXEL_FORMAT_U8)
+            if(image.type != PIXEL_TYPE_U8)
                 out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(image_channel_count(image) > 3)
+            else if(channel_count > 3)
                 out_error = _image_loader_to_error(error_msg_bad_chanel_count);
             else
                 out_error = netbpm_format_ppm_write_into(into, image);
@@ -283,11 +286,11 @@ EXPORT Error image_write_to_memory(Image image, String_Builder* into, Image_File
     if(had_internal_error)
         out_error = ERROR_AND(out_error) _image_loader_to_error(error_msg_unspecfied);
 
-    image_builder_deinit(&contiguous);
+    image_deinit(&contiguous);
     return out_error;
 }
 
-EXPORT Error image_write_to_file_formatted(Image image, String path, Image_File_Format file_format)
+EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
     String_Builder formatted = {allocator_get_scratch()};
     Error format_error = image_write_to_memory(image, &formatted, file_format);
@@ -298,7 +301,7 @@ EXPORT Error image_write_to_file_formatted(Image image, String path, Image_File_
     return output_error;
 }
 
-EXPORT Error image_write_to_file(Image image, String path)
+EXPORT Error image_write_to_file(Subimage image, String path)
 {
     isize last_dot_i = string_find_last_char(path, '.') + 1;
     CHECK_BOUNDS(last_dot_i, path.size + 1);

@@ -451,9 +451,9 @@ GLenum render_pixel_format_from_image_pixel_format(isize pixel_format)
 {
     switch(pixel_format)
     {
-        case PIXEL_FORMAT_U8:  return GL_UNSIGNED_BYTE;
-        case PIXEL_FORMAT_U16: return GL_UNSIGNED_SHORT;
-        case PIXEL_FORMAT_F32: return GL_FLOAT;
+        case PIXEL_TYPE_U8:  return GL_UNSIGNED_BYTE;
+        case PIXEL_TYPE_U16: return GL_UNSIGNED_SHORT;
+        case PIXEL_TYPE_F32: return GL_FLOAT;
         default: ASSERT(false); return 0;
     }
 }
@@ -481,17 +481,8 @@ void render_image_deinit(Render_Image* render)
 
 void render_image_init(Render_Image* render, Image image, String name, GLenum internal_format_or_zero)
 {
-    GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.pixel_format);
+    GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.type);
     GLenum channel_format = render_channel_format_from_image_builder_channel_count(image_channel_count(image));
-
-    Image_Builder contiguous = {0};
-
-    //not contigous in memory => make contiguous copy
-    if(image_is_contiguous(image) == false)
-    {
-        image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
-        image = image_from_builder(contiguous);
-    }
 
     if(internal_format_or_zero == 0)
         internal_format_or_zero = channel_format;
@@ -513,8 +504,6 @@ void render_image_init(Render_Image* render, Image image, String name, GLenum in
     glTexImage2D(GL_TEXTURE_2D, 0, internal_format_or_zero, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    image_builder_deinit(&contiguous);
 } 
 
 void render_image_init_from_single_pixel(Render_Image* render, Vec4 color, u8 channels, String name)
@@ -529,11 +518,9 @@ void render_image_init_from_single_pixel(Render_Image* render, Vec4 color, u8 ch
 
     image.pixels = channel_values;
     image.pixel_size = channels;
-    image.pixel_format = PIXEL_FORMAT_U8;
+    image.type = PIXEL_TYPE_U8;
     image.width = 1;
     image.height = 1;
-    image.containing_width = 1;
-    image.containing_height = 1;
 
     render_image_init(render, image, name, 0);
 }
@@ -582,19 +569,10 @@ void render_cubeimage_init(Render_Cubeimage* render, const Image images[6], Stri
         render->heights[i] = image.height;
         render->widths[i] = image.width;
 
-        Image_Builder contiguous = {0};
-        if(image_is_contiguous(image) == false)
-        {
-            image_builder_init_from_image(&contiguous, allocator_get_scratch(), image);
-            image = image_from_builder(contiguous);
-        }
-        
         GLenum channel_format = render_channel_format_from_image_builder_channel_count(image_channel_count(image));
-        GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.pixel_format);
+        GLenum pixel_format = render_pixel_format_from_image_pixel_format(image.type);
         //glTexImage2D(GL_TEXTURE_2D, 0, internal_format_or_zero, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + (GLenum) i, 0, channel_format, (GLsizei) image.width, (GLsizei) image.height, 0, channel_format, pixel_format, image.pixels);
-
-        image_builder_deinit(&contiguous);
     }
 
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -617,55 +595,52 @@ void render_cubeimage_unuse(const Render_Cubeimage* render)
 
 Error render_image_init_from_disk(Render_Image* tetxure, String path, String name)
 {
-    Image_Builder image_builder = {0};
+    Image image = {0};
     
     Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
-    Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+    Error error = image_read_from_file(&image, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
     allocator_set(prev_allocs);
     
     ASSERT_MSG(error_is_ok(error), ERROR_FMT, ERROR_PRINT(error));
     if(error_is_ok(error))
-        render_image_init(tetxure, image_from_builder(image_builder), name, 0);
+        render_image_init(tetxure, image, name, 0);
 
-    image_builder_deinit(&image_builder);
+    image_deinit(&image);
 
     return error;
 }
 
 Error render_image_init_hdr_from_disk(Render_Image* tetxure, String path, String name)
 {
-    Image_Builder image_builder = {0};
+    Image image = {0};
     
     Allocator_Set prev_allocs = allocator_set_default(allocator_get_scratch());
-    Error error = image_read_from_file(&image_builder, path, 0, PIXEL_FORMAT_F32, IMAGE_LOAD_FLAG_FLIP_Y);
+    Error error = image_read_from_file(&image, path, 0, PIXEL_TYPE_F32, IMAGE_LOAD_FLAG_FLIP_Y);
     allocator_set(prev_allocs);
     
     ASSERT_MSG(error_is_ok(error), ERROR_FMT, ERROR_PRINT(error));
     if(error_is_ok(error))
-        render_image_init(tetxure, image_from_builder(image_builder), name, GL_RGB16F);
+        render_image_init(tetxure, image, name, GL_RGB16F);
 
-    image_builder_deinit(&image_builder);
+    image_deinit(&image);
     
     return error;
 }
 
 Error render_cubeimage_init_from_disk(Render_Cubeimage* render, String front, String back, String top, String bot, String right, String left, String name)
 {
-    Image_Builder face_image_builders[6] = {0};
     Image face_images[6] = {0};
     String face_paths[6] = {right, left, top, bot, front, back};
 
     Error error = {0};
     for (isize i = 0; i < 6; i++)
-    {
-        error = ERROR_AND(error) image_read_from_file(&face_image_builders[i], face_paths[i], 0, PIXEL_FORMAT_U8, 0);
-        face_images[i] = image_from_builder(face_image_builders[i]);
-    }
+        error = ERROR_AND(error) image_read_from_file(&face_images[i], face_paths[i], 0, PIXEL_TYPE_U8, 0);
     
-    render_cubeimage_init(render, face_images, name);
+    if(error_is_ok(error))
+        render_cubeimage_init(render, face_images, name);
     
     for (isize i = 0; i < 6; i++)
-        image_builder_deinit(&face_image_builders[i]);
+        image_deinit(&face_images[i]);
 
     return error;
 }
@@ -1225,7 +1200,7 @@ Render_Map render_map_from_map(Map map, Render* render)
     out.info = map.info;
     
     Resource_Info* info = NULL;
-    Image_Builder* image = image_get_with_info(map.image, &info);
+    Image* image = image_get_with_info(map.image, &info);
 
     if(image)
     {
@@ -1243,14 +1218,19 @@ Render_Map render_map_from_map(Map map, Render* render)
 
         if(HANDLE_IS_NULL(handle))
         {
-            LOG_INFO("RENDER", "Created map "STRING_FMT" (%lli channels)", STRING_PRINT(path), image_builder_channel_count(*image));
+            LOG_INFO("RENDER", "Created map "STRING_FMT" (%lli channels)", STRING_PRINT(path), image_channel_count(*image));
             Render_Image render_image = {0};
-            render_image_init(&render_image, image_from_builder(*image), STRING("@TEMP"), 0);
+            render_image_init(&render_image, *image, STRING("@TEMP"), 0);
             builder_assign(&render_image.path, path);
             handle = render_image_add(render, &render_image);
         }
 
         out.image = handle;
+    }
+    else
+    {
+        LOG_ERROR("render", "couldnt find image!");
+        ASSERT(false);
     }
 
     return out;
@@ -1266,14 +1246,19 @@ Render_Cubemap render_cubemap_from_cubemap(Cubemap cubemap, Render* render)
     {
         Map* map = &cubemap.maps.faces[i];
         Resource_Info* info = NULL;
-        Image_Builder* image = image_get_with_info(map->image, &info);
+        Image* image = image_get_with_info(map->image, &info);
 
         if(image)
         {
-            images[i] = image_from_builder(*image);
+            images[i] = *image;
             had_at_least_one_side = true;
             String path = string_from_builder(info->path);;
             builder_append(&concatenated_paths, path);
+        }
+        else
+        {
+            LOG_ERROR("render", "couldnt find image!");
+            ASSERT(false);
         }
 
         array_push(&concatenated_paths, '\0');

@@ -133,7 +133,7 @@ void resources_check_reloads();
     EXPORT Id           name##_duplicate(Id info, Resource_Params params); \
 
 RESOURCE_FUNCTION_DECL(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
-RESOURCE_FUNCTION_DECL(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
+RESOURCE_FUNCTION_DECL(Image,   RESOURCE_TYPE_IMAGE,            image)
 RESOURCE_FUNCTION_DECL(Map,             RESOURCE_TYPE_MAP,              map)
 RESOURCE_FUNCTION_DECL(Cubemap,         RESOURCE_TYPE_CUBEMAP,          cubemap)
 RESOURCE_FUNCTION_DECL(Material,        RESOURCE_TYPE_MATERIAL,         material)
@@ -218,7 +218,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         } \
         
     RESOURCE_FUNCTION_DEF(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
-    RESOURCE_FUNCTION_DEF(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
+    RESOURCE_FUNCTION_DEF(Image,   RESOURCE_TYPE_IMAGE,            image)
     RESOURCE_FUNCTION_DEF(Map,             RESOURCE_TYPE_MAP,              map)
     RESOURCE_FUNCTION_DEF(Cubemap,         RESOURCE_TYPE_CUBEMAP,          cubemap)
     RESOURCE_FUNCTION_DEF(Material,        RESOURCE_TYPE_MATERIAL,         material)
@@ -243,19 +243,19 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     }
 
     //IMAGE
-    void _image_init(Image_Builder* out)
+    void _image_init(Image* out)
     {
-        image_builder_init(out, resources_allocator(), 1, PIXEL_FORMAT_U8);
+        image_init(out, resources_allocator(), 1, PIXEL_TYPE_U8);
     }
 
-    void _image_copy(Image_Builder* out, const Image_Builder* in)
+    void _image_copy(Image* out, const Image* in)
     {
-        image_builder_init_from_image(out, resources_allocator(), image_from_builder(*in));
+        image_assign(out, *in);
     }
 
-    void _image_deinit(Image_Builder* out)
+    void _image_deinit(Image* out)
     {
-        image_builder_deinit(out);
+        image_deinit(out);
     }
     
     //MAP
@@ -387,7 +387,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             resource_manager_init(&resources->resources[TYPE_ENUM], alloc, sizeof(Type_Name), (Resource_Constructor) (void*) _##type_name##_init, (Resource_Destructor) (void*) _##type_name##_deinit, (Resource_Copy) (void*) _##type_name##_copy, #type_name, TYPE_ENUM);
         
         RESOURCE_INIT(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
-        RESOURCE_INIT(Image_Builder,   RESOURCE_TYPE_IMAGE,            image)
+        RESOURCE_INIT(Image,   RESOURCE_TYPE_IMAGE,            image)
         RESOURCE_INIT(Map,             RESOURCE_TYPE_MAP,              map)
         RESOURCE_INIT(Cubemap,         RESOURCE_TYPE_CUBEMAP,          cubemap)
         RESOURCE_INIT(Material,        RESOURCE_TYPE_MATERIAL,         material)
@@ -713,14 +713,14 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     }
 
     
-    EXPORT bool serialize_image(Lpf_Dyn_Entry* entry, Image_Builder* image, Read_Or_Write action)
+    EXPORT bool serialize_image(Lpf_Dyn_Entry* entry, Image* image, Read_Or_Write action)
     {
-        const Serialize_Enum pixel_format[] = {
-            SERIALIZE_ENUM_VALUE(PIXEL_FORMAT_U8),
-            SERIALIZE_ENUM_VALUE(PIXEL_FORMAT_U16),
-            SERIALIZE_ENUM_VALUE(PIXEL_FORMAT_U24),
-            SERIALIZE_ENUM_VALUE(PIXEL_FORMAT_U32),
-            SERIALIZE_ENUM_VALUE(PIXEL_FORMAT_F32),
+        const Serialize_Enum type[] = {
+            SERIALIZE_ENUM_VALUE(PIXEL_TYPE_U8),
+            SERIALIZE_ENUM_VALUE(PIXEL_TYPE_U16),
+            SERIALIZE_ENUM_VALUE(PIXEL_TYPE_U24),
+            SERIALIZE_ENUM_VALUE(PIXEL_TYPE_U32),
+            SERIALIZE_ENUM_VALUE(PIXEL_TYPE_F32),
         };
 
         bool state = true;
@@ -728,9 +728,9 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         state = state && serialize_i32(serialize_locate(entry, "height", action),        &image->height, 0, action);
         state = state && serialize_i32(serialize_locate(entry, "height", action),        &image->height, 0, action);
 
-        bool pixel_format_state = serialize_enum(serialize_locate(entry, "pixel_format", action), &image->pixel_format, sizeof(image->pixel_format), PIXEL_FORMAT_U8, "Image_Pixel_Format", pixel_format, STATIC_ARRAY_SIZE(pixel_format), action);
+        bool pixel_format_state = serialize_enum(serialize_locate(entry, "type", action), &image->type, sizeof(image->type), PIXEL_TYPE_U8, "Pixel_Type", type, STATIC_ARRAY_SIZE(type), action);
         if(pixel_format_state == false)
-            state = serialize_i32(serialize_locate(entry, "pixel_format", action),        &image->pixel_format, PIXEL_FORMAT_U8, action);
+            state = serialize_i32(serialize_locate(entry, "type", action), (i32*) &image->type, PIXEL_TYPE_U8, action);
         else
             state = pixel_format_state;
 

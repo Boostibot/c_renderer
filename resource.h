@@ -264,15 +264,11 @@ void _resource_log_wrong_id(Resource_Ptr out)
     if(out.ptr != NULL)
     {
         if(out.ptr)
-            LOG_ERROR("RESOURCE", "Wrong id %lli used. \n"
+            log_callstack("RESOURCE", LOG_TYPE_ERROR, 1, "Wrong id %lli used. \n"
                     "curr name: " STRING_FMT " path:" STRING_FMT "\n",
                     (lli) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
         else
-            LOG_ERROR("RESOURCE", "Wrong id %lli used", (lli) out.id);
-
-        log_group_push();
-            log_callstack("RESOURCE", LOG_TYPE_ERROR, -1, 1);
-        log_group_pop();
+            log_callstack("RESOURCE", LOG_TYPE_ERROR, 1, "Wrong id %lli used", (lli) out.id);
 
         ASSERT(false);
     }

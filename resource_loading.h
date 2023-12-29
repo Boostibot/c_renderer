@@ -429,9 +429,9 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
         else
         {   
             map_image = image_insert(params);
-            Image_Builder* loaded_image = image_get(map_image); 
+            Image* loaded_image = image_get(map_image); 
 
-            load_error = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_FORMAT_U8, 0);
+            load_error = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_TYPE_U8, 0);
             if(error_is_ok(load_error) == false)
                 image_remove(map_image);
         }
