@@ -789,7 +789,6 @@ EXPORT bool mdump_type_info(Mdump_Blocks* blocks, Mdump_Type_Info* in_memory, Md
 void mdump_print_type_hierarchy(Mdump_Types* types)
 {
     LOG_INFO("mdump", "mdump types:");
-    log_group_push();
     for(isize j = 0; j < types->types.size; j++)
     {
         Mdump_Type_Info type = types->types.data[j];
@@ -798,8 +797,7 @@ void mdump_print_type_hierarchy(Mdump_Types* types)
 
         if(type.members.size > 0)
         {
-            LOG_INFO("mdump", "%s (size: %lli align: %lli) {", type.type_name.data, (lli) type.size, (lli) type.align);
-            log_group_push();
+            LOG_INFO(">mdump", "%s (size: %lli align: %lli) {", type.type_name.data, (lli) type.size, (lli) type.align);
             for(isize i = 0; i < type.members.size; i++)
             {
                 Mdump_Type_Member member = type.members.data[i];
@@ -809,17 +807,15 @@ void mdump_print_type_hierarchy(Mdump_Types* types)
                     decoration = "[]";
                 else if(member.flags & MDUMP_FLAG_PTR)
                     decoration = "*";
-                LOG_INFO("mdump", "%s: %s%s (offset: %lli)", member.name.data, member_info->type_name.data, decoration, (lli) member.offset);
+                LOG_INFO(">>mdump", "%s: %s%s (offset: %lli)", member.name.data, member_info->type_name.data, decoration, (lli) member.offset);
             }
-            log_group_pop();
-            LOG_INFO("mdump", "}");
+            LOG_INFO(">mdump", "}");
         }
         else
         {
-            LOG_INFO("mdump", "%s (size: %lli align: %lli)", type.type_name.data, (lli) type.size, (lli) type.align);
+            LOG_INFO(">mdump", "%s (size: %lli align: %lli)", type.type_name.data, (lli) type.size, (lli) type.align);
         }
     }
-    log_group_pop();
 }
 
 void test_mdump()

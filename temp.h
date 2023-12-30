@@ -1,7 +1,7 @@
 void run_func(void* context)
 {
     test_mdump();
-    log_todos("APP", LOG_TYPE_DEBUG, "@TODO @TOOD @TEMP @SPEED @PERF");
+    log_todos("APP", LOG_DEBUG, "@TODO @TOOD @TEMP @SPEED @PERF");
 
     LOG_INFO("APP", "run_func enter");
     Allocator* upstream_alloc = allocator_get_default();
@@ -258,7 +258,7 @@ void run_func(void* context)
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
         {
-            log_perf_counters("app", LOG_TYPE_INFO, true);
+            log_perf_counters("app", LOG_INFO, true);
         }
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
@@ -589,20 +589,15 @@ void run_func(void* context)
             PERF_COUNTER_END(art_counter_brdf_lut);
             }
 
-            log_perf_counters("APP", LOG_TYPE_DEBUG, true);
+            log_perf_counters("APP", LOG_DEBUG, true);
 
             LOG_INFO("RENDER", "Render allocation stats:");
-            log_group_push();
-                log_allocator_stats("RENDER", LOG_TYPE_INFO, allocator_get_stats(&renderer_alloc.allocator));
-            log_group_pop();
+                log_allocator_stats(">RENDER", LOG_INFO, &renderer_alloc.allocator);
 
             LOG_INFO("RESOURCES", "Resources allocation stats:");
-            log_group_push();
-                log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
-            log_group_pop();
+                log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
             
             LOG_INFO("RESOURCES", "Resources repository memory usage stats:");
-            log_group_push();
             
                 isize accumulated_total = 0;
                 for(isize i = 0; i < RESOURCE_TYPE_ENUM_COUNT; i++)
@@ -611,17 +606,14 @@ void run_func(void* context)
                     isize type_alloced = stable_array_capacity(&manager->storage)*manager->type_size;
                     isize hash_alloced = manager->id_hash.entries_count * sizeof(Hash_Ptr_Entry);
 
-                    LOG_INFO("RESOURCES", "%s", manager->type_name);
-                    log_group_push();
-                        LOG_INFO("RESOURCES", "type_alloced: %s", format_memory_unit_ephemeral(type_alloced));
-                        LOG_INFO("RESOURCES", "hashes:       %s", format_memory_unit_ephemeral(hash_alloced));
-                    log_group_pop();
+                    LOG_INFO(">RESOURCES", "%s", manager->type_name);
+                        LOG_INFO(">>RESOURCES", "type_alloced: %s", format_memory_unit_ephemeral(type_alloced));
+                        LOG_INFO(">>RESOURCES", "hashes:       %s", format_memory_unit_ephemeral(hash_alloced));
 
                     accumulated_total += type_alloced + hash_alloced;
                 }
 
-                LOG_INFO("RESOURCES", "total overhead:       %s", format_memory_unit_ephemeral(accumulated_total));
-            log_group_pop();
+                LOG_INFO(">RESOURCES", "total overhead:       %s", format_memory_unit_ephemeral(accumulated_total));
 
             glViewport(0, 0, app->window_framebuffer_width, app->window_framebuffer_height); //@TODO stuff somehwere else!
         }
@@ -683,13 +675,11 @@ void run_func(void* context)
 
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
     
-    log_perf_counters("APP", LOG_TYPE_INFO, true);
+    log_perf_counters("APP", LOG_INFO, true);
     render_world_deinit();
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
-    log_group_push();
-        log_allocator_stats("RESOURCES", LOG_TYPE_INFO, allocator_get_stats(&resources_alloc.allocator));
-    log_group_pop();
+        log_allocator_stats(">RESOURCES", LOG_INFO, allocator_get_stats(&resources_alloc.allocator));
 
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);

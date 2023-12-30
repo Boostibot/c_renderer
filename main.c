@@ -1,4 +1,4 @@
-//#define RUN_TESTS
+#define RUN_TESTS
 
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
@@ -197,8 +197,8 @@ void benchmark_random_cached(f64 discard, f64 time)
     char buffer[2048 + 1] = {0};
     Fill_Ascii_Context context = {buffer, 2048};
 
-    log_perf_stats("TEST", LOG_TYPE_INFO, "fill  ", perf_benchmark(w, t, r, _benchmark_fill_ascii, &context));
-    log_perf_stats("TEST", LOG_TYPE_INFO, "by_one", perf_benchmark(w, t, r, _benchmark_fill_ascii_by_one, &context));
+    log_perf_stats("TEST", LOG_INFO, "fill  ", perf_benchmark(w, t, r, _benchmark_fill_ascii, &context));
+    log_perf_stats("TEST", LOG_INFO, "by_one", perf_benchmark(w, t, r, _benchmark_fill_ascii_by_one, &context));
 
     return;
 }
@@ -1126,9 +1126,7 @@ Render_Texture_Layer render_texture_manager_add(Render_Texture_Manager* manager,
         if(found_type == FOUND_APPROXIMATE_BAD_FORMAT)
         {
             LOG_WARN("render", "render_texture_manager_add() Found only approximate match with wrong format!" _ERROR_PARAMS);
-            log_group_push();
-            LOG_WARN("render", "found channel count: %d", resolution->array.type.channels);
-            log_group_pop();
+            LOG_WARN(">render", "found channel count: %d", resolution->array.type.channels);
         }
 
         resolution->used_layers += 1;
@@ -1510,7 +1508,7 @@ void run_func(void* context)
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
         {
-            log_perf_counters("app", LOG_TYPE_INFO, true);
+            log_perf_counters("app", LOG_INFO, true);
         }
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
@@ -1717,15 +1715,14 @@ void run_func(void* context)
 
     render_screen_frame_buffers_msaa_deinit(&screen_buffers);
     
-    log_perf_counters("APP", LOG_TYPE_INFO, true);
+    log_perf_counters("APP", LOG_INFO, true);
     render_world_deinit();
 
-    #define LOG_GROUP(module, log_type, format, ...) LOG(module, log_type,  ##__VA_ARGS__), log_group_push()
+    #define LOG_GROUP(module, log_type, format, ...) log_message((module), (log_type), SOURCE_INFO(), format, ##__VA_ARGS__), log_group_push()
+    //LOG_GROUP("RESOURCES", LOG_INFO, "Resources allocation stats:");
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
-    log_group_push();
-        allocator_log_stats_get(&resources_alloc.allocator, "RESOURCES", LOG_TYPE_INFO);
-    log_group_pop();
+    log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
 
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);
@@ -1740,14 +1737,14 @@ void error_func(void* context, Platform_Sandbox_Error error)
     
     LOG_ERROR("APP", "%s exception occured", msg);
     LOG_TRACE("APP", "printing trace:");
-    log_group_push();
-    log_captured_callstack("APP", LOG_TYPE_ERROR, error.call_stack, error.call_stack_size);
-    log_group_pop();
+    log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
 }
 
 #include "lib/_test_all.h"
 void run_test_func(void* context)
 {
+    log_example();
+    LOG_INFO(">app", "test_mode_selected!");
     (void) context;
     test_all();
 }
