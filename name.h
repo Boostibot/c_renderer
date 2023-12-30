@@ -1,6 +1,7 @@
 #pragma once
 #include "lib/string.h"
 #include "lib/hash_string.h"
+#include "lib/guid.h"
 
 #define RESOURCE_NAME_SIZE 55
 
@@ -12,7 +13,7 @@ typedef struct Name {
 bool name_from_hash_string(Name* name, Hash_String string)
 {
     isize min_size = MIN(RESOURCE_NAME_SIZE, string.size);
-    memset(name->data, 0, RESOURCE_NAME_SIZE + 1);
+    memset(name->data, 0, sizeof name->data);
     memmove(name->data, string.data, min_size);
     name->hash = string.hash;
     return min_size == string.size;

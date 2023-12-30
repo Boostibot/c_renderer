@@ -7,31 +7,40 @@
 #include "engine_types.h"
 #include "lib/profile.h"
 
-typedef struct Shape
-{
-    Vertex_Array vertices;
-    Triangle_Index_Array triangles;
-} Shape;
 
-typedef struct Shape_Assembly
-{
-    Vertex_Array vertices;
-    Triangle_Index_Array triangles;
-    Hash_Index64 vertices_hash;
-} Shape_Assembly;
+typedef enum Geometry_Primitive_Type {
+    GEOMETRY_PRIMITIVE_TRIANGLE = 0,
+    GEOMETRY_PRIMITIVE_LINE_STRIP = 1,
+    GEOMETRY_PRIMITIVE_FAN = 2,
+} Geometry_Primitive_Type;
 
-typedef enum Winding_Order
-{
-    WINDING_ORDER_CLOCKWISE,
+typedef enum Winding_Order {
+    WINDING_ORDER_CLOCKWISE = 0,
     WINDING_ORDER_COUNTER_CLOCKWISE,
     WINDING_ORDER_INDETERMINATE, 
     //in the cases where the resulting normal is extremely close to 0
     //this heppesnt when the triangle is almost a line/point
 } Winding_Order;
 
+
+typedef struct Shape {
+    Vertex_Array vertices;
+    Triangle_Index_Array triangles;
+    Winding_Order winding_order;
+} Shape;
+
+typedef struct Shape_Assembly {
+    Vertex_Array vertices;
+    Triangle_Index_Array triangles;
+    Hash_Index64 vertices_hash;
+    Winding_Order winding_order;
+} Shape_Assembly;
+
+
 void shape_init(Shape* shape);
 void shape_deinit(Shape* shape);
 void shape_tranform(Shape* shape, Mat4 transform);
+void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize trinagles_count);
 
 u64 vertex_hash64(Vertex vertex, u64 seed);
 Shape shapes_make_unit_quad();
@@ -55,11 +64,13 @@ Vec3 triangle_calculate_tangent(const Vertex v1, const Vertex v2, const Vertex v
 Triangle_Index triangle_set_winding_order(Winding_Order desired_order, const Vertex* vertices, isize vertex_count, Triangle_Index triangle);
 void shape_set_winding_order(Winding_Order order, const Vertex* vertices, isize vertex_count, Triangle_Index* traingles, isize triangle_count);
 
+
 void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset);
 Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset);
 Shape shapes_make_cube_sphere(isize iters, f32 radius);
 Shape shapes_make_voleyball_sphere(isize iters, f32 radius);
 Shape shapes_make_uv_sphere(isize iters, f32 radius);
+
 Shape shape_make_z_looking_frusthum(f32 aspect, f32 near, f32 far, f32 fov);
 Shape shape_make_frusthum(f32 aspect, f32 near, f32 far, f32 fov, Vec3 looking_at);
 Shape shape_make_vertical_capsule(isize iters, f32 radius, f32 radii_distance);
@@ -158,6 +169,30 @@ void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in)
     array_copy(&out->triangles, in->triangles);
     array_copy(&out->vertices, in->vertices);
     hash_index64_copy(&out->vertices_hash, in->vertices_hash);
+}
+
+void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize trinagles_count)
+{
+    isize vertex_count_before = shape->vertices.size;
+    isize triangle_count_before = shape->triangles.size;
+
+    array_append(&shape->vertices, vertices, vertices_count);
+    array_resize(&shape->triangles, triangle_count_before + trinagles_count);
+    for(isize i = 0; i < trinagles_count; i++)
+    {
+        Triangle_Index index = indeces[i];
+        CHECK_BOUNDS(index.vertex_i[0], vertices_count);
+        CHECK_BOUNDS(index.vertex_i[1], vertices_count);
+        CHECK_BOUNDS(index.vertex_i[2], vertices_count);
+        
+        Triangle_Index offset_index = index;
+        offset_index.vertex_i[0] += (u32) vertex_count_before;
+        offset_index.vertex_i[1] += (u32) vertex_count_before;
+        offset_index.vertex_i[2] += (u32) vertex_count_before;
+
+        *array_get(shape->triangles, triangle_count_before + i) = offset_index;
+        //shape->triangles.data[vertex_count_before + i] = offset_index;
+    }
 }
 
 void shape_tranform(Shape* shape, Mat4 transform)

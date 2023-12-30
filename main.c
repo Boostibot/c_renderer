@@ -1,4 +1,4 @@
-#define RUN_TESTS
+//#define RUN_TESTS
 
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
@@ -9,7 +9,7 @@
 #pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
 #pragma warning(disable:4201) //Dissable "nonstandard extension used: nameless struct/union" 
 #pragma warning(disable:4189) //Dissable "local variable is initialized but not referenced" (for assert macro)
-#pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic checking)
+#pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
 
 #define JOT_ALL_IMPL
 #define LIB_MEM_DEBUG
@@ -369,6 +369,7 @@ void error_func(void* context, Platform_Sandbox_Error error);
 int main()
 {
     platform_init();
+
     Malloc_Allocator static_allocator = {0};
     malloc_allocator_init(&static_allocator);
     allocator_set_static(&static_allocator.allocator);
@@ -377,7 +378,7 @@ int main()
     malloc_allocator_init_use(&malloc_allocator, 0);
     
     error_system_init(&static_allocator.allocator);
-    file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator);
+    file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator, "logs");
 
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
@@ -443,57 +444,6 @@ int main()
     return 0;    
 }
 
-void break_debug_allocator()
-{
-    //My theory is that when reallocating from high aligned offset to low aligned offset we dont shift over the data
-    //I belive this can be easily solved by alloc & dealloc pair instead of the singular realloc we do currenlty.
-
-    Debug_Allocator debug_alloc = {0};
-    debug_allocator_init(&debug_alloc, allocator_get_default(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
-    {
-        Allocator* allocator = allocator_get_default();
-        isize alloc_gran = 41;
-        enum {ITERS = 100, TEST_VAL = 0x66};
-        u8* allocs[ITERS] = {0};
-        isize sizes[ITERS] = {0};
-        isize aligns[ITERS] = {0};
-
-        isize i = 6;
-        //for(isize i = 0; i < ITERS; i++)
-        {
-            sizes[i] = alloc_gran*i;
-            aligns[i] = (isize) 1 << (i % 13); 
-            allocs[i] = (u8*) debug_allocator_allocate(allocator, sizes[i], NULL, 0, aligns[i], SOURCE_INFO());
-
-            memset(allocs[i], TEST_VAL, sizes[i]);
-            for(isize k = 0; k < sizes[i]; k++)
-                TEST(allocs[i][k] == TEST_VAL);
-        }
-        
-        //for(isize i = 0; i < ITERS; i++)
-        {
-            u8* alloc = allocs[i];
-            isize size = sizes[i];
-            isize align = aligns[i];
-
-            allocs[i] = (u8*) debug_allocator_allocate(allocator, size + alloc_gran, alloc, size, align, SOURCE_INFO());
-            sizes[i] = size + alloc_gran;
-            for(isize k = 0; k < size - alloc_gran; k++)
-                TEST(alloc[k] == TEST_VAL);
-        }
-        //for(isize i = 0; i < ITERS; i++)
-        {
-            u8* alloc = allocs[i];
-            isize size = sizes[i];
-            isize align = aligns[i]; 
-            for(isize k = 0; k < size - alloc_gran; k++)
-                TEST(alloc[k] == TEST_VAL);
-
-            allocator_deallocate(allocator, alloc, size, align, SOURCE_INFO());
-        }
-    }
-    debug_allocator_deinit(&debug_alloc);
-}
 
 void process_first_person_input(App_State* app, f64 start_frame_time)
 {
@@ -601,29 +551,6 @@ Mat4 mat4_from_transform(Transform trans)
 {
     return mat4_translate(mat4_scaling(trans.scale), trans.translate);
 }
-void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize trinagles_count)
-{
-    isize vertex_count_before = shape->vertices.size;
-    isize triangle_count_before = shape->triangles.size;
-
-    array_append(&shape->vertices, vertices, vertices_count);
-    array_resize(&shape->triangles, triangle_count_before + trinagles_count);
-    for(isize i = 0; i < trinagles_count; i++)
-    {
-        Triangle_Index index = indeces[i];
-        CHECK_BOUNDS(index.vertex_i[0], vertices_count);
-        CHECK_BOUNDS(index.vertex_i[1], vertices_count);
-        CHECK_BOUNDS(index.vertex_i[2], vertices_count);
-        
-        Triangle_Index offset_index = index;
-        offset_index.vertex_i[0] += (u32) vertex_count_before;
-        offset_index.vertex_i[1] += (u32) vertex_count_before;
-        offset_index.vertex_i[2] += (u32) vertex_count_before;
-
-        *array_get(shape->triangles, triangle_count_before + i) = offset_index;
-        //shape->triangles.data[vertex_count_before + i] = offset_index;
-    }
-}
 
 GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, const char* const* querried_names, GLint* offsets_or_null, GLint* sizes_or_null, GLint* strides_or_null, GLuint querried_count, GLint* block_size_or_null)
 {
@@ -683,7 +610,11 @@ typedef struct Render_Texture_Array {
     i32 layer_count; 
 
     i32 mip_level_count; //defaults to 1
-    GL_Pixel_Format type; //needs to be specified or specified with .equivalent
+
+    //either gl_forrmat or type and channel_count needs to be set correctly;
+    GL_Pixel_Format gl_format; //needs to be specified or specified with
+    i32 channel_count;
+    Pixel_Type type; 
 
     GLuint mag_filter; //defaults to GL_LINEAR_MIPMAP_LINEAR
     GLuint min_filter; //defaults to GL_LINEAR
@@ -705,21 +636,26 @@ bool render_texture_array_init(Render_Texture_Array* partially_filled, void* dat
 
     //source: https://www.khronos.org/opengl/wiki/Array_Texture#Creation_and_Management
     
-    GL_Pixel_Format* p = &partially_filled->type;
-    if(p->equivalent != 0 && p->access_format == 0)
-        *p = gl_pixel_format_from_pixel_format(p->equivalent, p->channels);
-    else if(p->equivalent == 0 && p->access_format != 0)
-    {
-        isize channels = 0;
-        p->equivalent = pixel_format_from_gl_pixel_format(*p, &channels);
-        p->channels = (i32) channels;
-    }
-    else if((p->equivalent == 0 && p->access_format == 0) || p->unrepresentable)
+    GL_Pixel_Format* p = &partially_filled->gl_format;
+    if(partially_filled->type != PIXEL_TYPE_INVALID && p->internal_format == 0)
+        *p = gl_pixel_format_from_pixel_type(partially_filled->type, partially_filled->type);
+    else if(partially_filled->type == 0 && p->internal_format != 0)
+        partially_filled->type = pixel_type_from_gl_internal_format(p->internal_format, &partially_filled->channel_count);
+
+    if((partially_filled->type == 0 && p->internal_format == 0))
     {
         LOG_ERROR("render", "missing type in call to render_texture_array_init()");
         ASSERT(false);
         return false;
     }
+
+    if(p->internal_format == 0)
+    {
+        LOG_ERROR("render", "submitted type is unrepresentable!");
+        ASSERT(false);
+        return false;
+    }
+
     
     ASSERT_MSG(partially_filled->layer_count > 0 && partially_filled->width > 0 && partially_filled->height > 0, "No default!");
 
@@ -732,7 +668,7 @@ bool render_texture_array_init(Render_Texture_Array* partially_filled, void* dat
     glGenTextures(1, &partially_filled->handle);
 
     glBindTexture(GL_TEXTURE_2D_ARRAY, partially_filled->handle);
-    glTexStorage3D(GL_TEXTURE_2D_ARRAY, partially_filled->mip_level_count, p->storage_format, partially_filled->width, partially_filled->height, partially_filled->layer_count);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, partially_filled->mip_level_count, p->internal_format, partially_filled->width, partially_filled->height, partially_filled->layer_count);
 
     if(data_or_null)
     {
@@ -773,7 +709,7 @@ void render_texture_array_set(Render_Texture_Array* array, i32 layer, i32 x, i32
 
     if(image.width > 0 && image.height > 0)
     {
-        GL_Pixel_Format format = gl_pixel_format_from_pixel_format(image.type, image_channel_count(image));
+        GL_Pixel_Format format = gl_pixel_format_from_pixel_type_size(image.type, image.pixel_size);
         glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, x, y, layer, image.width, image.height, 1, format.access_format, format.channel_type, image.pixels);
     }
 
@@ -915,14 +851,17 @@ void render_texture_manager_generate_mips(Render_Texture_Manager* manager)
     }
 }
  
-isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32 width, i32 height, i32 layers, i32 grow_by, Pixel_Type format, i32 channel_count)
+isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32 width, i32 height, i32 layers, i32 grow_by, Pixel_Type type, i32 channel_count)
 {
+    LOG_INFO("render", "adding texture resolution: " "%d x %d : %s x %d", width, height, pixel_type_name(type), channel_count);
     i32 max_dim = MAX(width, height);
     i32 log_2_resolution = int_log2_upper_bound(max_dim);
 
     Render_Texture_Resolution resolution = {0};
     resolution.array.mip_level_count = MAX(log_2_resolution - 1, 1);
-    resolution.array.type = gl_pixel_format_from_pixel_format(format, channel_count);
+    resolution.array.gl_format = gl_pixel_format_from_pixel_type(type, channel_count);
+    resolution.array.type = type;
+    resolution.array.channel_count = channel_count;
     resolution.array.layer_count = layers;
     resolution.array.width = width;
     resolution.array.height = height;
@@ -930,6 +869,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
     resolution.used_layers = 0;
 
     isize out = -1;
+    log_group_push();
     if(render_texture_array_init(&resolution.array, NULL))
     {
         array_init(&resolution.layers, manager->allocator);
@@ -937,6 +877,10 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
         out = manager->resolutions.size;
         array_push(&manager->resolutions, resolution);
     }
+    else
+        LOG_ERROR("render", "Creation failed!");
+
+    log_group_pop();
 
     return out;
 }
@@ -980,21 +924,23 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     layer_counts[int_log2_lower_bound(4096)] = 8;
 
     isize combined_size = 0;
-    for(i32 i = 0; i < 7; i++)
+    for(i32 channels = 1; channels <= 3; channels ++)
     {
-        i32 size_log2 = (min_res_log2 + i);
-        i32 size = 1 << size_log2;
-        i32 layers = layer_counts[size_log2];
-        i32 grow_by = layers / 8;
-        i32 channels = 3;
-
-        i32 resolution_bytes_size = size*size*layers*channels;
-        combined_size += resolution_bytes_size;
+        for(i32 i = 0; i < 7; i++)
+        {
+            i32 size_log2 = (min_res_log2 + i);
+            i32 size = 1 << size_log2;
+            i32 layers = layer_counts[size_log2];
+            i32 grow_by = layers / 8;
             
-        render_texture_manager_add_resolution(manager, size, size, layers, grow_by, PIXEL_TYPE_U8, channels);
+            i32 resolution_bytes_size = size*size*layers*channels;
+            combined_size += resolution_bytes_size;
+            
+            render_texture_manager_add_resolution(manager, size, size, layers, grow_by, PIXEL_TYPE_U8, channels);
+        }
     }
 
-    LOG_WARN("render", "using %lli combined VRAM on textures", combined_size);
+    LOG_WARN("render", "using " MEMORY_FMT " combined RAM on textures", MEMORY_PRINT(combined_size));
 }
 
 typedef enum Found_Type{
@@ -1025,16 +971,16 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
         for(isize i = 0; i < manager->resolutions.size; i++)
         {
             Render_Texture_Resolution* resolution = &manager->resolutions.data[i];
-            GL_Pixel_Format* res_format = &resolution->array.type;
-            isize max_layer_dim = MAX(resolution->array.width, resolution->array.height);
-            isize min_layer_dim = MIN(resolution->array.width, resolution->array.height);
+            Render_Texture_Array* array = &resolution->array;
+            isize max_layer_dim = MAX(array->width, array->height);
+            isize min_layer_dim = MIN(array->width, array->height);
 
             //The layer must have:
             // 1) image_fits: big enough (can be rotated) @TODO: IMPLEMENT FURTHER DOWN!
             // 2) format_fits: the pixel format is the same and the number of channels is big enough
             // 3) has_space: needs to not be full or not be empty based on what we are looking for.
             bool image_fits = max_layer_dim >= max_dim && min_layer_dim >= min_dim;
-            bool format_fits = res_format->equivalent == type && res_format->channels >= channel_count;
+            bool format_fits = array->type == type && array->channel_count >= channel_count;
             bool has_space = true;
          
             if(used == false)
@@ -1044,9 +990,9 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
 
             if(image_fits && format_fits && has_space)
             {
-                isize layer_size = resolution->array.width * resolution->array.height;
+                isize layer_size = array->width * array->height;
                 isize size_diff = layer_size - needed_size;
-                isize channel_diff = res_format->channels - channel_count;
+                isize channel_diff = array->channel_count - channel_count;
                 ASSERT(size_diff >= 0);
 
                 //If number of channels dont match we effectively also waste all the other channels 
@@ -1068,7 +1014,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
             Render_Texture_Resolution* resolution = &manager->resolutions.data[min_diff_index];
             if(min_diff == 0)
                 found_type = FOUND_EXACT;
-            if(resolution->array.type.channels == type)
+            else if(resolution->array.type == type)
                 found_type = FOUND_APPROXIMATE;
             else
                 found_type = FOUND_APPROXIMATE_BAD_FORMAT;
@@ -1089,9 +1035,6 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
         }
     }
 
-    if(found_type == NOT_FOUND)
-        
-    
     if(found_type_or_null)
         *found_type_or_null = found_type;
 
@@ -1113,7 +1056,7 @@ Render_Texture_Layer render_texture_manager_add(Render_Texture_Manager* manager,
     Found_Type found_type = NOT_FOUND;
     Render_Texture_Layer empty_slot = render_texture_manager_find(manager, &found_type, image.width, image.height, (Pixel_Type) image.type, image_channel_count(image), false);
 
-    #define _ERROR_PARAMS "width: %d height: %d type: %s channel_count: %d", image.width, image.height, pixel_type_name(image.type), image_channel_count(image)
+    #define _ERROR_PARAMS "%d x %d : %s x %d", image.width, image.height, pixel_type_name(image.type), image_channel_count(image)
 
     if(empty_slot.resolution_index <= 0)
         LOG_ERROR("render", "render_texture_manager_add() Unable to find empty slot! " _ERROR_PARAMS);
@@ -1121,12 +1064,17 @@ Render_Texture_Layer render_texture_manager_add(Render_Texture_Manager* manager,
     {
         Render_Texture_Resolution* resolution = &manager->resolutions.data[empty_slot.resolution_index - 1];
         if(found_type == FOUND_APPROXIMATE)
-            LOG_WARN("render", "render_texture_manager_add() Found only approximate match" _ERROR_PARAMS);
+        {
+            LOG_WARN("render", "render_texture_manager_add() Found only approximate match!");
+            LOG_WARN(">render", "image      " _ERROR_PARAMS);
+            LOG_WARN(">render", "resolution %d x %d : %s x %d", resolution->array.width, resolution->array.height, pixel_type_name(resolution->array.type), resolution->array.channel_count);
+        }
             
         if(found_type == FOUND_APPROXIMATE_BAD_FORMAT)
         {
-            LOG_WARN("render", "render_texture_manager_add() Found only approximate match with wrong format!" _ERROR_PARAMS);
-            LOG_WARN(">render", "found channel count: %d", resolution->array.type.channels);
+            LOG_WARN("render", "render_texture_manager_add() Found only approximate match with wrong format!");
+            LOG_WARN(">render", "image      " _ERROR_PARAMS);
+            LOG_WARN(">render", "resolution %d x %d : %s x %d", resolution->array.width, resolution->array.height, pixel_type_name(resolution->array.type), resolution->array.channel_count);
         }
 
         resolution->used_layers += 1;
@@ -1169,7 +1117,6 @@ Error render_texture_manager_add_from_disk(Render_Texture_Manager* manager, Stri
     return error;
 }
 
-
 typedef struct Render_Batch_Group {
     i32 indeces_from;
     i32 indeces_to;
@@ -1190,6 +1137,8 @@ typedef struct Render_Batch_Mesh {
     Render_Mesh mesh;
     Render_Batch_Group_Array groups;
 } Render_Batch_Mesh;
+
+
 
 void run_func(void* context)
 {
@@ -1419,15 +1368,11 @@ void run_func(void* context)
             render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
             render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
             
-            //@TODO: use!
-            Image temp_builder = {allocator_get_scratch()};
-
             error = ERROR_AND(error) render_texture_manager_add_from_disk(&texture_manager, STRING("resources/floor.jpg"), &layer_floor);
             error = ERROR_AND(error) render_texture_manager_add_from_disk(&texture_manager, STRING("resources/debug.png"), &layer_debug);
+            //error = ERROR_AND(error) render_texture_manager_add_from_disk(&texture_manager, STRING("resources/rustediron2/rustediron2_metallic.png"), &layer_tiles);
 
             render_texture_manager_generate_mips(&texture_manager);
-
-            image_deinit(&temp_builder);
 
             //error = ERROR_AND(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
             //error = ERROR_AND(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
@@ -1718,9 +1663,6 @@ void run_func(void* context)
     log_perf_counters("APP", LOG_INFO, true);
     render_world_deinit();
 
-    #define LOG_GROUP(module, log_type, format, ...) log_message((module), (log_type), SOURCE_INFO(), format, ##__VA_ARGS__), log_group_push()
-    //LOG_GROUP("RESOURCES", LOG_INFO, "Resources allocation stats:");
-
     LOG_INFO("RESOURCES", "Resources allocation stats:");
     log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
 
@@ -1743,8 +1685,6 @@ void error_func(void* context, Platform_Sandbox_Error error)
 #include "lib/_test_all.h"
 void run_test_func(void* context)
 {
-    log_example();
-    LOG_INFO(">app", "test_mode_selected!");
     (void) context;
     test_all();
 }
