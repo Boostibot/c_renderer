@@ -6,8 +6,8 @@
 #define RESOURCE_NAME_SIZE 55
 
 typedef struct Name {
-    u64 hash;
     char data[RESOURCE_NAME_SIZE + 1];
+    u64 hash;
 } Name;
 
 bool name_from_hash_string(Name* name, Hash_String string)
@@ -32,6 +32,13 @@ bool name_from_cstring(Name* name, const char* str)
 bool name_from_builder(Name* name, String_Builder builder)
 {
     return name_from_string(name, string_from_builder(builder));
+}
+
+Name name_make(String str)
+{
+    Name out = {0};
+    name_from_string(&out, str);
+    return out;
 }
 
 bool name_is_equal(const Name* a, const Name* b)

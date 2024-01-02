@@ -666,7 +666,7 @@ bool mdump_array(Mdump_Blocks* blocks, void* array, isize item_size, Mdump_Array
     {
        isize item_count = 0;
        addr = mdump_get_array(blocks, *in_file, item_size, &item_count);
-       _array_resize(array, item_size, item_count, SOURCE_INFO());
+       _array_resize(array, item_size, item_count, true, SOURCE_INFO());
        state = item_count == in_file->size;
     }
 

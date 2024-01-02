@@ -111,61 +111,6 @@ typedef struct Render_Material
 DEFINE_ARRAY_TYPE(Render_Material, Render_Material_Array);
 
 
-//The main idea of this new rendere is to use the incredibly efficient
-// command buffer instanced calls (see below) to drastically reduce the number of draw calls,
-// while keeping as much flexibility as possible (ie not generting texture atlasses etc). 
-// 
-// We do this by keeping geometry in 'batches'. A batch is a single GL buffer 
-// containing aggragate of multiple different meshes or submeshes (groups in OBJ format - sponza has about a hundred). 
-// However a single model can be at most in one batch (ie we never split because too big).
-// The command buffer commands can dispatch any number of sub ranges of indeces (so meshes/groups in out batch) across any 
-// number of instances within single draw call. (So we can draw just the pot and plant from sponza.obj 100x at once!)
-// 
-// To use this we need:
-// 1) To group geometry into batches. 
-//      This is done by putting each object into its separate batch if big enough or appending to previously allocated batch
-//      untill big enough.
-// 
-// 2) To sort and group draw requests by shader/batch/obejct and then transform into the Render_Internal_Command structure.
-//      We simply sort.
-// 
-// 3) To set material 'uniforms' per model 
-//      We make a uniform buffer where instead of single field for each uniform we have an array of BLINN_PHONG_NUM_BATCH_ENTRIES.
-//      We then read at gl_DrawID to obtain our 'uniforms'
-// 
-// 4) To set samplers per model 
-//      Here are two solutions: 
-//          1 - use "bindless textures" and store them just like above - this is probably the more optimal solution
-//              and its call overhead is esentially zero
-//          2 - Have an array of sampler uniforms but since we are limited by the number of samplers we 'allocate' these slots
-//              so that we place indeces to the appropriate maps into the uniform buffer. This requires fancy code and might not be
-//              worth doing.
-//
-//
-
-
-//Render_Internal_Command can be understood as doing the following 
-// in a hypothetical opengl implementation:
-#if 0
-for(int draw_i = 0; draw_i < command_count; draw_i++)
-{
-    Render_Internal_Command c = commands[draw_i];
-    for(int instance_i = 0; instance_i < c.instance_count; instance_i++)
-    {
-        for(int i = c.indeces_from; i < c.indeces_from + c.indeces_count; i++)
-        {
-            GLuint gl_VertexID = indeces[i] + c.base_vertex;
-            GLuint gl_InstanceID = instance_i + c.base_instance;
-            GLuint gl_DrawID = draw_i;
- 
-            GLuint gl_BaseVertex = c.base_vertex;
-            GLuint gl_BaseInstance = c.base_instance;
- 
-            //... fire vertext shader and render ...
-        }
-    }
-}
-#endif
 
 typedef struct Render_Internal_Command {
     GLuint indeces_count;

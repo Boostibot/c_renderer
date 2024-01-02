@@ -691,3 +691,494 @@ void run_func(void* context)
 
     LOG_INFO("APP", "run_func exit");
 }
+
+void run_func(void* context)
+{
+    LOG_INFO("APP", "run_func enter");
+    Allocator* upstream_alloc = allocator_get_default();
+
+    GLFWwindow* window = (GLFWwindow*) context;
+    App_State* app = (App_State*) glfwGetWindowUserPointer(window);
+    App_Settings* settings = &app->settings;
+    memset(app, 0, sizeof *app);
+
+    app->camera.pos        = vec3(0.0f, 0.0f,  0.0f);
+    app->camera.looking_at = vec3(1.0f, 0.0f,  0.0f);
+    app->camera.up_dir     = vec3(0.0f, 1.0f,  0.0f);
+    app->camera.is_position_relative = true;
+
+    app->camera_yaw = -TAU/4;
+    app->camera_pitch = 0.0;
+
+    app->is_in_mouse_mode = false;
+    settings->fov = TAU/4;
+    settings->movement_speed = 2.5f;
+    settings->movement_sprint_mult = 5;
+    settings->screen_gamma = 2.2f;
+    settings->screen_exposure = 1;
+    settings->mouse_sensitivity = 0.002f;
+    settings->mouse_wheel_sensitivity = 0.05f; // uwu
+    settings->zoom_adjust_time = 0.1f;
+    settings->mouse_sensitivity_scale_with_fov_ammount = 1.0f;
+    settings->MSAA_samples = 4;
+
+    mapping_make_default(app->control_mappings);
+    
+    Debug_Allocator resources_alloc = {0};
+    Debug_Allocator renderer_alloc = {0};
+    
+    debug_allocator_init(&resources_alloc, upstream_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+    debug_allocator_init(&renderer_alloc, upstream_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+
+    Resources resources = {0};
+    Render renderer = {0};
+
+    render_world_init(&renderer_alloc.allocator);
+
+    resources_init(&resources, &resources_alloc.allocator);
+    resources_set(&resources);
+
+    render_init(&renderer, &renderer_alloc.allocator);
+
+    Render_Screen_Frame_Buffers_MSAA screen_buffers = {0};
+
+    Shape uv_sphere = {0};
+    Shape cube_sphere = {0};
+    Shape screen_quad = {0};
+    Shape unit_quad = {0};
+    Shape unit_cube = {0};
+    
+    Shape combined_shape = {0};
+
+    Render_Mesh render_uv_sphere = {0};
+    Render_Mesh render_cube_sphere = {0};
+    Render_Mesh render_screen_quad = {0};
+    Render_Mesh render_cube = {0};
+    Render_Mesh render_quad = {0};
+
+    GL_Vertex_Array render_batch = {0};
+
+    Render_Texture_Ptr image_floor = {0};
+    Render_Texture_Ptr image_debug = {0};
+    Render_Texture_Ptr image_rusted_iron_metallic = {0};
+
+    Render_Cubeimage cubemap_skybox = {0};
+
+    Render_Shader shader_depth_color = {0};
+    Render_Shader shader_solid_color = {0};
+    Render_Shader shader_screen = {0};
+    Render_Shader shader_debug = {0};
+    Render_Shader shader_blinn_phong = {0};
+    Render_Shader shader_skybox = {0};
+    Render_Shader shader_instanced = {0};
+    Render_Shader shader_instanced_batched = {0};
+
+    Render_Mesh* render_indirect_meshes[] = {&render_cube, &render_uv_sphere};
+    Render_Mesh render_indirect_mesh = {0};
+
+
+    f64 fps_display_frequency = 4;
+    f64 fps_display_last_update = 0;
+
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    
+    enum { 
+        num_instances_x = 20,
+        num_instances_y = 20,
+        num_instances = num_instances_x * num_instances_y, 
+        max_commands = 128,
+        model_slot = 5 
+    };
+
+    GLuint instanceVBO = 0;
+    {
+        DEFINE_ARRAY_TYPE(Mat4, Mat4_Array);
+        Mat4_Array models = {0};
+
+        for(isize i = 0; i < num_instances; i++)
+        {
+            f32 x = (f32) (i / num_instances_x);
+            f32 y = (f32) (i % num_instances_y);
+
+            f32 wave_x = sinf(x/num_instances_x * 4 * TAU);
+            f32 wave_y = sinf(y/num_instances_y * 4 * TAU);
+            Transform transform = {0};
+            transform.scale = vec3_of((wave_x*wave_x + wave_y*wave_y)/4 + 0.2f);
+            transform.translate = vec3(x, y, 0);
+
+            Mat4 mat = mat4_from_transform(transform);
+            array_push(&models, mat);
+        }
+
+        glCreateBuffers(1, &instanceVBO);
+        glNamedBufferData(instanceVBO, sizeof(Mat4) * models.size, models.data, GL_STATIC_DRAW);
+
+        array_deinit(&models);
+    }
+    
+    
+    GLuint command_buffer = 0;
+    GL_Uniform_Block uniform_block_params = {0};
+    GL_Uniform_Block uniform_block_environment = {0};
+
+    Render_Texture_Manager texture_manager = {0};
+    render_texture_manager_init(&texture_manager, allocator_get_default());
+    render_texture_manager_add_default_resolutions(&texture_manager);
+
+    Render_Texture_Layer layer_floor = {0};
+    Render_Texture_Layer layer_debug = {0};
+    Render_Texture_Layer layer_tiles = {0};
+
+    for(isize frame_num = 0; app->should_close == false; frame_num ++)
+    {
+        glfwSwapBuffers(window);
+        f64 start_frame_time = clock_s();
+        app->delta_time = start_frame_time - app->last_frame_timepoint; 
+        app->last_frame_timepoint = start_frame_time; 
+
+        window_process_input(window, frame_num == 0);
+        if(app->window_framebuffer_width != app->window_framebuffer_width_prev 
+            || app->window_framebuffer_height != app->window_framebuffer_height_prev
+            || frame_num == 0)
+        {
+            LOG_INFO("APP", "Resizing");
+            render_screen_frame_buffers_msaa_deinit(&screen_buffers);
+            render_screen_frame_buffers_msaa_init(&screen_buffers, app->window_framebuffer_width, app->window_framebuffer_height, settings->MSAA_samples);
+
+            //For some reason gets reset on change of frame buffers so we reset it as well
+            glDeleteBuffers(1, &command_buffer);
+            glCreateBuffers(1, &command_buffer);
+            glNamedBufferData(command_buffer, sizeof(Gl_Draw_Elements_Indirect_Command) * max_commands, NULL, GL_DYNAMIC_DRAW);
+
+            glViewport(0, 0, screen_buffers.width, screen_buffers.height);
+        }
+        
+        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&app->controls, CONTROL_REFRESH_SHADERS)
+            || frame_num == 0)
+        {
+            LOG_INFO("APP", "Refreshing shaders");
+            PERF_COUNTER_START(shader_load_counter);
+            
+            Error error = {0};
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.glsl"));
+            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl"));
+
+            ASSERT(error_is_ok(error));
+            {
+                uniform_block_params = uniform_block_make(shader_instanced_batched.shader, "Params", 0);
+                uniform_block_environment = uniform_block_make(shader_instanced_batched.shader, "Environment", 1);
+
+                GLint max_textures = 0;
+                glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_textures);
+                LOG_WARN("app", "max textures %i", max_textures);
+            }
+
+            PERF_COUNTER_END(shader_load_counter);
+        }
+
+
+        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+            || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
+            || frame_num == 0)
+        {
+            LOG_INFO("APP", "Refreshing art");
+            PERF_COUNTER_START(art_load_counter);
+
+            PERF_COUNTER_START(art_counter_shapes);
+            shape_deinit(&uv_sphere);
+            shape_deinit(&cube_sphere);
+            shape_deinit(&screen_quad);
+            shape_deinit(&unit_cube);
+            shape_deinit(&unit_quad);
+
+            uv_sphere = shapes_make_uv_sphere(40, 1);
+            cube_sphere = shapes_make_cube_sphere(40, 1);
+            screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
+            unit_cube = shapes_make_unit_cube();
+            unit_quad = shapes_make_unit_quad();
+            PERF_COUNTER_END(art_counter_shapes);
+
+            Error error = {0};
+
+            render_mesh_init_from_shape(&render_uv_sphere, uv_sphere, STRING("uv_sphere"));
+            render_mesh_init_from_shape(&render_cube_sphere, cube_sphere, STRING("cube_sphere"));
+            render_mesh_init_from_shape(&render_screen_quad, screen_quad, STRING("screen_quad"));
+            render_mesh_init_from_shape(&render_cube, unit_cube, STRING("unit_cube"));
+            render_mesh_init_from_shape(&render_quad, unit_quad, STRING("unit_cube"));
+            
+            error = ERROR_AND(error) render_texture_add_from_disk(&texture_manager, &layer_floor, STRING("resources/floor.jpg"));
+            error = ERROR_AND(error) render_texture_add_from_disk(&texture_manager, &layer_debug, STRING("resources/debug.png"));
+            error = ERROR_AND(error) render_texture_add_from_disk(&texture_manager, &layer_tiles, STRING("resources/rustediron2/rustediron2_metallic.png"));
+
+            render_texture_manager_generate_mips(&texture_manager);
+
+            //error = ERROR_AND(error) render_image_init_from_disk(&image_floor, STRING("resources/floor.jpg"), STRING("floor"));
+            //error = ERROR_AND(error) render_image_init_from_disk(&image_debug, STRING("resources/debug.png"), STRING("debug"));
+            //error = ERROR_AND(error) render_image_init_from_disk(&image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"), STRING("rustediron2"));
+            error = ERROR_AND(error) render_cubeimage_init_from_disk(&cubemap_skybox, 
+                STRING("resources/skybox_front.jpg"), 
+                STRING("resources/skybox_back.jpg"), 
+                STRING("resources/skybox_top.jpg"), 
+                STRING("resources/skybox_bottom.jpg"), 
+                STRING("resources/skybox_right.jpg"), 
+                STRING("resources/skybox_left.jpg"), STRING("skybox"));
+
+            PERF_COUNTER_END(art_load_counter);
+            ASSERT(error_is_ok(error));
+
+            {
+                shape_deinit(&combined_shape);
+
+                Render_Geometry_Batch_Index group_cube_sphere = {0};
+                group_cube_sphere.indeces_from = (i32) combined_shape.triangles.size*3;
+                shape_append(&combined_shape, cube_sphere.vertices.data, cube_sphere.vertices.size, cube_sphere.triangles.data, cube_sphere.triangles.size);
+                group_cube_sphere.indeces_to = (i32) combined_shape.triangles.size*3;
+                
+                Render_Geometry_Batch_Index group_unit_cube = {0};
+                group_unit_cube.indeces_from = (i32) combined_shape.triangles.size*3;
+                shape_append(&combined_shape, unit_cube.vertices.data, unit_cube.vertices.size, unit_cube.triangles.data, unit_cube.triangles.size);
+                group_unit_cube.indeces_to = (i32) combined_shape.triangles.size*3;
+
+                render_mesh_init_from_shape(&render_batch.mesh, combined_shape, STRING("render_batch.mesh"));
+                
+                group_cube_sphere.diffuse = layer_debug;
+                group_cube_sphere.diffuse_color = vec4(1, 1, 1, 1);
+                group_cube_sphere.ambient_color = vec4(0, 0, 0, 1);
+                group_cube_sphere.specular_color = vec4(0.9f, 0.9f, 0.9f, 0);
+                group_cube_sphere.specular_exponent = 256;
+                group_cube_sphere.metallic = 0;
+
+                group_unit_cube.diffuse = layer_floor;
+                group_unit_cube.diffuse_color = vec4(1, 1, 1, 1);
+                group_unit_cube.ambient_color = vec4(0, 0, 0, 1);
+                group_unit_cube.specular_color = vec4(0.5f, 0.5f, 0.5f, 0);
+                group_unit_cube.specular_exponent = 3;
+
+                array_push(&render_batch.groups, group_cube_sphere);
+                array_push(&render_batch.groups, group_unit_cube);
+
+            }
+
+            {
+                Render_Mesh* mesh = &render_batch.mesh;
+                glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+                glBindVertexArray(mesh->vao);
+                glVertexAttribPointer(model_slot + 0, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[0]));
+                glVertexAttribPointer(model_slot + 1, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[1]));
+                glVertexAttribPointer(model_slot + 2, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[2]));
+                glVertexAttribPointer(model_slot + 3, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[3]));
+
+                glEnableVertexAttribArray(model_slot + 0);	
+                glEnableVertexAttribArray(model_slot + 1);	
+                glEnableVertexAttribArray(model_slot + 2);	
+                glEnableVertexAttribArray(model_slot + 3);	
+    
+                glVertexAttribDivisor(model_slot + 0, 1);  
+                glVertexAttribDivisor(model_slot + 1, 1);  
+                glVertexAttribDivisor(model_slot + 2, 1);  
+                glVertexAttribDivisor(model_slot + 3, 1);  
+
+                glBindVertexArray(0);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                gl_check_error();
+            }
+        }
+
+        if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
+        {
+            app->is_in_mouse_mode = !app->is_in_mouse_mode;
+        }
+        
+        if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
+        {
+            log_perf_counters("app", LOG_INFO, true);
+        }
+        
+        if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
+        {
+            app->is_in_uv_debug_mode = !app->is_in_uv_debug_mode;
+        }
+
+        if(app->is_in_mouse_mode == false)
+            process_first_person_input(app, start_frame_time);
+
+        
+        app->camera.fov = settings->fov;
+        app->camera.near = 0.01f;
+        app->camera.far = 1000.0f;
+        app->camera.is_ortographic = false;
+        app->camera.is_position_relative = true;
+        app->camera.aspect_ratio = (f32) app->window_framebuffer_width / (f32) app->window_framebuffer_height;
+
+        Mat4 view = camera_make_view_matrix(app->camera);
+        Mat4 projection = camera_make_projection_matrix(app->camera);
+
+        
+        //================ FIRST PASS ==================
+        {
+            PERF_COUNTER_START(first_pass_counter);
+            render_screen_frame_buffers_msaa_render_begin(&screen_buffers);
+            glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            //render instanced sphere
+            {
+
+                Gl_Draw_Elements_Indirect_Command commands[2] = {0};
+
+                u32 instance_step = num_instances / (u32) render_batch.groups.size;
+                for(u32 i = 0; i < (u32) render_batch.groups.size; i++)
+                {
+                    Render_Geometry_Batch_Index* group = &render_batch.groups.data[i];
+                    commands[i].first_index = group->indeces_from;
+                    commands[i].count = group->indeces_to - group->indeces_from;
+                    commands[i].base_instance = instance_step * i;
+                    commands[i].instance_count = instance_step;
+                    commands[i].base_vertex = 0;
+                }
+                
+                Params params[MAX_BATCH] = {0};
+                Environment environment = {0};
+
+                render_shader_use(&shader_instanced_batched);
+                
+                GLuint map_array_loc = render_shader_get_uniform_location(&shader_instanced_batched, "u_map_resolutions");
+                GLint slot_index = 0;
+                GLint map_slots[MAX_RESOULTIONS] = {0};
+                for(GLint i = 0; i < MAX_RESOULTIONS && i < texture_manager.resolutions.size; i++)
+                {
+                    GL_Texture_Array* resolution_array = &texture_manager.resolutions.data[i].array;
+                    glActiveTexture(GL_TEXTURE0 + slot_index);
+                    glBindTexture(GL_TEXTURE_2D_ARRAY, resolution_array->handle);
+                    map_slots[i] = slot_index;
+                    slot_index += 1;
+                }
+                
+                glUniform1iv(map_array_loc, (GLsizei) MAX_RESOULTIONS, map_slots);
+
+
+                for(isize i = 0; i < render_batch.groups.size; i++)
+                {
+                    Render_Geometry_Batch_Index* group = &render_batch.groups.data[i];
+                    params[i].diffuse_color = group->diffuse_color;
+                    params[i].specular_color = group->specular_color;
+                    params[i].ambient_color = group->ambient_color;
+                    params[i].specular_exponent = group->specular_exponent;
+                    params[i].metallic = group->metallic;
+
+                    #define COMPRESS_TEXTURE_LAYER(tex_layer) (tex_layer).layer | ((tex_layer).resolution_index << 16)
+
+                    params[i].map_specular = COMPRESS_TEXTURE_LAYER(group->specular);
+                    params[i].map_diffuse = COMPRESS_TEXTURE_LAYER(group->diffuse);
+                }
+
+                {
+                    //This would also get abstarcted away to be asigned in the same place as render_batch.groups
+                    environment.light_quadratic_attentuation = 0.05f;
+                    environment.base_illumination = vec4_of(0.05f);
+                    environment.projection = projection; 
+                    environment.view = view; 
+                    environment.view_pos = vec4_from_vec3(app->camera.pos);
+
+                    environment.lights_count = 2;
+                    environment.lights[0].color_and_radius = vec4(10, 8, 7, 0);
+                    environment.lights[0].pos_and_range = vec4(40, 20, -10, 100);
+                    
+                    environment.lights[1].color_and_radius = vec4(8, 10, 8.5f, 0);
+                    environment.lights[1].pos_and_range = vec4(0, 0, 10, 100);
+                }
+
+                ASSERT(sizeof(environment) == uniform_block_environment.buffer_size);
+                ASSERT(sizeof(params) == uniform_block_params.buffer_size);
+                
+                glBindBuffer(GL_UNIFORM_BUFFER, uniform_block_environment.handle);
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(environment), &environment);
+                
+                glBindBuffer(GL_UNIFORM_BUFFER, uniform_block_params.handle);
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(params), &params);
+                
+                glBindBuffer(GL_DRAW_INDIRECT_BUFFER , command_buffer);
+                glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(commands), commands);
+
+                glBindVertexArray(render_batch.mesh.vao);
+                glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+
+                glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) render_batch.groups.size, 0);
+                
+            }
+
+            //render skybox
+            {
+                Mat4 model = mat4_scaling(vec3_of(-1));
+                Mat4 stationary_view = mat4_from_mat3(mat3_from_mat4(view));
+                render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_skybox);
+            }
+
+            render_screen_frame_buffers_msaa_render_end(&screen_buffers);
+            PERF_COUNTER_END(first_pass_counter);
+        }
+
+        // ============== POST PROCESSING PASS ==================
+        {
+            PERF_COUNTER_START(second_pass_counter);
+            render_screen_frame_buffers_msaa_post_process_begin(&screen_buffers);
+            render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, settings->screen_gamma, settings->screen_exposure);
+            render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
+            PERF_COUNTER_END(second_pass_counter);
+        }
+
+        f64 end_frame_time = clock_s();
+        f64 frame_time = end_frame_time - start_frame_time;
+        if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
+        {
+            fps_display_last_update = end_frame_time;
+            glfwSetWindowTitle(window, format_ephemeral("Render %5d fps", (int) (1.0f/frame_time)).data);
+        }
+    }
+    
+    shape_deinit(&uv_sphere);
+    shape_deinit(&cube_sphere);
+    shape_deinit(&screen_quad);
+    shape_deinit(&unit_cube);
+    shape_deinit(&unit_quad);
+    
+    render_mesh_deinit(&render_uv_sphere);
+    render_mesh_deinit(&render_cube_sphere);
+    render_mesh_deinit(&render_screen_quad);
+    render_mesh_deinit(&render_cube);
+    render_mesh_deinit(&render_quad);
+
+    render_shader_deinit(&shader_solid_color);
+    render_shader_deinit(&shader_depth_color);
+    render_shader_deinit(&shader_screen);
+    render_shader_deinit(&shader_blinn_phong);
+    render_shader_deinit(&shader_skybox);
+    render_shader_deinit(&shader_debug);
+
+    resources_deinit(&resources);
+    render_deinit(&renderer);
+
+    render_image_deinit(&image_floor);
+    render_image_deinit(&image_debug);
+    render_cubeimage_deinit(&cubemap_skybox);
+
+    render_screen_frame_buffers_msaa_deinit(&screen_buffers);
+    
+    log_perf_counters("APP", LOG_INFO, true);
+    render_world_deinit();
+
+    LOG_INFO("RESOURCES", "Resources allocation stats:");
+    log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
+
+    debug_allocator_deinit(&resources_alloc);
+    debug_allocator_deinit(&renderer_alloc);
+
+    LOG_INFO("APP", "run_func exit");
+}

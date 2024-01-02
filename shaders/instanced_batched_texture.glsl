@@ -1,9 +1,10 @@
 ﻿#version 460 core
 #extension GL_ARB_shader_draw_parameters : require
+#extension GL_ARB_shader_storage_buffer_object : require
 
 #define MAX_BATCH 8
 #define MAX_LIGHTS 32
-#define MAX_RESOULTIONS 7
+#define MAX_RESOULTIONS 32
 
 struct Light{
     vec4 pos_and_range;
@@ -41,8 +42,8 @@ struct Params_Data {
     //mat3x2 map_normal_transform;
 };
 
-layout(std140) uniform Params {
-    Params_Data params[MAX_BATCH];  
+layout(std430, binding = 0) buffer Params {
+    Params_Data params[];  
 };
 
 uniform sampler2DArray u_map_resolutions[MAX_RESOULTIONS];
@@ -84,7 +85,12 @@ Map map_decode(int map)
             return if_not_found;
     }
 
-    void main()
+    vec3 vec3_of(float val)
+    {
+        return vec3(val, val, val);    
+    }
+
+    vec3 compute()
     {
         int bi = _in.batch_index;
         //Most common value for specular intensity
@@ -101,9 +107,9 @@ Map map_decode(int map)
 
         //so that when extra expontiated extra shiny!
         float specular_intensity = log(specular_exponent / base_specular_exponent + 1);
-        specular_intensity = 1;
+        //specular_intensity = 1;
 
-        vec3 diffuse_illumination = diffuse_color * env.base_illumination.xyz;
+        vec3 diffuse_illumination = env.base_illumination.xyz;
         vec3 specular_illumination = vec3(0, 0, 0);
         
         vec3 normal = normalize(_in.norm);
@@ -123,12 +129,13 @@ Map map_decode(int map)
             if(light_dist <= light_range && attentuation > 0.0001)
             {
                 vec3 light_dir = normalize(light_pos - _in.frag_pos);
+                
                 vec3 reflect_dir = reflect(-light_dir, normal);
                 vec3 halfway_dir = normalize(light_dir + view_dir);  
 
                 float diffuse_mult = max(dot(light_dir, normal), 0.0);
-                float specular_mult_uncapped = pow(max(dot(normal, halfway_dir), 0), specular_exponent);
-        
+                float specular_mult_uncapped = pow(max(dot(normal, halfway_dir), 0) + 0.0001, specular_exponent);
+
                 // correct the specular so that there is no specular where diffuse is zero.
                 // we do custom falloff similar to the curve of x^(1/4) because it looks bad when we simply
                 // cut it off when diffuse_mult is zero
@@ -141,17 +148,20 @@ Map map_decode(int map)
                 specular_illumination += light_color * specular_mult * attentuation;
             }
         }
-
+        
         vec3 diffuse_sum = diffuse_color * diffuse_illumination * (1 - metallic);
 
         vec3 reflection_color = mix(specular_color, diffuse_color, metallic);
         vec3 specular_sum = reflection_color * specular_illumination * specular_intensity;
-        
         vec3 ambient_sum = ambient_color;
 
         vec3 result = ambient_sum + diffuse_sum + specular_sum;
-        o_color = vec4(result, 1.0);
-        //o_color = vec4(specular_sum*0.1f, 1.0);
+        return result;
+    }
+
+    void main()
+    {
+        o_color = vec4(compute().xyz, 1);
     }
 #endif 
 
@@ -159,7 +169,8 @@ Map map_decode(int map)
     layout (location = 0) in vec3 a_pos;
     layout (location = 1) in vec2 a_uv;
     layout (location = 2) in vec3 a_norm;
-    layout (location = 5) in mat4 a_model;
+    layout (location = 3) in vec3 a_tan;
+    layout (location = 4) in mat4 a_model;
     
     out VS_OUT { 
         vec3 frag_pos;
@@ -168,9 +179,19 @@ Map map_decode(int map)
         flat int batch_index;
     } _out;
 
+    mat4 BuildTranslation(vec3 delta)
+    {
+        return mat4(
+            vec4(1.0, 0.0, 0.0, 0.0),
+            vec4(0.0, 1.0, 0.0, 0.0),
+            vec4(0.0, 0.0, 1.0, 0.0),
+            vec4(delta, 1.0));
+    }
     void main()
     {
         vec4 fragment_pos = a_model * vec4(a_pos, 1.0);
+        //mat4 model = BuildTranslation(vec3(gl_InstanceID, 0, 0));
+
         vec4 world_pos = env.projection * env.view * a_model * vec4(a_pos, 1.0);
         
         _out.frag_pos = fragment_pos.xyz;
