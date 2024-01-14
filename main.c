@@ -8,8 +8,8 @@
 #pragma warning(disable:4255) //Dissable "no function prototype given: converting '()' to '(void)"  
 #pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
 #pragma warning(disable:4201) //Dissable "nonstandard extension used: nameless struct/union" 
-#pragma warning(disable:4189) //Dissable "local variable is initialized but not referenced" (for assert macro)
 #pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
+#pragma warning(disable:4324) //Dissable "structure was padded due to alignment specifier"
 
 #define JOT_ALL_IMPL
 #define LIB_MEM_DEBUG
@@ -282,7 +282,7 @@ void error_func(void* context, Platform_Sandbox_Error error);
 
 int main()
 {
-    platform_init();
+    platform_init(NULL);
 
     Malloc_Allocator static_allocator = {0};
     malloc_allocator_init(&static_allocator);
@@ -697,7 +697,6 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
         isize stride = image_byte_stride(*temp_builder);
         i32 pixel_size = temp_builder->pixel_size;
 
-        u8 color[3] = {0xff, 0, 0xff};
         //Extend sideways
         for(i32 y = 0; y < image.height; y++)
         {
@@ -1822,7 +1821,6 @@ void render_queue_expand(Render* render)
     Render_Queue* buffers = &render->render_queue;
     array_clear(&buffers->expanded);
     
-    bool keep_skipped_meshes = false;
     i32 skipped_meshes_count = 0;
     
     Render_Geometry* geometry = NULL;
@@ -2064,7 +2062,10 @@ void render_render(Render* render, Camera camera)
     qsort(buffers->expanded.data, buffers->expanded.size, sizeof *buffers->expanded.data, command_buffer_compare_func);
     PERF_COUNTER_END(render_queue_sort);
 
-    ASSERT(MAX_TEXTURES_PER_MATERIAL >= MAX_TEXTURE_SLOTS);
+    #define CONST_A 10
+    #define CONST_B 20
+
+    ASSERT(CONST_A >= CONST_B);
 
     glEnable(GL_DEPTH_TEST); 
     glEnable(GL_CULL_FACE);  
@@ -2130,6 +2131,7 @@ void render_render(Render* render, Camera camera)
 
                 //We prohibit a single material with too many textures to be rendered!
                 isize used_textures = curr.material->used_textures;
+                (void) used_textures; //@TODO
                     
                 //material changed so we analyze anew its textures
                 //Go through all of the materials textures and check if it was added
@@ -2355,7 +2357,6 @@ void render_render(Render* render, Camera camera)
         glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, batch_draws->size * sizeof *indirect_commands, indirect_commands);
 
 
-        Render_Geometry_Batch_Array* geo_batches = &render->geometry_manager.batches;
         Render_Geometry_Batch* geometry_batch = &render->geometry_manager.batches.data[batch.geometry_batch_index - 1];
         glBindVertexArray(geometry_batch->vertex_array_handle);
         //glBindBuffer(GL_ARRAY_BUFFER, geometry_batch->vertex_buffer_handle);
@@ -2499,8 +2500,6 @@ void run_func(void* context)
     Shape unit_quad = {0};
     Shape unit_cube = {0};
     
-    Shape combined_shape = {0};
-
     Render_Geometry_Ptr render_uv_sphere = {0};
     Render_Geometry_Ptr render_cube_sphere = {0};
     Render_Geometry_Ptr render_screen_quad = {0};
