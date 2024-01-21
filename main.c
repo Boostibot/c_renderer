@@ -1,4 +1,4 @@
-﻿//#define RUN_TESTS
+﻿#define RUN_TESTS
 
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
@@ -296,6 +296,15 @@ int main()
 
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+
+    
+    #ifdef RUN_TESTS
+    platform_exception_sandbox(
+        run_test_func, NULL, 
+        error_func, NULL);
+
+    return;
+    #endif
 
     GLFWallocator allocator = {0};
     allocator.allocate = glfw_malloc_func;
@@ -2792,8 +2801,10 @@ void error_func(void* context, Platform_Sandbox_Error error)
 }
 
 #include "lib/_test_all.h"
+#include "arena.h"
 void run_test_func(void* context)
 {
     (void) context;
+    test_arena(2);
     test_all();
 }
