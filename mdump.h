@@ -692,7 +692,7 @@ EXPORT Mdump_Type_Info mdump_type_info_make(Mdump_Types* types, const char* name
 EXPORT void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func info_func, const char* name, u32 offset, u32 size, u32 flags, String default_value)
 {
     Mdump_Type_Member out = {0};
-    Allocator* alloc = array_get_allocator(parent->members);
+    Allocator* alloc = parent->members.allocator;
     ASSERT_MSG(alloc, "Parent must already be filled!");
 
     out.name = builder_from_cstring(name, alloc);

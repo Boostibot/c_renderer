@@ -239,18 +239,6 @@
     <ClInclude Include="lib\_test_debug_allocator.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="arena1.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="arena2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="arena3.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="arena4.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="lib\arena.h">
       <Filter>lib</Filter>
     </ClInclude>

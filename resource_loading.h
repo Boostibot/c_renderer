@@ -466,7 +466,7 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
     Format_Mtl_Material_Array mtl_materials = {0};
     Material_Description material_desription = {0};
 
-    array_init_backed(&full_path, NULL, 512);
+    array_init_with_capacity(&full_path, NULL, 512);
     Error error = path_get_full(&full_path, path);
     if(error_is_ok(error))
     {
@@ -486,7 +486,7 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
         bool is_outdated = false;
     
         Id_Array found_materials = {0};
-        array_init_backed(&found_materials, NULL, 16);
+        array_init_with_capacity(&found_materials, NULL, 16);
 
         isize last = -1;
         Id found_material = {0};
@@ -565,7 +565,7 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 
     Id out_handle = {0};
     String_Builder full_path = {0};
-    array_init_backed(&full_path, 0, 512);
+    array_init_with_capacity(&full_path, 0, 512);
     Error error = path_get_full(&full_path, path);
     
     if(error_is_ok(error))

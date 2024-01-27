@@ -190,8 +190,8 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
         offset_index.vertex_i[1] += (u32) vertex_count_before;
         offset_index.vertex_i[2] += (u32) vertex_count_before;
 
-        *array_get(shape->triangles, triangle_count_before + i) = offset_index;
-        //shape->triangles.data[vertex_count_before + i] = offset_index;
+        CHECK_BOUNDS(triangle_count_before + i, shape->triangles.size);
+        shape->triangles.data[triangle_count_before + i] = offset_index;
     }
 }
 

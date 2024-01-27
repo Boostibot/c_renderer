@@ -220,10 +220,6 @@
     <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="arena1.h" />
-    <ClInclude Include="arena2.h" />
-    <ClInclude Include="arena3.h" />
-    <ClInclude Include="arena4.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />

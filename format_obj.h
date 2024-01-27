@@ -472,7 +472,7 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
 
 EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
-    Allocator* alloc = array_get_allocator(out->indeces);
+    Allocator* alloc = out->indeces.allocator;
     if(alloc == NULL)
         alloc = allocator_get_default();
 
@@ -490,7 +490,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
     array_reserve(&out->positions, expected_line_count);
     array_reserve(&out->uvs, expected_line_count);
     array_reserve(&out->normals, expected_line_count);
-    array_init_backed(&out->groups, scratch_alloc, 64);
+    array_init_with_capacity(&out->groups, scratch_alloc, 64);
 
     String active_object = {0};
     Format_Obj_Group* active_group = NULL;

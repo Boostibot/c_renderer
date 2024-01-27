@@ -1741,13 +1741,13 @@ void render_queue_init(Render_Queue* buffers, Allocator* allocator, isize total_
     isize environemnt_count = environemnt_bytes / sizeof(Render_Environment);
 
     //If you dont want these arrays to grow you can give failing allocator.
-    array_init_capacity(&buffers->masks, allocator, command_cound);
-    array_init_capacity(&buffers->transforms, allocator, command_cound);
-    array_init_capacity(&buffers->expanded, allocator, command_cound);
-    array_init_capacity(&buffers->materials, allocator, material_count);
-    array_init_capacity(&buffers->geometries, allocator, geometry_count);
-    array_init_capacity(&buffers->environments, allocator, environemnt_count);
-    array_init_capacity(&buffers->mono_queue, allocator, command_cound);
+    array_init_with_capacity(&buffers->masks, allocator, command_cound);
+    array_init_with_capacity(&buffers->transforms, allocator, command_cound);
+    array_init_with_capacity(&buffers->expanded, allocator, command_cound);
+    array_init_with_capacity(&buffers->materials, allocator, material_count);
+    array_init_with_capacity(&buffers->geometries, allocator, geometry_count);
+    array_init_with_capacity(&buffers->environments, allocator, environemnt_count);
+    array_init_with_capacity(&buffers->mono_queue, allocator, command_cound);
 }
 
 void render_queue_submit_phong(Render* render, const Render_Phong_Command* command)
@@ -1921,11 +1921,11 @@ void render_init(Render* render, Allocator* alloc, GL_Shader* blinn_phong, Rende
     isize max_num_instances = mem_budget.instance_buffer / (sizeof(Blinn_Phong_Per_Instance) + sizeof(Render_Per_Instance));
     isize max_num_draws = mem_budget.draw_buffer / (sizeof(Blinn_Phong_Per_Draw) + sizeof(Render_Per_Draw) + sizeof(Gl_Draw_Elements_Indirect_Command));
     
-    array_init_capacity(&render->blinn_phong_per_instance, render->allocator, max_num_instances);
-    array_init_capacity(&render->blinn_phong_per_draw, render->allocator, max_num_draws);
-    array_init_capacity(&render->render_per_instance, render->allocator, max_num_instances);
-    array_init_capacity(&render->render_per_draw, render->allocator, max_num_draws);
-    array_init_capacity(&render->indirect_draws, render->allocator, max_num_draws);
+    array_init_with_capacity(&render->blinn_phong_per_instance, render->allocator, max_num_instances);
+    array_init_with_capacity(&render->blinn_phong_per_draw, render->allocator, max_num_draws);
+    array_init_with_capacity(&render->render_per_instance, render->allocator, max_num_instances);
+    array_init_with_capacity(&render->render_per_draw, render->allocator, max_num_draws);
+    array_init_with_capacity(&render->indirect_draws, render->allocator, max_num_draws);
     //Allocator* failing = allocator_get_failing();
 
     //@TODO: budget?
@@ -1948,9 +1948,6 @@ void render_init(Render* render, Allocator* alloc, GL_Shader* blinn_phong, Rende
     
     render->uniform_block_draw = shader_storage_block_make(render->shader_blinn_phong.shader, "Params", 0, render->buffer_draw_uniform.handle);
     render->uniform_block_environment = uniform_block_make(render->shader_blinn_phong.shader, "Environment", 1, render->buffer_environment_uniform.handle);
-
-    
-    #undef array_init_capacity
 }
 
 Render_Info_Ptr _render_resource_find(Stable_Array stable, String name, Id id)
