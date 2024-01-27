@@ -24,11 +24,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="lib\platform_windows.c">
       <Filter>lib</Filter>
+    </ClCompile>
+    <ClCompile Include="main.c">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -41,22 +41,10 @@
     <ClInclude Include="engine_types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="entity.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="entity_store.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="format_obj.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="image_loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="render.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="render_world.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
@@ -72,12 +60,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shapes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="systems.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="temp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="todo.h">
@@ -96,9 +78,6 @@
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\_test_hash_index.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_hash_table.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\_test_image.h">
@@ -173,16 +152,7 @@
     <ClInclude Include="lib\hash.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\hash_index.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\hash_index_template.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="lib\hash_string.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\hash_table.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\image.h">
@@ -251,25 +221,10 @@
     <ClInclude Include="gl_utils\gl_pixel_format.h">
       <Filter>gl_utils</Filter>
     </ClInclude>
-    <ClInclude Include="render2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="gl_utils\gl_frame_buffers.h">
       <Filter>gl_utils</Filter>
     </ClInclude>
     <ClInclude Include="name.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="run_default.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="run_test.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="run_temp.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="run.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\_test_string.h">
@@ -284,8 +239,26 @@
     <ClInclude Include="lib\_test_debug_allocator.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="arena.h">
+    <ClInclude Include="arena1.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="arena2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="arena3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="arena4.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arena.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_arena.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\hash_index.h">
+      <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

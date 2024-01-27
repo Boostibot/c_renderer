@@ -41,9 +41,7 @@
 #include "image_loader.h"
 #include "todo.h"
 #include "resource_loading.h"
-//#include "render.h"
 #include "camera.h"
-#include "render_world.h"
 
 #include "glfw/glfw3.h"
 #include "control.h"
@@ -291,6 +289,9 @@ int main()
     Malloc_Allocator malloc_allocator = {0};
     malloc_allocator_init_use(&malloc_allocator, 0);
     
+    Arena* arena = allocator_get_arena();
+    arena_init(arena, 0, 128);
+
     error_system_init(&static_allocator.allocator);
     file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator, "logs");
 
@@ -2498,8 +2499,6 @@ void run_func(void* context)
     Resources resources = {0};
     Render render = {0};
 
-    render_world_init(&renderer_alloc.allocator);
-
     resources_init(&resources, &resources_alloc.allocator);
     resources_set(&resources);
 
@@ -2778,7 +2777,6 @@ void run_func(void* context)
     resources_deinit(&resources);
     
     log_perf_counters("APP", LOG_INFO, true);
-    render_world_deinit();
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
     log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
@@ -2799,11 +2797,106 @@ void error_func(void* context, Platform_Sandbox_Error error)
     log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
 }
 
-#include "lib/_test_all.h"
-#include "arena.h"
-void run_test_func(void* context)
+#define BENCH_BATCH 100
+#define BENCH_ARRAY_BYTE_SIZE 32*4
+#define BENCH_WARMUP 0.3
+#define BENCH_TIME   1.5
+#define BENCH_VERSION 1
+
+bool arena_array_bench(void* context)
 {
     (void) context;
-    test_arena(2);
+    Allocator* arena = allocator_acquire_arena();
+    
+    u8_Array arrays[BENCH_BATCH] = {0};
+    for(isize i = 0; i < BENCH_BATCH; i++)
+    {
+        array_init(&arrays[i], arena);
+        array_reserve(&arrays[i], BENCH_ARRAY_BYTE_SIZE);
+    }
+
+    allocator_release_arena(arena);
+    return true;
+}
+
+bool alloc_array_bench(void* context)
+{
+    Allocator* alloc = (Allocator*) context;
+    
+    u8_Array arrays[BENCH_BATCH] = {0};
+    for(isize i = 0; i < BENCH_BATCH; i++)
+    {
+        array_init(&arrays[i], alloc);
+        array_reserve(&arrays[i], BENCH_ARRAY_BYTE_SIZE);
+    }
+    
+    for(isize i = 0; i < BENCH_BATCH; i++)
+        array_deinit(&arrays[i]);
+
+    return true;
+}
+
+bool arena_bench(void* context)
+{
+    (void) context;
+    Allocator* arena = allocator_acquire_arena();
+    
+    void* arrays[BENCH_BATCH] = {0};
+    for(isize i = 0; i < BENCH_BATCH; i++)
+        arrays[i] = allocator_allocate(arena, BENCH_ARRAY_BYTE_SIZE, 16, SOURCE_INFO());
+
+    allocator_release_arena(arena);
+    return true;
+}
+
+bool alloc_bench(void* context)
+{
+    Allocator* alloc = (Allocator*) context;
+    
+    void* arrays[BENCH_BATCH] = {0};
+    for(isize i = 0; i < BENCH_BATCH; i++)
+        arrays[i] = allocator_allocate(alloc, BENCH_ARRAY_BYTE_SIZE, 16, SOURCE_INFO());
+    
+    for(isize i = 0; i < BENCH_BATCH; i++)
+        allocator_deallocate(alloc, arrays[i], BENCH_ARRAY_BYTE_SIZE, 16, SOURCE_INFO());
+
+    return true;
+}
+
+//TOOD: 1) simplify array
+//      2) Remove scratch allocator and replace with arena
+//      3) Simplify hash index and only keep hash index!
+//      4) Rethink strings 
+
+
+#include "lib/_test_all.h"
+void run_test_func(void* context)
+{
     test_all();
+    
+
+    Allocator* arena = allocator_acquire_arena();
+    i32_Array array = {arena};
+
+    array_push(&array, 102414);
+    array_push(&array, -102414);
+
+    Stack_Allocator stack_alloc = {0};
+    stack_allocator_init(&stack_alloc, NULL, 8*MEBI_BYTE, allocator_get_default());
+    
+    Perf_Stats stats_array_arena = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, arena_array_bench, NULL);
+    Perf_Stats stats_array_alloc = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, alloc_array_bench, &stack_alloc.allocator);
+    Perf_Stats stats_arena = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, arena_bench, NULL);
+    Perf_Stats stats_alloc = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, alloc_bench, &stack_alloc.allocator);
+
+    log_perf_stats("bench", LOG_INFO, "stats_arena      ", stats_arena);
+    log_perf_stats("bench", LOG_INFO, "stats_alloc      ", stats_alloc);
+    log_perf_stats("bench", LOG_INFO, "stats_array_arena", stats_array_arena);
+    log_perf_stats("bench", LOG_INFO, "stats_array_alloc", stats_array_alloc);
+
+    allocator_release_arena(arena);
+
+    (void) context;
+    //test_arena(2);
+
 }

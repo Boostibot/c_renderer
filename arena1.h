@@ -189,7 +189,7 @@ void test_arena(f64 time)
 
             i32 level3 = level2 + 1;
             {
-                char* pat3 = arena_push_string(&arena, level3, PATTERN3);
+                char* pat3 = arena_push_string(&arena, level3, PATTERN3); (void) pat3;
                 pat1 = arena_push_string(&arena, level1, PATTERN1);
             }
             arena_pop(&arena, level3);

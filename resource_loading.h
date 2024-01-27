@@ -84,7 +84,7 @@ DEFINE_ARRAY_TYPE(Error, Error_Array);
 
 EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
-    hash_index64_reserve(&shape_assembly->vertices_hash, model.indeces.size);
+    hash_index_reserve(&shape_assembly->vertices_hash, model.indeces.size);
     
     //Copy over materials
     for(isize i = 0; i < model.material_files.size; i++)

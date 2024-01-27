@@ -62,8 +62,8 @@ EXPORT Error image_write_to_file(Subimage image, String path);
 
 INTERNAL const char* _image_loader_translate_error(u32 code, void* context)
 {
-    Hash_Index64* error_hash = (Hash_Index64*) context;
-    isize found = hash_index64_find(*error_hash, code);
+    Hash_Index* error_hash = (Hash_Index*) context;
+    isize found = hash_index_find(*error_hash, code);
     if(found == -1)
         return "unknown error. This is likely an internal bug.";
     else
@@ -76,16 +76,16 @@ INTERNAL const char* _image_loader_translate_error(u32 code, void* context)
 INTERNAL Error _image_loader_to_error(const char* error_string)
 {
     static u32 error_module = 0;
-    static Hash_Index64 error_hash = {0};
+    static Hash_Index error_hash = {0};
     if(error_module == 0)
     {
-        hash_index64_init(&error_hash, allocator_get_static());
+        hash_index_init(&error_hash, allocator_get_static());
         error_module = error_system_register_module(_image_loader_translate_error, "image_loader.h", &error_hash);
     }
 
     //We assume no hash collisions.
     u32 hashed = hash64_to32((u64) error_string);
-    isize found_code = hash_index64_find_or_insert(&error_hash, hashed, 0);
+    isize found_code = hash_index_find_or_insert(&error_hash, hashed, 0);
 
     if(error_hash.entries[found_code].value != 0)
         ASSERT(strcmp((const char*) error_hash.entries[found_code].value, error_string) == 0);

@@ -1,7 +1,0 @@
-#pragma once
-
-enum {
-    SYSTEM_ENTITY_MANAGER,
-    SYSTEM_RENDER,
-    SYSTEM_COLLISION,
-};

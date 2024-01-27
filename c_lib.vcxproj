@@ -220,19 +220,21 @@
     <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="arena.h" />
+    <ClInclude Include="arena1.h" />
+    <ClInclude Include="arena2.h" />
+    <ClInclude Include="arena3.h" />
+    <ClInclude Include="arena4.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
+    <ClInclude Include="lib\arena.h" />
+    <ClInclude Include="lib\hash_index.h" />
     <ClInclude Include="lib\profile_utils.h" />
     <ClInclude Include="lib\_test_all.h" />
+    <ClInclude Include="lib\_test_arena.h" />
     <ClInclude Include="lib\_test_debug_allocator.h" />
     <ClInclude Include="lib\_test_string.h" />
-    <ClInclude Include="run.h" />
-    <ClInclude Include="run_default.h" />
     <ClInclude Include="engine_types.h" />
-    <ClInclude Include="entity.h" />
-    <ClInclude Include="entity_store.h" />
     <ClInclude Include="format_obj.h" />
     <ClInclude Include="gl_utils\gl.h" />
     <ClInclude Include="gl_utils\gl_debug_output.h" />
@@ -258,10 +260,7 @@
     <ClInclude Include="lib\guid.h" />
     <ClInclude Include="lib\handle_table.h" />
     <ClInclude Include="lib\hash.h" />
-    <ClInclude Include="lib\hash_index.h" />
-    <ClInclude Include="lib\hash_index_template.h" />
     <ClInclude Include="lib\hash_string.h" />
-    <ClInclude Include="lib\hash_table.h" />
     <ClInclude Include="lib\image.h" />
     <ClInclude Include="lib\log.h" />
     <ClInclude Include="lib\logger_file.h" />
@@ -282,7 +281,6 @@
     <ClInclude Include="lib\_test_array.h" />
     <ClInclude Include="lib\_test_base64.h" />
     <ClInclude Include="lib\_test_hash_index.h" />
-    <ClInclude Include="lib\_test_hash_table.h" />
     <ClInclude Include="lib\_test_image.h" />
     <ClInclude Include="lib\_test_log.h" />
     <ClInclude Include="lib\_test_lpf.h" />
@@ -292,18 +290,11 @@
     <ClInclude Include="lib\_test_unicode.h" />
     <ClInclude Include="mdump.h" />
     <ClInclude Include="name.h" />
-    <ClInclude Include="render.h" />
-    <ClInclude Include="render2.h" />
-    <ClInclude Include="render_world.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="resources.h" />
     <ClInclude Include="resource_descriptions.h" />
     <ClInclude Include="resource_loading.h" />
-    <ClInclude Include="run_temp.h" />
     <ClInclude Include="shapes.h" />
-    <ClInclude Include="systems.h" />
-    <ClInclude Include="temp.h" />
-    <ClInclude Include="run_test.h" />
     <ClInclude Include="todo.h" />
   </ItemGroup>
   <ItemGroup>

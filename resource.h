@@ -81,9 +81,9 @@ typedef void(*Resource_Copy)(void* to, void* from);
 typedef struct Resource_Manager {
     Stable_Array storage;
 
-    Hash_Ptr id_hash;
-    Hash_Ptr name_hash;
-    Hash_Ptr path_hash;
+    Hash_Index id_hash;
+    Hash_Index name_hash;
+    Hash_Index path_hash;
 
     Resource_Ptr_Array timed;
     Resource_Ptr_Array single_frame;
@@ -129,9 +129,9 @@ EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, i
     resource_manager_deinit(manager);
 
     stable_array_init(&manager->storage, alloc, item_size + sizeof(Resource_Info));
-    hash_ptr_init(&manager->id_hash, alloc);
-    hash_ptr_init(&manager->name_hash, alloc);
-    hash_ptr_init(&manager->path_hash, alloc);
+    hash_index_init(&manager->id_hash, alloc);
+    hash_index_init(&manager->name_hash, alloc);
+    hash_index_init(&manager->path_hash, alloc);
 
     array_init(&manager->timed, alloc);
     array_init(&manager->single_frame, alloc);
@@ -156,9 +156,9 @@ EXPORT void resource_manager_deinit(Resource_Manager* manager)
     STABLE_ARRAY_FOR_EACH_END
 
     stable_array_deinit(&manager->storage);
-    hash_ptr_deinit(&manager->id_hash);
-    hash_ptr_deinit(&manager->name_hash);
-    hash_ptr_deinit(&manager->path_hash);
+    hash_index_deinit(&manager->id_hash);
+    hash_index_deinit(&manager->name_hash);
+    hash_index_deinit(&manager->path_hash);
 
     array_deinit(&manager->timed);
     array_deinit(&manager->single_frame);
@@ -174,14 +174,14 @@ EXPORT bool         resource_is_valid(Resource_Ptr resource)
 EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
-    isize found = hash_ptr_find(manager->id_hash, (u64) id);
+    isize found = hash_index_find(manager->id_hash, (u64) id);
     if(found == -1)
         return out;
 
-    Hash_Ptr_Entry entry = manager->id_hash.entries[found];
+    Hash_Index_Entry entry = manager->id_hash.entries[found];
     ASSERT_MSG(entry.hash == (u64) id, "hash ptr has no hash collisions on 64 bit number!");
 
-    Resource_Info* ptr = (Resource_Info*) hash_ptr_ptr_restore((void*) entry.value);
+    Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
     out.id = id;
     out.ptr = ptr;
 
@@ -197,14 +197,14 @@ EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String 
     isize finished_at = 0;
     isize found = 0;
     if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_ptr_find_next(manager->name_hash, name.hash, *prev_found_and_finished_at, &finished_at);
+        found = hash_index_find_next(manager->name_hash, name.hash, *prev_found_and_finished_at, &finished_at);
     else
-        found = hash_ptr_find(manager->name_hash, name.hash);
+        found = hash_index_find(manager->name_hash, name.hash);
 
     while(found != -1)
     {
-        Hash_Ptr_Entry entry = manager->name_hash.entries[found];
-        Resource_Info* ptr = (Resource_Info*) hash_ptr_ptr_restore((void*) entry.value);
+        Hash_Index_Entry entry = manager->name_hash.entries[found];
+        Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
 
         if(string_is_equal(string_from_builder(ptr->name), string_from_hashed(name)))
         {
@@ -213,7 +213,7 @@ EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String 
             break;
         }
 
-        found = hash_ptr_find_next(manager->name_hash, name.hash, found, &finished_at);
+        found = hash_index_find_next(manager->name_hash, name.hash, found, &finished_at);
     }
 
     if(prev_found_and_finished_at)
@@ -229,14 +229,14 @@ EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String 
     isize finished_at = 0;
     isize found = 0;
     if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_ptr_find_next(manager->path_hash, path.hash, *prev_found_and_finished_at, &finished_at);
+        found = hash_index_find_next(manager->path_hash, path.hash, *prev_found_and_finished_at, &finished_at);
     else
-        found = hash_ptr_find(manager->path_hash, path.hash);
+        found = hash_index_find(manager->path_hash, path.hash);
 
     while(found != -1)
     {
-        Hash_Ptr_Entry entry = manager->path_hash.entries[found];
-        Resource_Info* ptr = (Resource_Info*) hash_ptr_ptr_restore((void*) entry.value);
+        Hash_Index_Entry entry = manager->path_hash.entries[found];
+        Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
 
         if(string_is_equal(string_from_builder(ptr->path), string_from_hashed(path)))
         {
@@ -245,7 +245,7 @@ EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String 
             break;
         }
 
-        found = hash_ptr_find_next(manager->path_hash, path.hash, found, &finished_at);
+        found = hash_index_find_next(manager->path_hash, path.hash, found, &finished_at);
     }
 
     if(prev_found_and_finished_at)
@@ -319,9 +319,9 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     Hash_String name_hashed = hash_string_from_string(params.name);
     Hash_String path_hashed = hash_string_from_string(params.path);
 
-    hash_ptr_insert(&manager->id_hash, (u64) params.id, (u64) info);
-    hash_ptr_insert(&manager->name_hash, name_hashed.hash, (u64) info);
-    hash_ptr_insert(&manager->path_hash, path_hashed.hash, (u64) info);
+    hash_index_insert(&manager->id_hash, (u64) params.id, (u64) info);
+    hash_index_insert(&manager->name_hash, name_hashed.hash, (u64) info);
+    hash_index_insert(&manager->path_hash, path_hashed.hash, (u64) info);
     
     out.id = params.id;
     out.ptr = info;
@@ -395,13 +395,13 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
         ASSERT(by_path.ptr == info);
 
         if(id_found != -1)
-            hash_ptr_remove(&manager->id_hash, id_found);
+            hash_index_remove(&manager->id_hash, id_found);
             
         if(name_found != -1)
-            hash_ptr_remove(&manager->name_hash, name_found);
+            hash_index_remove(&manager->name_hash, name_found);
             
         if(path_found != -1)
-            hash_ptr_remove(&manager->path_hash, path_found);
+            hash_index_remove(&manager->path_hash, path_found);
 
         array_deinit(&info->path);
         array_deinit(&info->name);
