@@ -194,10 +194,9 @@ EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_
 EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
-    isize finished_at = 0;
     isize found = 0;
     if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_index_find_next(manager->name_hash, name.hash, *prev_found_and_finished_at, &finished_at);
+        found = hash_index_find_next(manager->name_hash, name.hash, *prev_found_and_finished_at);
     else
         found = hash_index_find(manager->name_hash, name.hash);
 
@@ -213,7 +212,7 @@ EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String 
             break;
         }
 
-        found = hash_index_find_next(manager->name_hash, name.hash, found, &finished_at);
+        found = hash_index_find_next(manager->name_hash, name.hash, found);
     }
 
     if(prev_found_and_finished_at)
@@ -225,11 +224,9 @@ EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String 
 EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
-    
-    isize finished_at = 0;
     isize found = 0;
     if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_index_find_next(manager->path_hash, path.hash, *prev_found_and_finished_at, &finished_at);
+        found = hash_index_find_next(manager->path_hash, path.hash, *prev_found_and_finished_at);
     else
         found = hash_index_find(manager->path_hash, path.hash);
 
@@ -245,7 +242,7 @@ EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String 
             break;
         }
 
-        found = hash_index_find_next(manager->path_hash, path.hash, found, &finished_at);
+        found = hash_index_find_next(manager->path_hash, path.hash, found);
     }
 
     if(prev_found_and_finished_at)

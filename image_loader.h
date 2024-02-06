@@ -173,14 +173,17 @@ EXPORT Error image_read_from_memory(Image* image, String data, isize desired_cha
 
 EXPORT Error image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
-    String_Builder file_content = {allocator_get_scratch()};
-    Error file_error = file_read_entire(path, &file_content);
-    Error parse_error = ERROR_AND(file_error) image_read_from_memory(image, string_from_builder(file_content), desired_channels, format, flags);
-    
-    if(!error_is_ok(parse_error))
-        LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
-
-    array_deinit(&file_content);
+    Error parse_error = {0};
+    Allocator* arena = allocator_arena_acquire();
+    {
+        String_Builder file_content = {arena};
+        Error file_error = file_read_entire(path, &file_content);
+        parse_error = ERROR_AND(file_error) image_read_from_memory(image, string_from_builder(file_content), desired_channels, format, flags);
+        
+        if(!error_is_ok(parse_error))
+            LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
+    }
+    allocator_arena_release(&arena);
     return parse_error;
 }
 
@@ -198,106 +201,109 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
     const char* error_msg_bad_file_format =     "Invalid output format (IMAGE_LOAD_FILE_FORMAT_NONE or bad value)";
 
     int jpg_compression_quality = 50; //[0, 100]
+    Error out_error = {0};
 
     array_clear(into);
-
-    Image contiguous = {0};
-
-    //not contigous in memory => make contiguous copy
-    if(subimage_is_contiguous(image) == false)
+    Allocator* arena = allocator_arena_acquire();
     {
-        contiguous = image_from_subimage(image, allocator_get_scratch());
-        image = subimage_make(contiguous);
-    }
+        Image contiguous = {0};
 
-    Error out_error = {0};
-    isize channel_count = subimage_channel_count(image);
-    bool had_internal_error = false;
-    switch(file_format)
-    {
-        case IMAGE_LOAD_FILE_FORMAT_PNG: {
-            isize stride = subimage_byte_stride(image);;
-            if(image.type != PIXEL_TYPE_U8)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else
-                had_internal_error = !stbi_write_png_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, (int) stride);
-        } break;
-        
-        case IMAGE_LOAD_FILE_FORMAT_BMP: {
-            if(image.type != PIXEL_TYPE_U8)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else
-                had_internal_error = !stbi_write_bmp_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
-        } break;
-        
-        case IMAGE_LOAD_FILE_FORMAT_TGA: {
-            if(image.type != PIXEL_TYPE_U8)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else
-                had_internal_error = !stbi_write_tga_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
-        } break;
-        
-        case IMAGE_LOAD_FILE_FORMAT_JPG: {
-            if(image.type != PIXEL_TYPE_U8)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(channel_count > 3)
-                out_error = _image_loader_to_error(error_msg_bad_chanel_count);
-            else
-                had_internal_error = !stbi_write_jpg_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, jpg_compression_quality);
-        } break;
-        
-        case IMAGE_LOAD_FILE_FORMAT_HDR: {
-            if(image.type != PIXEL_TYPE_F32)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(channel_count > 3)
-                out_error = _image_loader_to_error(error_msg_bad_chanel_count);
-            else
-                had_internal_error = !stbi_write_hdr_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, (float*) (void*) image.pixels);
-        } break;
+        //not contigous in memory => make contiguous copy
+        if(subimage_is_contiguous(image) == false)
+        {
+            contiguous = image_from_subimage(image, arena);
+            image = subimage_make(contiguous);
+        }
 
-        case IMAGE_LOAD_FILE_FORMAT_PFM: {
-            if(image.type != PIXEL_TYPE_F32)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(channel_count > 3)
-                out_error = _image_loader_to_error(error_msg_bad_chanel_count);
-            else
-                out_error = netbpm_format_pfm_write_into(into, image, 1.0f);
-        } break;
-
-        case IMAGE_LOAD_FILE_FORMAT_PPM: {
-            if(image.type != PIXEL_TYPE_U8)
-                out_error = _image_loader_to_error(error_msg_bad_type);
-            else if(channel_count > 3)
-                out_error = _image_loader_to_error(error_msg_bad_chanel_count);
-            else
-                out_error = netbpm_format_ppm_write_into(into, image);
-        } break;
+        isize channel_count = subimage_channel_count(image);
+        bool had_internal_error = false;
+        switch(file_format)
+        {
+            case IMAGE_LOAD_FILE_FORMAT_PNG: {
+                isize stride = subimage_byte_stride(image);;
+                if(image.type != PIXEL_TYPE_U8)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else
+                    had_internal_error = !stbi_write_png_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, (int) stride);
+            } break;
             
-        case IMAGE_LOAD_FILE_FORMAT_PAM: {
-            out_error = netbpm_format_pam_write_into(into, image);
-        } break;
+            case IMAGE_LOAD_FILE_FORMAT_BMP: {
+                if(image.type != PIXEL_TYPE_U8)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else
+                    had_internal_error = !stbi_write_bmp_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
+            } break;
+            
+            case IMAGE_LOAD_FILE_FORMAT_TGA: {
+                if(image.type != PIXEL_TYPE_U8)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else
+                    had_internal_error = !stbi_write_tga_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
+            } break;
+            
+            case IMAGE_LOAD_FILE_FORMAT_JPG: {
+                if(image.type != PIXEL_TYPE_U8)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else if(channel_count > 3)
+                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
+                else
+                    had_internal_error = !stbi_write_jpg_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, jpg_compression_quality);
+            } break;
+            
+            case IMAGE_LOAD_FILE_FORMAT_HDR: {
+                if(image.type != PIXEL_TYPE_F32)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else if(channel_count > 3)
+                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
+                else
+                    had_internal_error = !stbi_write_hdr_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, (float*) (void*) image.pixels);
+            } break;
 
-        case IMAGE_LOAD_FILE_FORMAT_NONE:
-        default: 
-            out_error = _image_loader_to_error(error_msg_bad_file_format);
-        break;
+            case IMAGE_LOAD_FILE_FORMAT_PFM: {
+                if(image.type != PIXEL_TYPE_F32)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else if(channel_count > 3)
+                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
+                else
+                    out_error = netbpm_format_pfm_write_into(into, image, 1.0f);
+            } break;
+
+            case IMAGE_LOAD_FILE_FORMAT_PPM: {
+                if(image.type != PIXEL_TYPE_U8)
+                    out_error = _image_loader_to_error(error_msg_bad_type);
+                else if(channel_count > 3)
+                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
+                else
+                    out_error = netbpm_format_ppm_write_into(into, image);
+            } break;
+                
+            case IMAGE_LOAD_FILE_FORMAT_PAM: {
+                out_error = netbpm_format_pam_write_into(into, image);
+            } break;
+
+            case IMAGE_LOAD_FILE_FORMAT_NONE:
+            default: 
+                out_error = _image_loader_to_error(error_msg_bad_file_format);
+            break;
+        }
+
+        if(had_internal_error)
+            out_error = ERROR_AND(out_error) _image_loader_to_error(error_msg_unspecfied);
+
     }
+    allocator_arena_release(&arena);
 
-    if(had_internal_error)
-        out_error = ERROR_AND(out_error) _image_loader_to_error(error_msg_unspecfied);
-
-    image_deinit(&contiguous);
     return out_error;
 }
 
 EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
-    String_Builder formatted = {allocator_get_scratch()};
+    Allocator* arena = allocator_arena_acquire();
+    String_Builder formatted = {arena};
     Error format_error = image_write_to_memory(image, &formatted, file_format);
     Error output_error = ERROR_AND(format_error) file_write_entire(path, string_from_builder(formatted));
 
-    array_deinit(&formatted);
-
+    allocator_arena_release(&arena);
     return output_error;
 }
 

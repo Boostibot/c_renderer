@@ -289,8 +289,8 @@ int main()
     Malloc_Allocator malloc_allocator = {0};
     malloc_allocator_init_use(&malloc_allocator, 0);
     
-    Arena* arena = allocator_get_arena();
-    arena_init(arena, 0, 128);
+    Arena_Stack* arena_stack = scratch_arena_acquire().stack;
+    arena_init(arena_stack, 0, 128);
 
     error_system_init(&static_allocator.allocator);
     file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator, "logs");
@@ -696,7 +696,7 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
 
         if(temp_builder_or_null == NULL)
         {
-            image_init_unshaped(&temp_storage, allocator_get_scratch());
+            image_init_unshaped(&temp_storage, allocator_get_default());
             temp_builder = &temp_storage;
         }
 
@@ -858,7 +858,7 @@ void render_texture_manager_init(Render_Texture_Manager* manager, Allocator* all
 {
     //render_texture_manager_deinit(manager);
     if(allocator == NULL) 
-        allocator = allocator_get_scratch();
+        allocator = allocator_get_default();
         
     manager->allocator = allocator;
     manager->memory_budget = memory_budget;
@@ -2069,11 +2069,6 @@ void render_render(Render* render, Camera camera)
     qsort(buffers->expanded.data, buffers->expanded.size, sizeof *buffers->expanded.data, command_buffer_compare_func);
     PERF_COUNTER_END(render_queue_sort);
 
-    #define CONST_A 10
-    #define CONST_B 20
-
-    ASSERT(CONST_A >= CONST_B);
-
     glEnable(GL_DEPTH_TEST); 
     glEnable(GL_CULL_FACE);  
     glCullFace(GL_BACK);
@@ -2431,20 +2426,23 @@ Error render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out
     log_group_push();
     PERF_COUNTER_START(image_read_counter);
 
-    Image temp_storage = {allocator_get_scratch()};
-    Error error = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
-    
-    if(error_is_ok(error) == false)
+    Error error = {0};
+    Allocator* arena = allocator_arena_acquire();
     {
-        LOG_ERROR("render", "error reading " ERROR_FMT " image!", ERROR_PRINT(error));
-        ASSERT(false);
-    }
-    else
-    {
-        *out = render_texture_add(render, temp_storage, name);
-    }
+        Image temp_storage = {arena};
+        error = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
         
-    image_deinit(&temp_storage);
+        if(error_is_ok(error) == false)
+        {
+            LOG_ERROR("render", "error reading " ERROR_FMT " image!", ERROR_PRINT(error));
+            ASSERT(false);
+        }
+        else
+        {
+            *out = render_texture_add(render, temp_storage, name);
+        }
+    }
+    allocator_arena_release(&arena);
     
     PERF_COUNTER_END(image_read_counter);
     log_group_pop();
@@ -2794,106 +2792,15 @@ void error_func(void* context, Platform_Sandbox_Error error)
     log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
 }
 
-#define BENCH_BATCH 100
-#define BENCH_ARRAY_BYTE_SIZE 32*4
-#define BENCH_WARMUP 0.3
-#define BENCH_TIME   1.5
-#define BENCH_VERSION 1
+//TOOD: 1) Remove scratch allocator and replace with arena
+//      2) Rethink strings 
 
-bool arena_array_bench(void* context)
-{
-    (void) context;
-    Allocator* arena = allocator_acquire_arena();
-    
-    u8_Array arrays[BENCH_BATCH] = {0};
-    for(isize i = 0; i < BENCH_BATCH; i++)
-    {
-        array_init(&arrays[i], arena);
-        array_reserve(&arrays[i], BENCH_ARRAY_BYTE_SIZE);
-    }
-
-    allocator_release_arena(arena);
-    return true;
-}
-
-bool alloc_array_bench(void* context)
-{
-    Allocator* alloc = (Allocator*) context;
-    
-    u8_Array arrays[BENCH_BATCH] = {0};
-    for(isize i = 0; i < BENCH_BATCH; i++)
-    {
-        array_init(&arrays[i], alloc);
-        array_reserve(&arrays[i], BENCH_ARRAY_BYTE_SIZE);
-    }
-    
-    for(isize i = 0; i < BENCH_BATCH; i++)
-        array_deinit(&arrays[i]);
-
-    return true;
-}
-
-bool arena_bench(void* context)
-{
-    (void) context;
-    Allocator* arena = allocator_acquire_arena();
-    
-    void* arrays[BENCH_BATCH] = {0};
-    for(isize i = 0; i < BENCH_BATCH; i++)
-        arrays[i] = allocator_allocate(arena, BENCH_ARRAY_BYTE_SIZE, 16, SOURCE_INFO());
-
-    allocator_release_arena(arena);
-    return true;
-}
-
-bool alloc_bench(void* context)
-{
-    Allocator* alloc = (Allocator*) context;
-    
-    void* arrays[BENCH_BATCH] = {0};
-    for(isize i = 0; i < BENCH_BATCH; i++)
-        arrays[i] = allocator_allocate(alloc, BENCH_ARRAY_BYTE_SIZE, 16, SOURCE_INFO());
-    
-    for(isize i = 0; i < BENCH_BATCH; i++)
-        allocator_deallocate(alloc, arrays[i], BENCH_ARRAY_BYTE_SIZE, 16, SOURCE_INFO());
-
-    return true;
-}
-
-//TOOD: 1) simplify array
-//      2) Remove scratch allocator and replace with arena
-//      3) Simplify hash index and only keep hash index!
-//      4) Rethink strings 
-
-
+#include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
+//#include "lib/lpf2.h"
 void run_test_func(void* context)
 {
-    test_all();
-    
-
-    Allocator* arena = allocator_acquire_arena();
-    i32_Array array = {arena};
-
-    array_push(&array, 102414);
-    array_push(&array, -102414);
-
-    Stack_Allocator stack_alloc = {0};
-    stack_allocator_init(&stack_alloc, NULL, 8*MEBI_BYTE, allocator_get_default());
-    
-    Perf_Stats stats_array_arena = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, arena_array_bench, NULL);
-    Perf_Stats stats_array_alloc = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, alloc_array_bench, &stack_alloc.allocator);
-    Perf_Stats stats_arena = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, arena_bench, NULL);
-    Perf_Stats stats_alloc = perf_benchmark(BENCH_WARMUP, BENCH_TIME, BENCH_BATCH, alloc_bench, &stack_alloc.allocator);
-
-    log_perf_stats("bench", LOG_INFO, "stats_arena      ", stats_arena);
-    log_perf_stats("bench", LOG_INFO, "stats_alloc      ", stats_alloc);
-    log_perf_stats("bench", LOG_INFO, "stats_array_arena", stats_array_arena);
-    log_perf_stats("bench", LOG_INFO, "stats_array_alloc", stats_array_alloc);
-
-    allocator_release_arena(arena);
-
     (void) context;
-    //test_arena(2);
-
+    test_lpf();
+    //test_all();
 }

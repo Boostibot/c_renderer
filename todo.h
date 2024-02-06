@@ -188,45 +188,49 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
 
 EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo)
 {
-    String_Builder source = {allocator_get_scratch()};
+    
+    Allocator* arena = allocator_arena_acquire();
+    String_Builder source = {arena};
 
     Error file_error = file_read_entire(path, &source);
     todo_parse_source(todos, path, string_from_builder(source), todo);
     
-    array_deinit(&source);
+    allocator_arena_release(&arena);
     return file_error;
 }
 
 EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
-    String_Builder source = {allocator_get_scratch()};
-
-    Platform_Directory_Entry* entries = NULL;
-    isize entries_count = 0;
-
-    Platform_Error platform_error = platform_directory_list_contents_alloc(path, &entries, &entries_count, depth);
-    Error error = error_from_platform(platform_error);
-
-    if(error_is_ok(error))
+    Error error = {0};
+    Allocator* arena = allocator_arena_acquire();
     {
-        for(isize i = 0; i < entries_count; i++)
-        {
-            Platform_Directory_Entry entry = entries[i];
-            if(entry.info.type == PLATFORM_FILE_TYPE_FILE)
-            {
-                String file_path = string_make(entry.path);
-                Error file_error = file_read_entire(file_path, &source);
+        String_Builder source = {arena};
 
-                todo_parse_source(todos, file_path, todo, string_from_builder(source));
-                error = ERROR_AND(error) file_error;
+        Platform_Directory_Entry* entries = NULL;
+        isize entries_count = 0;
+
+        Platform_Error platform_error = platform_directory_list_contents_alloc(path, &entries, &entries_count, depth);
+        error = error_from_platform(platform_error);
+
+        if(error_is_ok(error))
+        {
+            for(isize i = 0; i < entries_count; i++)
+            {
+                Platform_Directory_Entry entry = entries[i];
+                if(entry.info.type == PLATFORM_FILE_TYPE_FILE)
+                {
+                    String file_path = string_make(entry.path);
+                    Error file_error = file_read_entire(file_path, &source);
+
+                    todo_parse_source(todos, file_path, todo, string_from_builder(source));
+                    error = ERROR_AND(error) file_error;
+                }
             }
         }
+
+        platform_directory_list_contents_free(entries);
     }
-
-    platform_directory_list_contents_free(entries);
-
-    array_deinit(&source);
-
+    allocator_arena_release(&arena);
     return error;
 }
 

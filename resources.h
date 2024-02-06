@@ -437,7 +437,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         memset(resources, 0, sizeof *resources);
     }
     
-    EXPORT bool serialize_resource_info(Lpf_Dyn_Entry* entry, Resource_Info* info, Read_Or_Write action)
+    EXPORT bool serialize_resource_info(Lpf_Entry* entry, Resource_Info* info, Read_Or_Write action)
     {
         #if 0
         typedef enum Resource_Lifetime {
@@ -506,11 +506,11 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         bool state = true;
         state = state && serialize_id(serialize_locate(entry, "id", action),            &info->id, NULL, action);
         state = state && serialize_string(serialize_locate(entry, "name", action),      &info->name, STRING(""), action);
-        serialize_string(serialize_locate(entry, "path", action),               &info->path, STRING(""), action);
-        serialize_enum(serialize_locate(entry, "type_enum", action),      &info->type_enum, sizeof(info->type_enum), 0, "", resource_type_enum, STATIC_ARRAY_SIZE(resource_type_enum), action);
+        serialize_string(serialize_locate(entry, "path", action),                       &info->path, STRING(""), action);
+        serialize_enum(serialize_locate(entry, "type_enum", action),                    &info->type_enum, sizeof(info->type_enum), 0, resource_type_enum, STATIC_ARRAY_SIZE(resource_type_enum), action);
 
-        state = state && serialize_enum(serialize_locate(entry, "lifetime", action),    &info->lifetime, sizeof(info->lifetime), 0, "", resource_lifetime_enum, STATIC_ARRAY_SIZE(resource_lifetime_enum), action);
-        state = state && serialize_enum(serialize_locate(entry, "reload", action),      &info->reload, sizeof(info->reload), 0, "", resource_reload_enum, STATIC_ARRAY_SIZE(resource_reload_enum), action);
+        state = state && serialize_enum(serialize_locate(entry, "lifetime", action),    &info->lifetime, sizeof(info->lifetime), 0, resource_lifetime_enum, STATIC_ARRAY_SIZE(resource_lifetime_enum), action);
+        state = state && serialize_enum(serialize_locate(entry, "reload", action),      &info->reload, sizeof(info->reload), 0, resource_reload_enum, STATIC_ARRAY_SIZE(resource_reload_enum), action);
     
         if(state)
         {
@@ -521,12 +521,12 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         }
     
         if(state && action == SERIALIZE_WRITE)
-            serialize_entry_set_identity(entry, STRING("Resource_Info"), STRING(""), LPF_KIND_SCOPE_START, LPF_FLAG_ALIGN_MEMBERS);
+            serialize_entry_set_identity(entry, STRING("Resource_Info"), LPF_COLLECTION);
 
         return state;
     }
 
-    EXPORT bool serialize_map_info(Lpf_Dyn_Entry* entry, Map_Info* info, Read_Or_Write action)
+    EXPORT bool serialize_map_info(Lpf_Entry* entry, Map_Info* info, Read_Or_Write action)
     {
         #if 0
         typedef enum Map_Scale_Filter {
@@ -596,14 +596,14 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         if(state)
         {
             STATIC_ASSERT(STATIC_ARRAY_SIZE(info->channels_idices1) == 4);
-            serialize_int_count_typed(serialize_locate(entry, "channels_count", action), info->channels_idices1, sizeof(*info->channels_idices1), default_values.channels_idices1, 4, STRING("4i"), action);
+            serialize_int_count_typed(serialize_locate(entry, "channels_count", action), info->channels_idices1, sizeof(*info->channels_idices1), default_values.channels_idices1, 4, action);
 
-            serialize_enum(serialize_locate(entry, "filter_minify", action), &info->filter_minify, sizeof(info->filter_minify), default_values.filter_minify, "Map_Scale_Filter", map_scale, STATIC_ARRAY_SIZE(map_scale), action);
-            serialize_enum(serialize_locate(entry, "filter_magnify", action), &info->filter_magnify, sizeof(info->filter_magnify), default_values.filter_magnify, "Map_Scale_Filter", map_scale, STATIC_ARRAY_SIZE(map_scale), action);
+            serialize_enum(serialize_locate(entry, "filter_minify", action), &info->filter_minify, sizeof(info->filter_minify), default_values.filter_minify, map_scale, STATIC_ARRAY_SIZE(map_scale), action);
+            serialize_enum(serialize_locate(entry, "filter_magnify", action), &info->filter_magnify, sizeof(info->filter_magnify), default_values.filter_magnify, map_scale, STATIC_ARRAY_SIZE(map_scale), action);
 
-            serialize_enum(serialize_locate(entry, "repeat_u", action),     &info->repeat_u, sizeof(info->repeat_u), default_values.repeat_u, "Map_Repeat", map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
-            serialize_enum(serialize_locate(entry, "repeat_v", action),     &info->repeat_v, sizeof(info->repeat_v), default_values.repeat_v, "Map_Repeat", map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
-            serialize_enum(serialize_locate(entry, "repeat_w", action),     &info->repeat_w, sizeof(info->repeat_w), default_values.repeat_w, "Map_Repeat", map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
+            serialize_enum(serialize_locate(entry, "repeat_u", action),     &info->repeat_u, sizeof(info->repeat_u), default_values.repeat_u, map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
+            serialize_enum(serialize_locate(entry, "repeat_v", action),     &info->repeat_v, sizeof(info->repeat_v), default_values.repeat_v, map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
+            serialize_enum(serialize_locate(entry, "repeat_w", action),     &info->repeat_w, sizeof(info->repeat_w), default_values.repeat_w, map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
         
             serialize_f32(serialize_locate(entry, "gamma", action),         &info->gamma, default_values.gamma, action);
             serialize_f32(serialize_locate(entry, "brigthness", action),    &info->brigthness, default_values.brigthness, action);
@@ -611,12 +611,12 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         }
 
         if(state && action == SERIALIZE_WRITE)
-            serialize_entry_set_identity(entry, STRING("Map_Info"), STRING(""), LPF_KIND_SCOPE_START, LPF_FLAG_ALIGN_MEMBERS);
+            serialize_entry_set_identity(entry, STRING("Map_Info"), LPF_COLLECTION);
 
         return state;
     }
     
-    EXPORT bool serialize_map_type(Lpf_Dyn_Entry* entry, Map_Type* type, Read_Or_Write action)
+    EXPORT bool serialize_map_type(Lpf_Entry* entry, Map_Type* type, Read_Or_Write action)
     {
         const Serialize_Enum map_type[] = {
             SERIALIZE_ENUM_VALUE(MAP_TYPE_ALBEDO),
@@ -638,10 +638,10 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             SERIALIZE_ENUM_VALUE(MAP_TYPE_EMMISIVE),
         };
     
-        return serialize_enum(entry, type, sizeof(*type), 0, "Map_Type", map_type, STATIC_ARRAY_SIZE(map_type), action);
+        return serialize_enum(entry, type, sizeof(*type), 0, map_type, STATIC_ARRAY_SIZE(map_type), action);
     }
     
-    EXPORT bool serialize_cubemap_type(Lpf_Dyn_Entry* entry, Cubemap_Type* type, Read_Or_Write action)
+    EXPORT bool serialize_cubemap_type(Lpf_Entry* entry, Cubemap_Type* type, Read_Or_Write action)
     {
         const Serialize_Enum cubemap_type[] = {
             SERIALIZE_ENUM_VALUE(CUBEMAP_TYPE_SKYBOX),
@@ -653,10 +653,10 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             SERIALIZE_ENUM_VALUE(CUBEMAP_TYPE_ENUM_COUNT),
         };
     
-        return serialize_enum(entry, type, sizeof(*type), 0, "Cubemap_Type", cubemap_type, STATIC_ARRAY_SIZE(cubemap_type), action);
+        return serialize_enum(entry, type, sizeof(*type), 0, cubemap_type, STATIC_ARRAY_SIZE(cubemap_type), action);
     }
     
-    EXPORT bool serialize_material_info(Lpf_Dyn_Entry* entry, Material_Info* info, Read_Or_Write action)
+    EXPORT bool serialize_material_info(Lpf_Entry* entry, Material_Info* info, Read_Or_Write action)
     {
         #if 0
         typedef struct Material_Info {
@@ -707,13 +707,13 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         serialize_f32(serialize_locate(entry, "bump_multiplier", action),                                   &info->bump_multiplier, default_values.bump_multiplier, action);
         
         if((phong_state || pbr_state) && action == SERIALIZE_WRITE)
-            serialize_entry_set_identity(entry, STRING("Material_Info"), STRING(""), LPF_KIND_SCOPE_START, LPF_FLAG_ALIGN_MEMBERS);
+            serialize_entry_set_identity(entry, STRING("Material_Info"), LPF_COLLECTION);
 
         return phong_state || pbr_state;
     }
 
     
-    EXPORT bool serialize_image(Lpf_Dyn_Entry* entry, Image* image, Read_Or_Write action)
+    EXPORT bool serialize_image(Lpf_Entry* entry, Image* image, Read_Or_Write action)
     {
         const Serialize_Enum type[] = {
             SERIALIZE_ENUM_VALUE(PIXEL_TYPE_U8),
@@ -728,7 +728,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         state = state && serialize_i32(serialize_locate(entry, "height", action),        &image->height, 0, action);
         state = state && serialize_i32(serialize_locate(entry, "height", action),        &image->height, 0, action);
 
-        bool pixel_format_state = serialize_enum(serialize_locate(entry, "type", action), &image->type, sizeof(image->type), PIXEL_TYPE_U8, "Pixel_Type", type, STATIC_ARRAY_SIZE(type), action);
+        bool pixel_format_state = serialize_enum(serialize_locate(entry, "type", action), &image->type, sizeof(image->type), PIXEL_TYPE_U8, type, STATIC_ARRAY_SIZE(type), action);
         if(pixel_format_state == false)
             state = serialize_i32(serialize_locate(entry, "type", action), (i32*) &image->type, PIXEL_TYPE_U8, action);
         else

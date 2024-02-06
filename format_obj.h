@@ -472,14 +472,12 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
 
 EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
+    Allocator* default_alloc = allocator_get_default();
     Allocator* alloc = out->indeces.allocator;
     if(alloc == NULL)
-        alloc = allocator_get_default();
+        alloc = default_alloc;
 
     format_obj_model_init(out, alloc);
-    
-    Allocator* scratch_alloc = allocator_get_scratch();
-    Allocator* default_alloc = allocator_get_default();
     
     bool had_error = false;
     isize error_count = 0;
@@ -490,347 +488,351 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
     array_reserve(&out->positions, expected_line_count);
     array_reserve(&out->uvs, expected_line_count);
     array_reserve(&out->normals, expected_line_count);
-    array_init_with_capacity(&out->groups, scratch_alloc, 64);
 
     String active_object = {0};
     Format_Obj_Group* active_group = NULL;
-
-    i32 trinagle_index = 0;
-    for(Line_Iterator it = {0}; line_iterator_get_line(&it, obj_source); )
+    Allocator* arena = allocator_arena_acquire();
     {
-        String line = string_trim_whitespace(it.line);
-
-        // Skip blank lines.
-        if(line.size == 0)
-            continue;
-
-        Format_Obj_Mtl_Error_Statement error = FORMAT_OBJ_ERROR_NONE;
-
-        char first_char = line.data[0];
-        switch (first_char) 
+        array_init_with_capacity(&out->groups, arena, 64);
+        i32 trinagle_index = 0;
+        for(Line_Iterator it = {0}; line_iterator_get_line(&it, obj_source); )
         {
-            case '#': {
-                // Skip comments
+            String line = string_trim_whitespace(it.line);
+
+            // Skip blank lines.
+            if(line.size == 0)
                 continue;
-            } break;
 
-            //vertex variants
-            case 'v': {
-                char second_char = line.data[1];
-                switch (second_char)
-                {
-                    case ' ': {
-                        Vec3 pos = {0};
-                        isize line_index = 1;
-                        bool matched = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &pos.x)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &pos.y)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &pos.z);
+            Format_Obj_Mtl_Error_Statement error = FORMAT_OBJ_ERROR_NONE;
 
-                        if(!matched)
-                            error = FORMAT_OBJ_ERROR_VERTEX_POS;
-                        else
-                            array_push(&out->positions, pos);
-                    } break;
+            char first_char = line.data[0];
+            switch (first_char) 
+            {
+                case '#': {
+                    // Skip comments
+                    continue;
+                } break;
 
-                    case 'n': {
-
-                        Vec3 norm = {0};
-                        isize line_index = 2;
-                        bool matched = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &norm.x)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &norm.y)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &norm.z);
-
-                        if(!matched)
-                            error = FORMAT_OBJ_ERROR_VERTEX_NORM;
-                        else
-                            array_push(&out->normals, norm);
-                    } break;
-
-                    case 't': {
-
-                        // @NOTE: Ignoring Z if present.
-                        Vec2 tex_coord = {0};
-                        isize line_index = 2;
-                        bool matched = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &tex_coord.x)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_f32(line, &line_index, &tex_coord.y);
-                        
-                        if(!matched)
-                            error = FORMAT_OBJ_ERROR_VERTEX_UV;
-                        else 
-                            array_push(&out->uvs, tex_coord);
-                    } break;
-
-                    default: {
-                        error = FORMAT_OBJ_ERROR_OTHER;
-                    }
-                }
-            } break;
-
-            //faces
-            case 'f': {
-
-                // can be one of the following:
-                // 1: f 1/1/1 2/2/2 3/3/3   ~~ pos/tex/norm pos/tex/norm pos/tex/norm
-                // 2: f 1/1 2/2 3/3         ~~ pos/tex pos/tex pos/tex
-                // 3: f 1//1 2//2 3//3      ~~ pos//norm pos//norm pos//norm
-                // 3: f 1 2 3               ~~ pos pos pos
-
-                //looks for "//" or the lack of "/" inside the string to narrow our options
-                bool has_double_slash = string_find_first(line, STRING("//") , 0) != -1;
-                bool has_slash = string_find_first_char(line, '/' , 0) != -1;
-
-                Format_Obj_Vertex_Index indeces[3] = {0};
-                
-                bool ok = false;
-                isize line_index = 1;
-                //tries first the ones based on our analysis and then the rest until valid is found
-                
-                //f 1//1 2//2 3//3 
-                if(has_double_slash)
-                {
-                    line_index = 1;
-                    ok = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
-                            && match_sequence(line, &line_index, STRING("//"))
-                            && match_decimal_i32(line, &line_index, &indeces[0].norm_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
-                            && match_sequence(line, &line_index, STRING("//"))
-                            && match_decimal_i32(line, &line_index, &indeces[1].norm_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
-                            && match_sequence(line, &line_index, STRING("//"))
-                            && match_decimal_i32(line, &line_index, &indeces[2].norm_i1);
-                }
-                //f 1 2 3
-                else if(!has_slash)
-                {
-                    line_index = 1;
-                    ok = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[2].pos_i1);
-                }
-                
-                //f 1/1/1 2/2/2 3/3/3
-                if(!ok)
-                {
-                    line_index = 1;
-                    ok = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[0].uv_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[0].norm_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[1].uv_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[1].norm_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[2].uv_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[2].norm_i1);
-                }
-
-                //f 1/1 2/2 3/3
-                if(!ok)
-                {
-                    line_index = 1;
-                    ok = true
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[0].uv_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[1].uv_i1)
-                            && match_whitespace(line, &line_index)
-                            && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
-                            && match_char(line, &line_index, '/')
-                            && match_decimal_i32(line, &line_index, &indeces[2].uv_i1);
-                }
-
-                if(!ok)
-                    error = FORMAT_OBJ_ERROR_FACE;
-
-                //correct negative values indeces. If index is negative it refers to the -i-nth last parsed
-                // value in the given category. If the category does not recieve data (NULL) set the index to 0
-                for(isize i = 0; i < 3; i++)
-                {
-                    Format_Obj_Vertex_Index index = indeces[i];
-                    if(index.pos_i1 < 0)
-                        index.pos_i1 = (u32) out->positions.size + index.pos_i1 + 1;
-                    
-                    if(index.uv_i1 < 0)
-                        index.uv_i1 = (u32) out->uvs.size + index.uv_i1 + 1;
-                        
-                    if(index.norm_i1 < 0)
-                        index.norm_i1 = (u32) out->normals.size + index.norm_i1 + 1;
-                }
-
-                array_push(&out->indeces, indeces[0]); 
-                array_push(&out->indeces, indeces[1]); 
-                array_push(&out->indeces, indeces[2]);
-
-                trinagle_index += 1;
-            } break;
-            
-            //Smoothing
-            case 's': {
-                isize line_index1 = 1;
-                u64 smoothing_index = 0;
-                bool matched_smoothing_index = true
-                    && match_whitespace(line, &line_index1)
-                    && match_decimal_u64(line, &line_index1, &smoothing_index);
-                    
-                isize line_index2 = 1;
-                bool matched_smoothing_off = !matched_smoothing_index
-                    && match_whitespace(line, &line_index2)
-                    && match_sequence(line, &line_index2, STRING("off"));
-                
-                if(matched_smoothing_off)
-                    smoothing_index = 0;
-
-                if(matched_smoothing_index || matched_smoothing_off)
-                {
-                    if(active_group == NULL)
-                        active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
-
-                    active_group->smoothing_index = (i32) smoothing_index;
-                }
-                else
-                {
-                    error = FORMAT_OBJ_ERROR_SMOOTH_SHADING;
-                }
-            } break;
-            
-            //Group: g [group1] [group2] ...
-            case 'g': {
-                String_Builder_Array groups = {default_alloc};
-                isize line_index = 1;
-                while(true)
-                {
-                    isize group_from = 0;
-                    isize group_to = 0;
-                    if(match_whitespace_separated(line, &line_index, &group_from, &group_to))
+                //vertex variants
+                case 'v': {
+                    char second_char = line.data[1];
+                    switch (second_char)
                     {
-                        String group = string_range(line, group_from, group_to);
-                        array_push(&groups, builder_from_string(group, default_alloc));
+                        case ' ': {
+                            Vec3 pos = {0};
+                            isize line_index = 1;
+                            bool matched = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &pos.x)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &pos.y)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &pos.z);
+
+                            if(!matched)
+                                error = FORMAT_OBJ_ERROR_VERTEX_POS;
+                            else
+                                array_push(&out->positions, pos);
+                        } break;
+
+                        case 'n': {
+
+                            Vec3 norm = {0};
+                            isize line_index = 2;
+                            bool matched = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &norm.x)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &norm.y)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &norm.z);
+
+                            if(!matched)
+                                error = FORMAT_OBJ_ERROR_VERTEX_NORM;
+                            else
+                                array_push(&out->normals, norm);
+                        } break;
+
+                        case 't': {
+
+                            // @NOTE: Ignoring Z if present.
+                            Vec2 tex_coord = {0};
+                            isize line_index = 2;
+                            bool matched = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &tex_coord.x)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_f32(line, &line_index, &tex_coord.y);
+                            
+                            if(!matched)
+                                error = FORMAT_OBJ_ERROR_VERTEX_UV;
+                            else 
+                                array_push(&out->uvs, tex_coord);
+                        } break;
+
+                        default: {
+                            error = FORMAT_OBJ_ERROR_OTHER;
+                        }
+                    }
+                } break;
+
+                //faces
+                case 'f': {
+
+                    // can be one of the following:
+                    // 1: f 1/1/1 2/2/2 3/3/3   ~~ pos/tex/norm pos/tex/norm pos/tex/norm
+                    // 2: f 1/1 2/2 3/3         ~~ pos/tex pos/tex pos/tex
+                    // 3: f 1//1 2//2 3//3      ~~ pos//norm pos//norm pos//norm
+                    // 3: f 1 2 3               ~~ pos pos pos
+
+                    //looks for "//" or the lack of "/" inside the string to narrow our options
+                    bool has_double_slash = string_find_first(line, STRING("//") , 0) != -1;
+                    bool has_slash = string_find_first_char(line, '/' , 0) != -1;
+
+                    Format_Obj_Vertex_Index indeces[3] = {0};
+                    
+                    bool ok = false;
+                    isize line_index = 1;
+                    //tries first the ones based on our analysis and then the rest until valid is found
+                    
+                    //f 1//1 2//2 3//3 
+                    if(has_double_slash)
+                    {
+                        line_index = 1;
+                        ok = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_sequence(line, &line_index, STRING("//"))
+                                && match_decimal_i32(line, &line_index, &indeces[0].norm_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_sequence(line, &line_index, STRING("//"))
+                                && match_decimal_i32(line, &line_index, &indeces[1].norm_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
+                                && match_sequence(line, &line_index, STRING("//"))
+                                && match_decimal_i32(line, &line_index, &indeces[2].norm_i1);
+                    }
+                    //f 1 2 3
+                    else if(!has_slash)
+                    {
+                        line_index = 1;
+                        ok = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1);
+                    }
+                    
+                    //f 1/1/1 2/2/2 3/3/3
+                    if(!ok)
+                    {
+                        line_index = 1;
+                        ok = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[0].uv_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[0].norm_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[1].uv_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[1].norm_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[2].uv_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[2].norm_i1);
+                    }
+
+                    //f 1/1 2/2 3/3
+                    if(!ok)
+                    {
+                        line_index = 1;
+                        ok = true
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[0].uv_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[1].uv_i1)
+                                && match_whitespace(line, &line_index)
+                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
+                                && match_char(line, &line_index, '/')
+                                && match_decimal_i32(line, &line_index, &indeces[2].uv_i1);
+                    }
+
+                    if(!ok)
+                        error = FORMAT_OBJ_ERROR_FACE;
+
+                    //correct negative values indeces. If index is negative it refers to the -i-nth last parsed
+                    // value in the given category. If the category does not recieve data (NULL) set the index to 0
+                    for(isize i = 0; i < 3; i++)
+                    {
+                        Format_Obj_Vertex_Index index = indeces[i];
+                        if(index.pos_i1 < 0)
+                            index.pos_i1 = (u32) out->positions.size + index.pos_i1 + 1;
+                        
+                        if(index.uv_i1 < 0)
+                            index.uv_i1 = (u32) out->uvs.size + index.uv_i1 + 1;
+                            
+                        if(index.norm_i1 < 0)
+                            index.norm_i1 = (u32) out->normals.size + index.norm_i1 + 1;
+                    }
+
+                    array_push(&out->indeces, indeces[0]); 
+                    array_push(&out->indeces, indeces[1]); 
+                    array_push(&out->indeces, indeces[2]);
+
+                    trinagle_index += 1;
+                } break;
+                
+                //Smoothing
+                case 's': {
+                    isize line_index1 = 1;
+                    u64 smoothing_index = 0;
+                    bool matched_smoothing_index = true
+                        && match_whitespace(line, &line_index1)
+                        && match_decimal_u64(line, &line_index1, &smoothing_index);
+                        
+                    isize line_index2 = 1;
+                    bool matched_smoothing_off = !matched_smoothing_index
+                        && match_whitespace(line, &line_index2)
+                        && match_sequence(line, &line_index2, STRING("off"));
+                    
+                    if(matched_smoothing_off)
+                        smoothing_index = 0;
+
+                    if(matched_smoothing_index || matched_smoothing_off)
+                    {
+                        if(active_group == NULL)
+                            active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
+
+                        active_group->smoothing_index = (i32) smoothing_index;
                     }
                     else
                     {
-                        break;
+                        error = FORMAT_OBJ_ERROR_SMOOTH_SHADING;
                     }
+                } break;
+                
+                //Group: g [group1] [group2] ...
+                case 'g': {
+                    String_Builder_Array groups = {default_alloc};
+                    isize line_index = 1;
+                    while(true)
+                    {
+                        isize group_from = 0;
+                        isize group_to = 0;
+                        if(match_whitespace_separated(line, &line_index, &group_from, &group_to))
+                        {
+                            String group = string_range(line, group_from, group_to);
+                            array_push(&groups, builder_from_string(group, default_alloc));
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    if(groups.size > 0)
+                        active_group = _obj_parser_add_group(out, active_object, &groups, trinagle_index);
+                    else
+                        error = FORMAT_OBJ_ERROR_GROUP;
+
+                    builder_array_deinit(&groups);
+                } break;
+
+                //Object: g [object_name] ...
+                case 'o': {
+                    isize line_index = 1;
+                    isize object_from = 0;
+                    isize object_to = 0;
+
+                    if(match_whitespace_separated(line, &line_index, &object_from, &object_to))
+                        active_object = string_range(line, object_from, object_to);
+                    else
+                        error = FORMAT_OBJ_ERROR_OBJECT;
+                } break;
+
+                //Material library
+                case 'm': {
+                    isize line_index = 0;
+                    isize from_index = 0;
+                    isize to_index = 0;
+
+                    if(match_sequence(line, &line_index, STRING("mtllib")) 
+                        && match_whitespace_separated(line, &line_index, &from_index, &to_index))
+                    {
+                        String material_lib = string_range(line, from_index, to_index);
+                        array_push(&out->material_files, builder_from_string(material_lib, NULL));
+                    }
+                    else
+                    {
+                        error = FORMAT_OBJ_ERROR_MATERIAL_LIBRARY;
+                    }
+                } break;
+                
+                //use material
+                case 'u': {
+                    isize line_index = 0;
+                    isize from_index = 0;
+                    isize to_index = 0;
+
+                    if(match_sequence(line, &line_index, STRING("usemtl")) 
+                        && match_whitespace_separated(line, &line_index, &from_index, &to_index))
+                    {
+                        if(active_group == NULL)
+                            active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
+
+                        String material_use = string_range(line, from_index, to_index);
+                        builder_assign(&active_group->material, material_use);
+                    }
+                    else
+                    {
+                        error = FORMAT_OBJ_ERROR_MATERIAL_USE;
+                    }
+                } break;
+
+                default: {
+                    error = FORMAT_OBJ_ERROR_OTHER;
                 }
-
-                if(groups.size > 0)
-                    active_group = _obj_parser_add_group(out, active_object, &groups, trinagle_index);
-                else
-                    error = FORMAT_OBJ_ERROR_GROUP;
-
-                builder_array_deinit(&groups);
-            } break;
-
-            //Object: g [object_name] ...
-            case 'o': {
-                isize line_index = 1;
-                isize object_from = 0;
-                isize object_to = 0;
-
-                if(match_whitespace_separated(line, &line_index, &object_from, &object_to))
-                    active_object = string_range(line, object_from, object_to);
-                else
-                    error = FORMAT_OBJ_ERROR_OBJECT;
-            } break;
-
-            //Material library
-            case 'm': {
-                isize line_index = 0;
-                isize from_index = 0;
-                isize to_index = 0;
-
-                if(match_sequence(line, &line_index, STRING("mtllib")) 
-                    && match_whitespace_separated(line, &line_index, &from_index, &to_index))
-                {
-                    String material_lib = string_range(line, from_index, to_index);
-                    array_push(&out->material_files, builder_from_string(material_lib, NULL));
-                }
-                else
-                {
-                    error = FORMAT_OBJ_ERROR_MATERIAL_LIBRARY;
-                }
-            } break;
-            
-            //use material
-            case 'u': {
-                isize line_index = 0;
-                isize from_index = 0;
-                isize to_index = 0;
-
-                if(match_sequence(line, &line_index, STRING("usemtl")) 
-                    && match_whitespace_separated(line, &line_index, &from_index, &to_index))
-                {
-                    if(active_group == NULL)
-                        active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
-
-                    String material_use = string_range(line, from_index, to_index);
-                    builder_assign(&active_group->material, material_use);
-                }
-                else
-                {
-                    error = FORMAT_OBJ_ERROR_MATERIAL_USE;
-                }
-            } break;
-
-            default: {
-                error = FORMAT_OBJ_ERROR_OTHER;
             }
-        }
 
-        //Handle errors
-        if(error)
-        {
-            Format_Obj_Mtl_Error parser_error = {0};
-            parser_error.index = it.line_from;
-            parser_error.line = (i32) it.line_number;
-            parser_error.statement = error;
-            parser_error.unimplemented = false; //@TODO
+            //Handle errors
+            if(error)
+            {
+                Format_Obj_Mtl_Error parser_error = {0};
+                parser_error.index = it.line_from;
+                parser_error.line = (i32) it.line_number;
+                parser_error.statement = error;
+                parser_error.unimplemented = false; //@TODO
 
-            had_error = true;
-            if(errors && error_count < errors_max_count)
-                errors[error_count] = parser_error;
+                had_error = true;
+                if(errors && error_count < errors_max_count)
+                    errors[error_count] = parser_error;
 
-            error_count++;
-        }
-    } 
-    
-    //end the last group
-    if(active_group == NULL)
-        active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
-    active_group->trinagles_count = trinagle_index - active_group->trinagles_from;
+                error_count++;
+            }
+        } 
+        
+        //end the last group
+        if(active_group == NULL)
+            active_group = _obj_parser_get_active_group(out, active_object, trinagle_index);
+        active_group->trinagles_count = trinagle_index - active_group->trinagles_from;
 
-    *had_errors = error_count;
+        *had_errors = error_count;
+    }
+    allocator_arena_release(&arena);
+
     return had_error;
 }
 
