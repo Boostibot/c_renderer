@@ -357,23 +357,23 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     //SHADER
     void _shader_init(Shader* out)
     {
-        array_init(&out->fragment_shader_source, resources_allocator());
-        array_init(&out->geometry_shader_source, resources_allocator());
-        array_init(&out->vertex_shader_source, resources_allocator());
+        builder_init(&out->fragment_shader_source, resources_allocator());
+        builder_init(&out->geometry_shader_source, resources_allocator());
+        builder_init(&out->vertex_shader_source, resources_allocator());
     }
 
     void _shader_copy(Shader* out, const Shader* in)
     {
-        array_copy(&out->fragment_shader_source, in->fragment_shader_source);
-        array_copy(&out->geometry_shader_source, in->geometry_shader_source);
-        array_copy(&out->vertex_shader_source, in->vertex_shader_source);
+        builder_assign(&out->fragment_shader_source, in->fragment_shader_source.string);
+        builder_assign(&out->geometry_shader_source, in->geometry_shader_source.string);
+        builder_assign(&out->vertex_shader_source, in->vertex_shader_source.string);
     }
 
     void _shader_deinit(Shader* out)
     {
-        array_deinit(&out->fragment_shader_source);
-        array_deinit(&out->geometry_shader_source);
-        array_deinit(&out->vertex_shader_source);
+        builder_deinit(&out->fragment_shader_source);
+        builder_deinit(&out->geometry_shader_source);
+        builder_deinit(&out->vertex_shader_source);
     }
     
     void resources_init(Resources* resources, Allocator* alloc)

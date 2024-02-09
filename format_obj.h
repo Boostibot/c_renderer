@@ -277,20 +277,20 @@ EXPORT void _format_obj_texture_info_init_or_deinit(Format_Mtl_Map* info, Alloca
         info->scale = vec3_of(1);
         info->bump_multiplier = 1;
         info->modify_contrast = 1;
-        array_init(&info->path, alloc);
+        builder_init(&info->path, alloc);
     }
     else
     {
-        array_deinit(&info->path);
+        builder_deinit(&info->path);
         memset(info, 0, sizeof *info);
     }
 }
 EXPORT void _format_obj_material_info_init_or_deinit(Format_Mtl_Material* info, Allocator* alloc, bool is_init)
 {       
     if(is_init)
-        array_init(&info->name, alloc);
+        builder_init(&info->name, alloc);
     else
-        array_deinit(&info->name);
+        builder_deinit(&info->name);
 
     info->opacity = 1;
     info->illumination_mode = 1;
@@ -335,8 +335,8 @@ EXPORT void format_obj_material_info_deinit(Format_Mtl_Material* info)
 EXPORT void format_obj_group_deinit(Format_Obj_Group* info)
 {
     builder_array_deinit(&info->groups);
-    array_deinit(&info->object);
-    array_deinit(&info->material);
+    builder_deinit(&info->object);
+    builder_deinit(&info->material);
 
     memset(info, 0, sizeof *info);
 }
@@ -379,8 +379,8 @@ EXPORT void format_obj_group_init(Format_Obj_Group* info, Allocator* alloc)
 {
     format_obj_group_deinit(info);
     array_init(&info->groups, alloc);
-    array_init(&info->object, alloc);
-    array_init(&info->material, alloc);
+    builder_init(&info->object, alloc);
+    builder_init(&info->material, alloc);
 }
 
 EXPORT const char* format_obj_mtl_error_statement_to_string(Format_Obj_Mtl_Error_Statement statement)
@@ -459,7 +459,7 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
     if(out->groups.size != 0)
     {
         Format_Obj_Group* last = array_last(out->groups);
-        if(string_is_equal(string_from_builder(last->object), active_object))
+        if(string_is_equal(last->object.string, active_object))
             return last;   
     }
     

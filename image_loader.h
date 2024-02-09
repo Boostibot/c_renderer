@@ -178,7 +178,7 @@ EXPORT Error image_read_from_file(Image* image, String path, isize desired_chann
     {
         String_Builder file_content = {arena};
         Error file_error = file_read_entire(path, &file_content);
-        parse_error = ERROR_AND(file_error) image_read_from_memory(image, string_from_builder(file_content), desired_channels, format, flags);
+        parse_error = ERROR_AND(file_error) image_read_from_memory(image, file_content.string, desired_channels, format, flags);
         
         if(!error_is_ok(parse_error))
             LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
@@ -190,7 +190,8 @@ EXPORT Error image_read_from_file(Image* image, String path, isize desired_chann
 EXPORT INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
 {
     String_Builder* append_into = (String_Builder*) context;
-    array_append(append_into, (char*) data, size);
+    String string = {data, size};
+    builder_append(append_into, string);
 }
 
 EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
@@ -203,7 +204,7 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
     int jpg_compression_quality = 50; //[0, 100]
     Error out_error = {0};
 
-    array_clear(into);
+    builder_clear(into);
     Allocator* arena = allocator_arena_acquire();
     {
         Image contiguous = {0};
@@ -301,7 +302,7 @@ EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_Fi
     Allocator* arena = allocator_arena_acquire();
     String_Builder formatted = {arena};
     Error format_error = image_write_to_memory(image, &formatted, file_format);
-    Error output_error = ERROR_AND(format_error) file_write_entire(path, string_from_builder(formatted));
+    Error output_error = ERROR_AND(format_error) file_write_entire(path, formatted.string);
 
     allocator_arena_release(&arena);
     return output_error;

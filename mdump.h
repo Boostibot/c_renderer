@@ -372,7 +372,7 @@ Mdump_Type mdump_get_type_by_name(Mdump_Types* types, String type_name)
     for(isize i = 0; i < types->types.size; i++)
     {
         Mdump_Type_Info* type = &types->types.data[i];
-        if(string_is_equal(string_from_builder(type->type_name), type_name))
+        if(string_is_equal(type->type_name.string, type_name))
             return (Mdump_Type) i;
     }
 
@@ -397,7 +397,7 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
     log_group_push();
 
     Mdump_Type out_type = MDUMP_TYPE_NONE;
-    Mdump_Type found = mdump_get_type_by_name(types, string_from_builder(info.type_name));
+    Mdump_Type found = mdump_get_type_by_name(types, info.type_name.string);
     if(found != MDUMP_TYPE_NONE)
         out_type = mdump_validate_type_against(types, info, found);
     else
@@ -531,7 +531,7 @@ Mdump_Type_Info mdump_get_builtin_type_info(Mdump_Types* types, Mdump_Type type)
 {
     Mdump_Type_Info* info = mdump_get_type_info(types, type);
     Mdump_Type_Info out = {0};
-    out.type_name = builder_from_string(string_from_builder(info->type_name), types->allocator);
+    out.type_name = builder_from_string(info->type_name.string, types->allocator);
     out.size = info->size;
     out.align = info->align;
     out.flags = info->flags;
@@ -594,7 +594,7 @@ EXPORT bool mdump_string(Mdump_Blocks* blocks, String_Builder* in_memory, Mdump_
         builder_assign(in_memory, read);
     }
     else
-        *in_file = mdump_string_from_string(blocks, string_from_builder(*in_memory));
+        *in_file = mdump_string_from_string(blocks, in_memory->string);
 
     return ok;
 }
@@ -619,8 +619,8 @@ EXPORT bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory, M
         for(isize i = 0; i < chunk_count; i++)
             total_size += chunks[i].size;
 
-        array_clear(in_memory);
-        array_reserve(in_memory, total_size);
+        builder_clear(in_memory);
+        builder_reserve(in_memory, total_size);
         for(isize i = 0; i < chunk_count && ok; i++)
         {
             String read = mdump_string_to_string(blocks, chunks[i], &ok);
@@ -633,7 +633,7 @@ EXPORT bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory, M
 
         *in_file = mdump_array_allocate(blocks, chunk_count, sizeof(Mdump_String), MDUMP_ARRAY_ALIGN);
         Mdump_String* chunks = MDUMP_GET_ARRAY_SURE(blocks, *in_file, Mdump_String);
-        String remnaining_string = string_from_builder(*in_memory);
+        String remnaining_string = in_memory->string;
         for(isize i = 0; i < chunk_count; i++)
         {
             String chunk = string_safe_head(remnaining_string, INT32_MAX);

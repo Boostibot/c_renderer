@@ -210,11 +210,11 @@ EXPORT void map_description_init(Map_Description* description, Allocator* alloc)
 {
     map_description_deinit(description);
     map_info_init(&description->info, alloc);
-    array_init(&description->path, alloc);
+    builder_init(&description->path, alloc);
 }
 EXPORT void map_description_deinit(Map_Description* description)
 {
-    array_deinit(&description->path);
+    builder_deinit(&description->path);
     map_info_deinit(&description->info);
     memset(description, 0, sizeof *description);
 }
@@ -234,8 +234,8 @@ EXPORT void material_description_init(Material_Description* description, Allocat
 {
     material_description_deinit(description);
 
-    array_init(&description->path, alloc);
-    array_init(&description->name, alloc);
+    builder_init(&description->path, alloc);
+    builder_init(&description->name, alloc);
 
     for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
         map_description_init(&description->maps[i], alloc);  
@@ -247,8 +247,8 @@ EXPORT void material_description_init(Material_Description* description, Allocat
 }
 EXPORT void material_description_deinit(Material_Description* description)
 {
-    array_deinit(&description->path);
-    array_deinit(&description->name);
+    builder_deinit(&description->path);
+    builder_deinit(&description->name);
     
     for(isize i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
         map_description_deinit(&description->maps[i]);  
@@ -264,15 +264,15 @@ EXPORT void triangle_mesh_group_description_init(Triangle_Mesh_Group_Description
 {
     triangle_mesh_group_description_deinit(description);
 
-    array_init(&description->name, alloc);
-    array_init(&description->material_name, alloc);
-    array_init(&description->material_path, alloc);
+    builder_init(&description->name, alloc);
+    builder_init(&description->material_name, alloc);
+    builder_init(&description->material_path, alloc);
 }
 EXPORT void triangle_mesh_group_description_deinit(Triangle_Mesh_Group_Description* description)
 {
-    array_deinit(&description->name);
-    array_deinit(&description->material_name);
-    array_deinit(&description->material_path);
+    builder_deinit(&description->name);
+    builder_deinit(&description->material_name);
+    builder_deinit(&description->material_path);
 
     memset(description, 0, sizeof *description);
 }
@@ -281,15 +281,15 @@ EXPORT void triangle_mesh_description_init(Triangle_Mesh_Description* descriptio
 {
     triangle_mesh_description_deinit(description);
 
-    array_init(&description->name, alloc);
-    array_init(&description->path, alloc);
+    builder_init(&description->name, alloc);
+    builder_init(&description->path, alloc);
     array_init(&description->groups, alloc);
     array_init(&description->material_files, alloc);
 }
 EXPORT void triangle_mesh_description_deinit(Triangle_Mesh_Description* description)
 {
-    array_deinit(&description->name);
-    array_deinit(&description->path);
+    builder_deinit(&description->name);
+    builder_deinit(&description->path);
 
     for(isize i = 0; i < description->groups.size; i++)
         triangle_mesh_group_description_deinit(&description->groups.data[i]);

@@ -2802,5 +2802,5 @@ void run_test_func(void* context)
 {
     (void) context;
     test_lpf();
-    //test_all();
+    test_all();
 }

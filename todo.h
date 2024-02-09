@@ -61,18 +61,18 @@ EXPORT void todo_init(Todo* todo, Allocator* alloc)
 {
     todo_deinit(todo);
     
-    array_init(&todo->path, alloc);
-    array_init(&todo->comment, alloc); 
-    array_init(&todo->signature, alloc); 
-    array_init(&todo->marker, alloc); 
+    builder_init(&todo->path, alloc);
+    builder_init(&todo->comment, alloc); 
+    builder_init(&todo->signature, alloc); 
+    builder_init(&todo->marker, alloc); 
 }
 
 EXPORT void todo_deinit(Todo* todo)
 {
-    array_deinit(&todo->path);
-    array_deinit(&todo->comment); 
-    array_deinit(&todo->signature); 
-    array_deinit(&todo->marker); 
+    builder_deinit(&todo->path);
+    builder_deinit(&todo->comment); 
+    builder_deinit(&todo->signature); 
+    builder_deinit(&todo->marker); 
     todo->line = 0;
 }
 
@@ -150,7 +150,7 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
                             break;
 
                         if(todo.comment.size > 0)
-                            array_push(&todo.comment, ' ');
+                            builder_push(&todo.comment, ' ');
 
                         builder_append(&todo.comment, connecting_content);
 
@@ -193,7 +193,7 @@ EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo)
     String_Builder source = {arena};
 
     Error file_error = file_read_entire(path, &source);
-    todo_parse_source(todos, path, string_from_builder(source), todo);
+    todo_parse_source(todos, path, source.string, todo);
     
     allocator_arena_release(&arena);
     return file_error;
@@ -222,7 +222,7 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
                     String file_path = string_make(entry.path);
                     Error file_error = file_read_entire(file_path, &source);
 
-                    todo_parse_source(todos, file_path, todo, string_from_builder(source));
+                    todo_parse_source(todos, file_path, todo, source.string);
                     error = ERROR_AND(error) file_error;
                 }
             }
@@ -243,7 +243,7 @@ EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* ma
         String common_path_prefix = {0};
         for(isize i = 0; i < todos.size; i++)
         {
-            String curent_path = string_from_builder(todos.data[i].path);
+            String curent_path = todos.data[i].path.string;
             if(common_path_prefix.data == NULL)
                 common_path_prefix = curent_path;
             else
@@ -265,7 +265,7 @@ EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* ma
         for(isize i = 0; i < todos.size; i++)
         {
             Todo todo = todos.data[i];
-            String path = string_from_builder(todo.path);
+            String path = todo.path.string;
         
             if(path.size > common_path_prefix.size)
                 path = string_safe_tail(path, common_path_prefix.size);

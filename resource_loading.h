@@ -89,7 +89,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
     //Copy over materials
     for(isize i = 0; i < model.material_files.size; i++)
     {
-        String material_file = string_from_builder(model.material_files.data[i]);
+        String material_file = model.material_files.data[i].string;
         array_push(&description->material_files, builder_from_string(material_file, NULL));
     }
 
@@ -236,9 +236,9 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
         group_desc.triangles_from = triangles_before;
         group_desc.triangles_to = triangles_after;
 
-        builder_assign(&group_desc.material_name, string_from_builder(parent_group->material));
+        builder_assign(&group_desc.material_name, parent_group->material.string);
         if(parent_group->groups.size > 0)
-            builder_assign(&group_desc.name, string_from_builder(parent_group->groups.data[0]));
+            builder_assign(&group_desc.name, parent_group->groups.data[0].string);
 
 
         //link the previous group to this one
@@ -271,7 +271,7 @@ INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, 
     if(is_nearf(vec3_len(description->info.scale), 0, EPSILON))
         description->info.scale = vec3_of(1);
 
-    builder_assign(&description->path, string_from_builder(map.path));
+    builder_assign(&description->path, map.path.string);
 }
 
 #define GAMMA_SRGB 2.2f
@@ -280,7 +280,7 @@ INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, 
 EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_Material material)
 {
     
-    builder_assign(&description->name, string_from_builder(material.name));
+    builder_assign(&description->name, material.name.string);
         
     f32 guessed_ao = 1.0f - CLAMP(vec3_len(material.ambient_color), 0.0f, 1.0f);
     f32 guessed_metallic = (f32)(material.specular_exponent >= 32);
@@ -406,14 +406,14 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
         if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.size <= 0)
             continue;
         
-        String item_path = string_from_builder(map_or_cubemap.description->path);
-        String dir_path = path_get_file_directory(string_from_builder(description.path));
+        String item_path = map_or_cubemap.description->path.string;
+        String dir_path = path_get_file_directory(description.path.string);
 
         //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
         String full_item_path = path_get_full_ephemeral_from(item_path, dir_path);
         Error load_error = {0};
         
-        Id found_image = image_find_by_path(hash_string_from_string(full_item_path), NULL);
+        Id found_image = image_find_by_path(hash_string_make(full_item_path), NULL);
         Id map_image = NULL;
 
         Resource_Params params = {0};
@@ -461,12 +461,11 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
     Malloc_Allocator arena = {0};
     malloc_allocator_init_use(&arena, 0);
 
-    String_Builder full_path =  {0};
+    String_Builder full_path =  builder_make(NULL, 512);
     String_Builder file_content = {0};
     Format_Mtl_Material_Array mtl_materials = {0};
     Material_Description material_desription = {0};
 
-    array_init_with_capacity(&full_path, NULL, 512);
     Error error = path_get_full(&full_path, path);
     if(error_is_ok(error))
     {
@@ -478,7 +477,7 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
         //       iterate all resources when looking for path.
 
         Platform_File_Info file_info = {0};
-        Error file_info_error = error_from_platform(platform_file_info(string_from_builder(full_path), &file_info));
+        Error file_info_error = error_from_platform(platform_file_info(full_path.string, &file_info));
         if(error_is_ok(file_info_error) == false)
             LOG_ERROR("ASSET", "Error getting info of material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 
@@ -492,7 +491,7 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
         Id found_material = {0};
         while(true)
         {
-            found_material = material_find_by_path(hash_string_from_builder(full_path), &last);
+            found_material = material_find_by_path(hash_string_make(full_path.string), &last);
             if(found_material == NULL)
                 break;
 
@@ -520,12 +519,12 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
 
         if((was_found == false || is_outdated))
         {
-            error = file_read_entire(string_from_builder(full_path), &file_content);
+            error = file_read_entire(full_path.string, &file_content);
             if(error_is_ok(error))
             {
                 Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
                 isize had_mtl_errors = 0;
-                format_mtl_read(&mtl_materials, string_from_builder(file_content), mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
+                format_mtl_read(&mtl_materials, file_content.string, mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
 
                 for(isize i = 0; i < had_mtl_errors; i++)
                     LOG_ERROR("ASSET", "Error parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
@@ -533,11 +532,11 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
                 for(isize i = 0; i < mtl_materials.size; i++)
                 {
                     process_mtl_material(&material_desription, mtl_materials.data[i]);
-                    array_copy(&material_desription.path, full_path);
+                    builder_assign(&material_desription.path, full_path.string);
                 
                     Resource_Params params = {0};
-                    params.name = string_from_builder(material_desription.name);
-                    params.path = string_from_builder(material_desription.path);
+                    params.name = material_desription.name.string;
+                    params.path = material_desription.path.string;
                     params.was_loaded = true;
 
                     Id local_handle = material_insert(params);
@@ -564,18 +563,17 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     malloc_allocator_init_use(&arena, 0);
 
     Id out_handle = {0};
-    String_Builder full_path = {0};
-    array_init_with_capacity(&full_path, 0, 512);
+    String_Builder full_path = builder_make(NULL, 512);
     Error error = path_get_full(&full_path, path);
     
     if(error_is_ok(error))
     {
         Platform_File_Info file_info = {0};
-        Error file_info_error = error_from_platform(platform_file_info(string_from_builder(full_path), &file_info));
+        Error file_info_error = error_from_platform(platform_file_info(full_path.string, &file_info));
         if(error_is_ok(file_info_error) == false)
             LOG_ERROR("ASSET", "Error getting info of object file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
 
-        Id found_mesh = triangle_mesh_find_by_path(hash_string_from_builder(full_path), NULL);
+        Id found_mesh = triangle_mesh_find_by_path(hash_string_make(full_path.string), NULL);
         if(found_mesh != NULL)
         {
             Resource_Info* resource_info = NULL;
@@ -587,7 +585,7 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
         if(out_handle == NULL)
         {
             String_Builder file_content = {0};
-            error = file_read_entire(string_from_builder(full_path), &file_content);
+            error = file_read_entire(full_path.string, &file_content);
 
             if(error_is_ok(error))
             {
@@ -596,16 +594,16 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 
                 Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
                 isize had_obj_errors = 0;
-                format_obj_read(&model, string_from_builder(file_content), obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
+                format_obj_read(&model, file_content.string, obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
 
                 //@NOTE: So that we dont waste too much memory while loading
-                array_deinit(&file_content); 
+                builder_deinit(&file_content); 
 
                 for(isize i = 0; i < had_obj_errors; i++)
                     LOG_ERROR("ASSET", "Error parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
 
                 Resource_Params params = {0};
-                params.path = string_from_builder(full_path);
+                params.path = full_path.string;
                 params.name = path_get_name_from_path(params.path);
                 params.was_loaded = true;
 
@@ -618,10 +616,10 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                 Triangle_Mesh_Description description = {0};
                 process_obj_triangle_mesh(out_assembly, &description, model);
 
-                String dir_path = path_get_file_directory(string_from_builder(full_path));
+                String dir_path = path_get_file_directory(full_path.string);
                 for(isize i = 0; i < description.material_files.size; i++)
                 {
-                    String file = string_from_builder(description.material_files.data[i]);
+                    String file = description.material_files.data[i].string;
                     String mtl_path = path_get_full_ephemeral_from(file, dir_path);
 
                     Error major_material_error = material_read_entire(&triangle_mesh->materials, mtl_path);
@@ -644,14 +642,14 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                         if(material_get_with_info(material_handle, &material_info) == NULL)
                             continue;
 
-                        String material_name = string_from_builder(material_info->name);
-                        if(string_is_equal(material_name, string_from_builder(group_desc->material_name)))
+                        String material_name = material_info->name.string;
+                        if(string_is_equal(material_name, group_desc->material_name.string))
                         {
                             unable_to_find_group = false;
 
                             Triangle_Mesh_Group group = {0};
 
-                            name_from_string(&group.name, material_name);
+                            group.name = name_make(material_name);
                             group.material_i1 = (i32) j + 1;
 
                             //group.next_i1 = group_desc->next_i1;

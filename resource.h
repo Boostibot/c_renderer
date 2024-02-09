@@ -151,8 +151,8 @@ EXPORT void resource_manager_deinit(Resource_Manager* manager)
         if(manager->destructor)
             manager->destructor(info->data);
             
-        array_deinit(&info->path);
-        array_deinit(&info->name);
+        builder_deinit(&info->path);
+        builder_deinit(&info->name);
     STABLE_ARRAY_FOR_EACH_END
 
     stable_array_deinit(&manager->storage);
@@ -205,7 +205,7 @@ EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String 
         Hash_Index_Entry entry = manager->name_hash.entries[found];
         Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
 
-        if(string_is_equal(string_from_builder(ptr->name), string_from_hashed(name)))
+        if(string_is_equal(ptr->name.string, name.string))
         {
             out.id = ptr->id;
             out.ptr = ptr;
@@ -235,7 +235,7 @@ EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String 
         Hash_Index_Entry entry = manager->path_hash.entries[found];
         Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
 
-        if(string_is_equal(string_from_builder(ptr->path), string_from_hashed(path)))
+        if(string_is_equal(ptr->path.string, path.string))
         {
             out.id = ptr->id;
             out.ptr = ptr;
@@ -313,8 +313,8 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     if(params.was_loaded)
         info->load_etime = now;
 
-    Hash_String name_hashed = hash_string_from_string(params.name);
-    Hash_String path_hashed = hash_string_from_string(params.path);
+    Hash_String name_hashed = hash_string_make(params.name);
+    Hash_String path_hashed = hash_string_make(params.path);
 
     hash_index_insert(&manager->id_hash, (u64) params.id, (u64) info);
     hash_index_insert(&manager->name_hash, name_hashed.hash, (u64) info);
@@ -356,8 +356,8 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
         else if(manager->destructor)
             manager->destructor(info->data);
             
-        Hash_String name = hash_string_from_builder(info->name);
-        Hash_String path = hash_string_from_builder(info->path);
+        Hash_String name = hash_string_make(info->name.string);
+        Hash_String path = hash_string_make(info->path.string);
 
         isize id_found = -1;
         isize name_found = -1;
@@ -400,8 +400,8 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
         if(path_found != -1)
             hash_index_remove(&manager->path_hash, path_found);
 
-        array_deinit(&info->path);
-        array_deinit(&info->name);
+        builder_deinit(&info->path);
+        builder_deinit(&info->name);
         stable_array_remove(&manager->storage, info->storage_index);
     }
     else
