@@ -491,9 +491,9 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
 
     String active_object = {0};
     Format_Obj_Group* active_group = NULL;
-    Allocator* arena = allocator_arena_acquire();
+    Arena arena = scratch_arena_acquire();
     {
-        array_init_with_capacity(&out->groups, arena, 64);
+        array_init_with_capacity(&out->groups, &arena.allocator, 64);
         i32 trinagle_index = 0;
         for(Line_Iterator it = {0}; line_iterator_get_line(&it, obj_source); )
         {
@@ -831,7 +831,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
 
         *had_errors = error_count;
     }
-    allocator_arena_release(&arena);
+    arena_release(&arena);
 
     return had_error;
 }

@@ -244,7 +244,6 @@
     <ClInclude Include="image_loader.h" />
     <ClInclude Include="lib\allocator.h" />
     <ClInclude Include="lib\allocator_debug.h" />
-    <ClInclude Include="lib\allocator_failing.h" />
     <ClInclude Include="lib\allocator_malloc.h" />
     <ClInclude Include="lib\allocator_stack.h" />
     <ClInclude Include="lib\allocator_wrapper.h" />
@@ -253,7 +252,6 @@
     <ClInclude Include="lib\defines.h" />
     <ClInclude Include="lib\error.h" />
     <ClInclude Include="lib\file.h" />
-    <ClInclude Include="lib\format_netbpm.h" />
     <ClInclude Include="lib\guid.h" />
     <ClInclude Include="lib\hash.h" />
     <ClInclude Include="lib\hash_string.h" />

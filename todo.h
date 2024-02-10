@@ -188,23 +188,22 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
 
 EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo)
 {
-    
-    Allocator* arena = allocator_arena_acquire();
-    String_Builder source = {arena};
+    Arena arena = scratch_arena_acquire();
+    String_Builder source = {&arena.allocator};
 
     Error file_error = file_read_entire(path, &source);
     todo_parse_source(todos, path, source.string, todo);
     
-    allocator_arena_release(&arena);
+    arena_release(&arena);
     return file_error;
 }
 
 EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
     Error error = {0};
-    Allocator* arena = allocator_arena_acquire();
+    Arena arena = scratch_arena_acquire();
     {
-        String_Builder source = {arena};
+        String_Builder source = {&arena.allocator};
 
         Platform_Directory_Entry* entries = NULL;
         isize entries_count = 0;
@@ -230,7 +229,7 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
 
         platform_directory_list_contents_free(entries);
     }
-    allocator_arena_release(&arena);
+    arena_release(&arena);
     return error;
 }
 

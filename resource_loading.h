@@ -458,8 +458,8 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
 
 EXPORT Error material_read_entire(Id_Array* materials, String path)
 {
-    Malloc_Allocator arena = {0};
-    malloc_allocator_init_use(&arena, 0);
+    Stack_Allocator arena = {0};
+    stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
 
     String_Builder full_path =  builder_make(NULL, 512);
     String_Builder file_content = {0};
@@ -552,15 +552,15 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
     if(error_is_ok(error) == false)
         LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
 
-    malloc_allocator_deinit(&arena);
+    stack_allocator_deinit(&arena);
 
     return error;
 }
 
 EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
-    Malloc_Allocator arena = {0};
-    malloc_allocator_init_use(&arena, 0);
+    Stack_Allocator arena = {0};
+    stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
 
     Id out_handle = {0};
     String_Builder full_path = builder_make(NULL, 512);
@@ -590,7 +590,7 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
             if(error_is_ok(error))
             {
                 Format_Obj_Model model = {0};
-                format_obj_model_init(&model, 0);
+                format_obj_model_init(&model, NULL);
 
                 Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
                 isize had_obj_errors = 0;
@@ -681,7 +681,7 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     if(error_is_ok(error) == false)
         LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
     
-    malloc_allocator_deinit(&arena);
+    stack_allocator_deinit(&arena);
     *triangle_mesh_handle = out_handle;
     return error;
 }

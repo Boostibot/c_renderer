@@ -175,7 +175,7 @@ Mdump_Ptr _mdump_allocate_recursive(Mdump_Blocks* blocks, isize size, isize alig
 
         Mdump_Block new_block = {0};
         new_block.size = MAX(blocks->block_default_size, size + (isize) sizeof(Mdump_Magic));
-        new_block.data = (u8*) allocator_allocate(blocks->block_allocator, new_block.size, MDUMP_BLOCK_ALIGN, SOURCE_INFO());
+        new_block.data = (u8*) allocator_allocate(blocks->block_allocator, new_block.size, MDUMP_BLOCK_ALIGN);
         new_block.used_to = sizeof(Mdump_Magic);
         
         //Fill with marker data (0b01010101)
@@ -666,7 +666,7 @@ bool mdump_array(Mdump_Blocks* blocks, void* array, isize item_size, Mdump_Array
     {
        isize item_count = 0;
        addr = mdump_get_array(blocks, *in_file, item_size, &item_count);
-       _array_resize(array, item_size, item_count, true, SOURCE_INFO());
+       _array_resize(array, item_size, item_count, true);
        state = item_count == in_file->size;
     }
 

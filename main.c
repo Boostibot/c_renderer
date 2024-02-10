@@ -1,6 +1,4 @@
-﻿#define RUN_TESTS
-
-#define _CRT_SECURE_NO_WARNINGS
+﻿#define _CRT_SECURE_NO_WARNINGS
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
 #pragma warning(disable:4702) //Dissable "unrelachable code"
 #pragma warning(disable:4820) //Dissable "Padding added to struct" 
@@ -12,8 +10,8 @@
 #pragma warning(disable:4324) //Dissable "structure was padded due to alignment specifier"
 
 #define JOT_ALL_IMPL
-#define LIB_MEM_DEBUG
-#define DEBUG
+#define RUN_TESTS
+//#define RUN_JUST_TESTS
 
 #include "mdump.h"
 
@@ -283,29 +281,34 @@ int main()
     platform_init(NULL);
 
     Malloc_Allocator static_allocator = {0};
-    malloc_allocator_init(&static_allocator);
+    malloc_allocator_init(&static_allocator, "static allocator");
     allocator_set_static(&static_allocator.allocator);
     
     Malloc_Allocator malloc_allocator = {0};
-    malloc_allocator_init_use(&malloc_allocator, 0);
+    malloc_allocator_init(&malloc_allocator, "fallback allocator");
+
+    Stack_Allocator stack_allocator = {0};
+    stack_allocator_init(&stack_allocator, NULL, 10*MEBI_BYTE, &malloc_allocator.allocator);
     
-    Arena_Stack* arena_stack = scratch_arena_acquire().stack;
-    arena_init(arena_stack, 0, 128);
+    Arena_Stack* arena_stack = allocator_get_scratch_arena();
+    arena_init(arena_stack, 0, 0, "scratch arena");
 
     error_system_init(&static_allocator.allocator);
-    file_logger_init_use(&global_logger, &malloc_allocator.allocator, &malloc_allocator.allocator, "logs");
+    file_logger_init_use(&global_logger, &malloc_allocator.allocator, "logs");
 
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
-    
-    #ifdef RUN_TESTS
     platform_exception_sandbox(
         run_test_func, NULL, 
         error_func, NULL);
 
-    return;
+    bool quit = false;
+    #ifdef RUN_JUST_TESTS
+        quit = true;
     #endif
+    if(quit)
+        return 0;
 
     GLFWallocator allocator = {0};
     allocator.allocate = glfw_malloc_func;
@@ -343,15 +346,10 @@ int main()
 
     gl_debug_output_enable();
 
-    #ifndef RUN_TESTS
     platform_exception_sandbox(
         run_func, window, 
         error_func, window);
-    #else
-    platform_exception_sandbox(
-        run_test_func, window, 
-        error_func, window);
-    #endif
+
     glfwDestroyWindow(window);
     glfwTerminate();
 
@@ -1586,38 +1584,38 @@ typedef  struct {
 DEFINE_ARRAY_TYPE(Gl_Draw_Elements_Indirect_Command, Gl_Draw_Elements_Indirect_Command_Array);
 
 typedef struct  {
-    MODIFIER_ALIGNED(16) Mat4 model;
+    ATTRIBUTE_ALIGNED(16) Mat4 model;
 } Blinn_Phong_Per_Instance;
 
 typedef struct  {
-    MODIFIER_ALIGNED(16) Vec4 diffuse_color;
-    MODIFIER_ALIGNED(16) Vec4 ambient_color;
-    MODIFIER_ALIGNED(16) Vec4 specular_color;
-    MODIFIER_ALIGNED(4) float specular_exponent;
-    MODIFIER_ALIGNED(4) float metallic;
-    MODIFIER_ALIGNED(4) int map_diffuse; 
-    MODIFIER_ALIGNED(4) int map_specular; 
-    MODIFIER_ALIGNED(4) int map_normal; 
-    MODIFIER_ALIGNED(4) int map_ambient; 
+    ATTRIBUTE_ALIGNED(16) Vec4 diffuse_color;
+    ATTRIBUTE_ALIGNED(16) Vec4 ambient_color;
+    ATTRIBUTE_ALIGNED(16) Vec4 specular_color;
+    ATTRIBUTE_ALIGNED(4) float specular_exponent;
+    ATTRIBUTE_ALIGNED(4) float metallic;
+    ATTRIBUTE_ALIGNED(4) int map_diffuse; 
+    ATTRIBUTE_ALIGNED(4) int map_specular; 
+    ATTRIBUTE_ALIGNED(4) int map_normal; 
+    ATTRIBUTE_ALIGNED(4) int map_ambient; 
 } Blinn_Phong_Per_Draw;
 
 typedef struct {
-    MODIFIER_ALIGNED(16) Vec4 pos_and_range;
-    MODIFIER_ALIGNED(16) Vec4 color_and_radius;
+    ATTRIBUTE_ALIGNED(16) Vec4 pos_and_range;
+    ATTRIBUTE_ALIGNED(16) Vec4 color_and_radius;
 } Blinn_Phong_Light;
 
 typedef struct {
-    MODIFIER_ALIGNED(16) Mat4 projection;
-    MODIFIER_ALIGNED(16) Mat4 view;
-    MODIFIER_ALIGNED(16) Vec4 view_pos;
-    MODIFIER_ALIGNED(16) Vec4 base_illumination;
+    ATTRIBUTE_ALIGNED(16) Mat4 projection;
+    ATTRIBUTE_ALIGNED(16) Mat4 view;
+    ATTRIBUTE_ALIGNED(16) Vec4 view_pos;
+    ATTRIBUTE_ALIGNED(16) Vec4 base_illumination;
 
-    MODIFIER_ALIGNED(4) float light_linear_attentuation;
-    MODIFIER_ALIGNED(4) float light_quadratic_attentuation;
-    MODIFIER_ALIGNED(4) float gamma;
-    MODIFIER_ALIGNED(4) int lights_count;
+    ATTRIBUTE_ALIGNED(4) float light_linear_attentuation;
+    ATTRIBUTE_ALIGNED(4) float light_quadratic_attentuation;
+    ATTRIBUTE_ALIGNED(4) float gamma;
+    ATTRIBUTE_ALIGNED(4) int lights_count;
 
-    MODIFIER_ALIGNED(16) Blinn_Phong_Light lights[MAX_LIGHTS];
+    ATTRIBUTE_ALIGNED(16) Blinn_Phong_Light lights[MAX_LIGHTS];
 } Blinn_Phong_Per_Batch;
 
 DEFINE_ARRAY_TYPE(Blinn_Phong_Per_Instance, Blinn_Phong_Per_Instance_Array);
@@ -1903,8 +1901,6 @@ void render_queue_clear(Render_Queue* buffers)
     array_clear(&buffers->geometries);
     array_clear(&buffers->environments);
 }
-
-#include "lib/allocator_failing.h"
 
 typedef struct Render_Memory_Budget {
     isize geometry; 
@@ -2427,9 +2423,9 @@ Error render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out
     PERF_COUNTER_START(image_read_counter);
 
     Error error = {0};
-    Allocator* arena = allocator_arena_acquire();
+    Arena arena = scratch_arena_acquire();
     {
-        Image temp_storage = {arena};
+        Image temp_storage = {&arena.allocator};
         error = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
         
         if(error_is_ok(error) == false)
@@ -2442,7 +2438,7 @@ Error render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out
             *out = render_texture_add(render, temp_storage, name);
         }
     }
-    allocator_arena_release(&arena);
+    arena_release(&arena);
     
     PERF_COUNTER_END(image_read_counter);
     log_group_pop();
@@ -2792,15 +2788,10 @@ void error_func(void* context, Platform_Sandbox_Error error)
     log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
 }
 
-//TOOD: 1) Remove scratch allocator and replace with arena
-//      2) Rethink strings 
-
 #include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
-//#include "lib/lpf2.h"
 void run_test_func(void* context)
 {
     (void) context;
-    test_lpf();
-    test_all();
+    test_all(1.0);
 }

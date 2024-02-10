@@ -14,9 +14,6 @@ typedef enum Image_File_Format {
     IMAGE_LOAD_FILE_FORMAT_TGA,
     IMAGE_LOAD_FILE_FORMAT_JPG,
     IMAGE_LOAD_FILE_FORMAT_HDR,
-    IMAGE_LOAD_FILE_FORMAT_PPM,
-    IMAGE_LOAD_FILE_FORMAT_PAM,
-    IMAGE_LOAD_FILE_FORMAT_PFM,
 } Image_File_Format;
 
 
@@ -40,9 +37,9 @@ EXPORT Error image_write_to_file(Subimage image, String path);
 #define LIB_IMAGE_LOADER_HAS_IMPL
 // ========================= IMPL =====================
 
-#define STBI_MALLOC(size)           wrapper_allocator_malloc(allocator_get_default(), size, DEF_ALIGN, SOURCE_INFO())
-#define STBI_REALLOC(ptr, new_size) wrapper_allocator_realloc(allocator_get_default(), ptr, new_size, DEF_ALIGN, SOURCE_INFO())
-#define STBI_FREE(ptr)              wrapper_allocator_free(ptr, SOURCE_INFO())
+#define STBI_MALLOC(size)           wrapper_allocator_malloc(allocator_get_default(), size, DEF_ALIGN)
+#define STBI_REALLOC(ptr, new_size) wrapper_allocator_realloc(allocator_get_default(), ptr, new_size, DEF_ALIGN)
+#define STBI_FREE(ptr)              wrapper_allocator_free(ptr)
 #define STBI_ASSERT(x)              ASSERT(x)
 #define STBI_WINDOWS_UTF8
 
@@ -54,7 +51,6 @@ EXPORT Error image_write_to_file(Subimage image, String path);
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 
-#include "lib/format_netbpm.h"
 #include "extrenal/include/stb/stb_image.h"
 #include "extrenal/include/stb/stb_image_write.h"
 
@@ -103,68 +99,46 @@ EXPORT Error image_read_from_memory(Image* image, String data, isize desired_cha
     if(image->allocator)
         prev_allocs = allocator_set_default(image->allocator);
 
-    Netbpm_Format netbpm_format = netbpm_format_classify(data);
-    if(netbpm_format != NETBPM_FORMAT_NONE)
-    {
-        switch(netbpm_format)
-        {
-            case NETBPM_FORMAT_PPM: error = netbpm_format_ppm_read_into(image, data); break;
-            case NETBPM_FORMAT_PGM: error = netbpm_format_pgm_read_into(image, data); break;
-            case NETBPM_FORMAT_PFM: error = netbpm_format_pfm_read_into(image, data); break;
-            case NETBPM_FORMAT_PFMG: error = netbpm_format_pfmg_read_into(image, data); break;
-            case NETBPM_FORMAT_PAM: error = netbpm_format_pam_read_into(image, data); break;
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    void* allocated = NULL;
+    stbi_set_flip_vertically_on_load((flags & IMAGE_LOAD_FLAG_FLIP_Y) > 0);
 
-            case NETBPM_FORMAT_NONE:
-            case NETBPM_FORMAT_PBM_ASCII:
-            case NETBPM_FORMAT_PGM_ASCII:
-            case NETBPM_FORMAT_PPM_ASCII:
-            case NETBPM_FORMAT_PBM:
-            default: error = _image_loader_to_error("unsupported netbpm format"); break;
-        }
+    #pragma warning(disable:4061) //Dissables "'PIXEL_TYPE_I24' in switch of enum 'Pixel_Type' is not explicitly handled by a case label"
+    switch(format)
+    {
+        case PIXEL_TYPE_U8:
+            allocated = stbi_load_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+            break;
+
+        case PIXEL_TYPE_U16:
+            allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+            break;
+
+        case PIXEL_TYPE_F32:
+            allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+            break;
+
+        case PIXEL_TYPE_U24:
+        case PIXEL_TYPE_U32:
+        default: 
+            ASSERT(false);
+            break;
+    }
+    #pragma warning(default:4061)
+
+
+    if(allocated)
+    {
+        image_init(image, wrapper_allocator_get_default(), channels, format);
+        image->pixels = (u8*) allocated;
+        image->width = (i32) width;
+        image->height = (i32) height;
     }
     else
     {
-        int width = 0;
-        int height = 0;
-        int channels = 0;
-        void* allocated = NULL;
-        stbi_set_flip_vertically_on_load((flags & IMAGE_LOAD_FLAG_FLIP_Y) > 0);
-
-        #pragma warning(disable:4061) //Dissables "'PIXEL_TYPE_I24' in switch of enum 'Pixel_Type' is not explicitly handled by a case label"
-        switch(format)
-        {
-            case PIXEL_TYPE_U8:
-                allocated = stbi_load_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
-                break;
-
-            case PIXEL_TYPE_U16:
-                allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
-                break;
-
-            case PIXEL_TYPE_F32:
-                allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
-                break;
-
-            case PIXEL_TYPE_U24:
-            case PIXEL_TYPE_U32:
-            default: 
-                ASSERT(false);
-                break;
-        }
-        #pragma warning(default:4061)
-
-
-        if(allocated)
-        {
-            image_init(image, wrapper_allocator_get_default(), channels, format);
-            image->pixels = (u8*) allocated;
-            image->width = (i32) width;
-            image->height = (i32) height;
-        }
-        else
-        {
-            error = _image_loader_to_error(stbi_failure_reason());
-        }
+        error = _image_loader_to_error(stbi_failure_reason());
     }
 
     allocator_set(prev_allocs);
@@ -174,16 +148,16 @@ EXPORT Error image_read_from_memory(Image* image, String data, isize desired_cha
 EXPORT Error image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
     Error parse_error = {0};
-    Allocator* arena = allocator_arena_acquire();
+    Arena arena = scratch_arena_acquire();
     {
-        String_Builder file_content = {arena};
+        String_Builder file_content = {&arena.allocator};
         Error file_error = file_read_entire(path, &file_content);
         parse_error = ERROR_AND(file_error) image_read_from_memory(image, file_content.string, desired_channels, format, flags);
         
         if(!error_is_ok(parse_error))
             LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
     }
-    allocator_arena_release(&arena);
+    arena_release(&arena);
     return parse_error;
 }
 
@@ -205,14 +179,14 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
     Error out_error = {0};
 
     builder_clear(into);
-    Allocator* arena = allocator_arena_acquire();
+    Arena arena = scratch_arena_acquire();
     {
         Image contiguous = {0};
 
         //not contigous in memory => make contiguous copy
         if(subimage_is_contiguous(image) == false)
         {
-            contiguous = image_from_subimage(image, arena);
+            contiguous = image_from_subimage(image, &arena.allocator);
             image = subimage_make(contiguous);
         }
 
@@ -260,28 +234,6 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
                     had_internal_error = !stbi_write_hdr_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, (float*) (void*) image.pixels);
             } break;
 
-            case IMAGE_LOAD_FILE_FORMAT_PFM: {
-                if(image.type != PIXEL_TYPE_F32)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
-                else if(channel_count > 3)
-                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
-                else
-                    out_error = netbpm_format_pfm_write_into(into, image, 1.0f);
-            } break;
-
-            case IMAGE_LOAD_FILE_FORMAT_PPM: {
-                if(image.type != PIXEL_TYPE_U8)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
-                else if(channel_count > 3)
-                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
-                else
-                    out_error = netbpm_format_ppm_write_into(into, image);
-            } break;
-                
-            case IMAGE_LOAD_FILE_FORMAT_PAM: {
-                out_error = netbpm_format_pam_write_into(into, image);
-            } break;
-
             case IMAGE_LOAD_FILE_FORMAT_NONE:
             default: 
                 out_error = _image_loader_to_error(error_msg_bad_file_format);
@@ -292,19 +244,19 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
             out_error = ERROR_AND(out_error) _image_loader_to_error(error_msg_unspecfied);
 
     }
-    allocator_arena_release(&arena);
+    arena_release(&arena);
 
     return out_error;
 }
 
 EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
-    Allocator* arena = allocator_arena_acquire();
-    String_Builder formatted = {arena};
+    Arena arena = scratch_arena_acquire();
+    String_Builder formatted = {&arena.allocator};
     Error format_error = image_write_to_memory(image, &formatted, file_format);
     Error output_error = ERROR_AND(format_error) file_write_entire(path, formatted.string);
 
-    allocator_arena_release(&arena);
+    arena_release(&arena);
     return output_error;
 }
 
@@ -335,12 +287,6 @@ EXPORT Image_File_Format image_file_format_from_extension(String extension_witho
         return IMAGE_LOAD_FILE_FORMAT_JPG;
     else if(string_is_equal(ext, STRING("hdr")) || string_is_equal(ext, STRING("HDR")))
         return IMAGE_LOAD_FILE_FORMAT_HDR;
-    else if(string_is_equal(ext, STRING("ppm")) || string_is_equal(ext, STRING("PPM")))
-        return IMAGE_LOAD_FILE_FORMAT_PPM;
-    else if(string_is_equal(ext, STRING("pfm")) || string_is_equal(ext, STRING("PFM")))
-        return IMAGE_LOAD_FILE_FORMAT_PFM;
-    else if(string_is_equal(ext, STRING("pam")) || string_is_equal(ext, STRING("PAM")))
-        return IMAGE_LOAD_FILE_FORMAT_PAM;
     else
         return IMAGE_LOAD_FILE_FORMAT_NONE;
 }

@@ -95,9 +95,6 @@
     <ClInclude Include="lib\allocator_debug.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\allocator_failing.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="lib\allocator_malloc.h">
       <Filter>lib</Filter>
     </ClInclude>
@@ -120,9 +117,6 @@
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\file.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\format_netbpm.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\guid.h">

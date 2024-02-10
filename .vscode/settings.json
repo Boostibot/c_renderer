@@ -3,6 +3,7 @@
         "initializer_list": "c",
         "utility": "c",
         "xutility": "c",
-        "algorithm": "c"
+        "algorithm": "c",
+        "xmemory": "cpp"
     }
 }
