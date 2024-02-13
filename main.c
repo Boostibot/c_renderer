@@ -290,7 +290,7 @@ int main()
     Stack_Allocator stack_allocator = {0};
     stack_allocator_init(&stack_allocator, NULL, 10*MEBI_BYTE, &malloc_allocator.allocator);
     
-    Arena_Stack* arena_stack = allocator_get_scratch_arena();
+    Arena_Stack* arena_stack = allocator_get_scratch_arena_stack();
     arena_init(arena_stack, 0, 0, "scratch arena");
 
     error_system_init(&static_allocator.allocator);
@@ -822,7 +822,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
         LOG_ERROR(">render", "Zero sized!");
     else
     {
-        log_group_push();
+        log_group();
         if(gl_texture_array_init(&resolution.array, NULL) == false)
             LOG_ERROR("render", "Creation failed!");
         else
@@ -833,7 +833,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
             array_push(&manager->resolutions, resolution);
             manager->memory_used  += needed_size;
         }
-        log_group_pop();
+        log_ungroup();
     }
 
     return out;
@@ -900,7 +900,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     
     f64 scaling_factor = (f64) desired_total_size / (f64) ideal_total_size;
     
-    log_group_push();
+    log_group();
     isize combined_size = 0;
     for(i32 j = 0; j < STATIC_ARRAY_SIZE(channel_counts); j++)
     {
@@ -927,7 +927,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
             }
         }
     }
-    log_group_pop();
+    log_ungroup();
 
     LOG_WARN("render", "using " MEMORY_FMT " combined RAM on textures", MEMORY_PRINT(combined_size));
 }
@@ -1292,9 +1292,9 @@ String format_render_info_ephemeral(Render_Info info)
     return format_ephemeral("%s " TIME_FMT " (gen: %i)", info.name.data, TIME_PRINT(c), (int) info.generation);
 }
 
-void log_render_info(const char* module, Log_Type type, Render_Info info)
+void log_render_info(const char* module, Log_Filter type, Render_Info info)
 {
-    LOG(module, type, "%s", format_render_info_ephemeral(info).data);
+    LOG(module, "", type, "%s", format_render_info_ephemeral(info).data);
 }
 
 void render_geometry_manager_init(Render_Geometry_Manager* manager, Allocator* alloc, GL_Buffer* instance_buffer, isize memory_limit)
@@ -1384,9 +1384,9 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
     
     if(batch_index == 0)
     {
-        log_group_push();
+        log_group();
         batch_index = render_geometry_manager_add_batch(manager, vertex_count, index_count);
-        log_group_pop();
+        log_ungroup();
     }
 
     Render_Geometry_Batch_Index out = {0};
@@ -2419,7 +2419,7 @@ Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, Strin
 Error render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
 {
     LOG_INFO("render", "reading image at path '%s' current working dir '%s'", escape_string_ephemeral(path), platform_directory_get_current_working());
-    log_group_push();
+    log_group();
     PERF_COUNTER_START(image_read_counter);
 
     Error error = {0};
@@ -2441,7 +2441,7 @@ Error render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out
     arena_release(&arena);
     
     PERF_COUNTER_END(image_read_counter);
-    log_group_pop();
+    log_ungroup();
     return error;
 }
 

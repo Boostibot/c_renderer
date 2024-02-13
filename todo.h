@@ -50,7 +50,7 @@ EXPORT void todo_deinit(Todo* todo);
 EXPORT void  todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
 EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo_marker);
 EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
-EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth);
+EXPORT Error log_todos(const char* log_module, Log_Filter log_type, const char* marker, isize depth);
 
 #endif
 
@@ -233,7 +233,7 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
     return error;
 }
 
-EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
+EXPORT Error log_todos(const char* log_module, Log_Filter log_type, const char* marker, isize depth)
 {
     Todo_Array todos = {0};
     Error error = todo_parse_folder(&todos, STRING("./"), string_make(marker), depth);
@@ -259,8 +259,8 @@ EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* ma
             }
         }
     
-        LOG(log_module, log_type, "Logging TODOs (%lli):", (lli) todos.size);
-        log_group_push();
+        LOG(log_module, "", log_type, "Logging TODOs (%lli):", (lli) todos.size);
+        log_group();
         for(isize i = 0; i < todos.size; i++)
         {
             Todo todo = todos.data[i];
@@ -270,11 +270,11 @@ EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* ma
                 path = string_safe_tail(path, common_path_prefix.size);
 
             if(todo.signature.size > 0)
-                LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
+                LOG(log_module, "", log_type, "%-20s %4lli %s(%s) %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
             else
-                LOG(log_module, log_type, "%-20s %4lli %s %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
+                LOG(log_module, "", log_type, "%-20s %4lli %s %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
         }
-        log_group_pop();
+        log_ungroup();
     
         for(isize i = 0; i < todos.size; i++)
             todo_deinit(&todos.data[i]);

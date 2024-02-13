@@ -225,6 +225,7 @@
     <ClInclude Include="control.h" />
     <ClInclude Include="lib\arena.h" />
     <ClInclude Include="lib\hash_index.h" />
+    <ClInclude Include="lib\log_list.h" />
     <ClInclude Include="lib\lpf.h" />
     <ClInclude Include="lib\profile_utils.h" />
     <ClInclude Include="lib\_test_all.h" />
@@ -258,7 +259,7 @@
     <ClInclude Include="lib\image.h" />
     <ClInclude Include="lib\log.h" />
     <ClInclude Include="lib\logger_file.h" />
-    <ClInclude Include="lib\logger_memory.h" />
+    <ClInclude Include="lib\_logger_memory.h" />
     <ClInclude Include="lib\math.h" />
     <ClInclude Include="lib\parse.h" />
     <ClInclude Include="lib\perf.h" />
