@@ -1,7 +1,6 @@
 #pragma once
 #include "resources.h"
 #include "format_obj.h"
-#include "lib/error.h"
 #include "lib/file.h"
 #include "lib/profile.h"
 #include "image_loader.h"
@@ -24,16 +23,6 @@ INTERNAL const char* _format_obj_mtl_translate_error(u32 code, void* context)
     snprintf(out, LOCAL_BUFF_SIZE, "%s line: %d", error_flag_str, line);
     error_index += 1;
     return out;
-}
-
-INTERNAL Error _format_obj_mtl_error_on_to_error(Format_Obj_Mtl_Error_Statement statement, isize line)
-{
-    static u32 error_module = 0;
-    if(error_module == 0)
-        error_module = error_system_register_module(_format_obj_mtl_translate_error, "format_obj_mtl.h", NULL);
-
-    u32 splatted = (u32) line << 8 | (u32) statement;
-    return error_make(error_module, splatted);
 }
 
 #define OBJ_MTL_ERROR_FMT           "%s at line %d" 
@@ -64,17 +53,6 @@ INTERNAL const char* _resource_loading_translate_error(u32 code, void* context)
         default: return "RESOURCE_LOADING_ERROR_OTHER";
     }
 }
-
-INTERNAL Error _resource_loading_error_to_error(Resource_Loading_Error error)
-{
-    static u32 error_module = 0;
-    if(error_module == 0)
-        error_module = error_system_register_module(_resource_loading_translate_error, "resource_loading.h", NULL);
-
-    return error_make(error_module, (u32) error);
-}
-
-DEFINE_ARRAY_TYPE(Error, Error_Array);
 
 EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
@@ -199,7 +177,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
                         case INVALID_UV_INDEX: error_string = "invalid uv-coordinate index"; break;
                     }
 
-                    LOG_ERROR("ASSET", "Error processing obj file: %s with index %lli on index number %lli ", error_string, (lli) error_index, (lli) i);
+                    LOG_ERROR("ASSET", "bool processing obj file: %s with index %lli on index number %lli ", error_string, (lli) error_index, (lli) i);
                 }
 
                 u32 final_index = shape_assembly_add_vertex_custom(&shape_assembly->vertices_hash, &shape_assembly->vertices, composed_vertex);
@@ -356,9 +334,9 @@ EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_
     process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
 }
 
-EXPORT Error material_load_images(Material* material, Material_Description description)
+EXPORT bool material_load_images(Material* material, Material_Description description)
 {
-    Error out_error = {0};
+    bool out_error = {0};
     material->info = description.info;
 
     typedef struct Map_Or_Cubemap_Handles {
@@ -405,7 +383,7 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
 
         //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
         String full_item_path = path_get_full_ephemeral_from(item_path, dir_path);
-        Error load_error = {0};
+        bool load_state = true;
         
         Id found_image = image_find_by_path(hash_string_make(full_item_path), NULL);
         Id map_image = NULL;
@@ -425,14 +403,12 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
             map_image = image_insert(params);
             Image* loaded_image = image_get(map_image); 
 
-            load_error = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_TYPE_U8, 0);
-            if(error_is_ok(load_error) == false)
+            load_state = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_TYPE_U8, 0);
+            if(load_state == false)
                 image_remove(map_image);
         }
 
-        if(map_image == NULL)
-            LOG_ERROR("ASSET", "Error rading image " STRING_FMT ": " ERROR_FMT, STRING_PRINT(full_item_path), ERROR_PRINT(load_error));
-        else
+        if(map_image)
         {
             Map* map = NULL;
             if(map_or_cubemap.is_cubemap)
@@ -450,18 +426,20 @@ EXPORT Error material_load_images(Material* material, Material_Description descr
 
 #define FLAT_ERRORS_COUNT 100
 
-EXPORT Error material_read_entire(Id_Array* materials, String path)
+EXPORT bool material_read_entire(Id_Array* materials, String path)
 {
     Stack_Allocator arena = {0};
     stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
+
+    LOG_INFO("ASSET", "Loading materials at '%s'", string_escape_ephemeral(path));
 
     String_Builder full_path =  builder_make(NULL, 512);
     String_Builder file_content = {0};
     Format_Mtl_Material_Array mtl_materials = {0};
     Material_Description material_desription = {0};
 
-    Error error = path_get_full(&full_path, path);
-    if(error_is_ok(error))
+    bool state = path_get_full(&full_path, path);
+    if(state)
     {
         //@TODO: In the future we will want to separate the concept of resource from
         //       path and name. Resource is simply the data and name and path are a means
@@ -471,9 +449,9 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
         //       iterate all resources when looking for path.
 
         Platform_File_Info file_info = {0};
-        Error file_info_error = error_from_platform(platform_file_info(full_path.string, &file_info));
-        if(error_is_ok(file_info_error) == false)
-            LOG_ERROR("ASSET", "Error getting info of material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
+        Platform_Error file_info_error = platform_file_info(full_path.string, &file_info);
+        if(file_info_error != PLATFORM_ERROR_OK)
+            LOG_ERROR("ASSET", "error getting info of object file '%s': %s", full_path.data, platform_translate_error(file_info_error));
 
         bool was_found = false;
         bool is_outdated = false;
@@ -489,7 +467,7 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
             if(found_material == NULL)
                 break;
 
-            if(error_is_ok(file_info_error))
+            if(file_info_error == PLATFORM_ERROR_OK)
             {
                 Resource_Info* material_info = NULL;
                 material_get_with_info(found_material, &material_info);
@@ -513,15 +491,15 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
 
         if((was_found == false || is_outdated))
         {
-            error = file_read_entire(full_path.string, &file_content);
-            if(error_is_ok(error))
+            state = state && file_read_entire(full_path.string, &file_content);
+            if(state)
             {
                 Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
                 isize had_mtl_errors = 0;
                 format_mtl_read(&mtl_materials, file_content.string, mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
 
                 for(isize i = 0; i < had_mtl_errors; i++)
-                    LOG_ERROR("ASSET", "Error parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
+                    LOG_ERROR("ASSET", "bool parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
             
                 for(isize i = 0; i < mtl_materials.size; i++)
                 {
@@ -543,29 +521,31 @@ EXPORT Error material_read_entire(Id_Array* materials, String path)
         }
     }
     
-    if(error_is_ok(error) == false)
-        LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
+    if(state == false)
+        LOG_ERROR("ASSET", "Error loading material file '%s'", full_path.data);
 
     stack_allocator_deinit(&arena);
 
-    return error;
+    return state;
 }
 
-EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
+EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
     Stack_Allocator arena = {0};
     stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
+    
+    LOG_INFO("ASSET", "Loading mesh at '%s'", string_escape_ephemeral(path));
 
     Id out_handle = {0};
     String_Builder full_path = builder_make(NULL, 512);
-    Error error = path_get_full(&full_path, path);
+    bool state = path_get_full(&full_path, path);
     
-    if(error_is_ok(error))
+    if(state)
     {
         Platform_File_Info file_info = {0};
-        Error file_info_error = error_from_platform(platform_file_info(full_path.string, &file_info));
-        if(error_is_ok(file_info_error) == false)
-            LOG_ERROR("ASSET", "Error getting info of object file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(file_info_error));
+        Platform_Error file_info_error = platform_file_info(full_path.string, &file_info);
+        if(file_info_error != PLATFORM_ERROR_OK)
+            LOG_ERROR("ASSET", "error getting info of object file '%s': %s", full_path.data, platform_translate_error(file_info_error));
 
         Id found_mesh = triangle_mesh_find_by_path(hash_string_make(full_path.string), NULL);
         if(found_mesh != NULL)
@@ -579,9 +559,10 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
         if(out_handle == NULL)
         {
             String_Builder file_content = {0};
-            error = file_read_entire(full_path.string, &file_content);
-
-            if(error_is_ok(error))
+            state = state && file_read_entire(full_path.string, &file_content);
+            if(state == false)
+                LOG_ERROR("ASSET", "Failed to load triangle_mesh file '%s'", full_path.data);
+            else
             {
                 Format_Obj_Model model = {0};
                 format_obj_model_init(&model, NULL);
@@ -594,7 +575,7 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                 builder_deinit(&file_content); 
 
                 for(isize i = 0; i < had_obj_errors; i++)
-                    LOG_ERROR("ASSET", "Error parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
+                    LOG_ERROR("ASSET", "bool parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
 
                 Resource_Params params = {0};
                 params.path = full_path.string;
@@ -616,10 +597,8 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                     String file = description.material_files.data[i].string;
                     String mtl_path = path_get_full_ephemeral_from(file, dir_path);
 
-                    Error major_material_error = material_read_entire(&triangle_mesh->materials, mtl_path);
-
-                    if(error_is_ok(major_material_error) == false)
-                        LOG_ERROR("ASSET", "Failed to load material file %s while loading %s", mtl_path.data, full_path.data);
+                    if(material_read_entire(&triangle_mesh->materials, mtl_path) == false)
+                        LOG_ERROR("ASSET", "Failed to load material file '%s' while loading '%s'", mtl_path.data, full_path.data);
                 }
 
                 for(isize i = 0; i < description.groups.size; i++)
@@ -665,17 +644,13 @@ EXPORT Error triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                         LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
                 }
             }
-            else
-            {
-                LOG_ERROR("ASSET", "Failed to load triangle_mesh file %s", full_path.data);
-            }
         }
     }
     
-    if(error_is_ok(error) == false)
-        LOG_ERROR("ASSET", "Error rading material file %s: " ERROR_FMT, full_path.data, ERROR_PRINT(error));
+    if(state == false)
+        LOG_ERROR("ASSET", "Error rading mesh file '%s'", full_path.data);
     
     stack_allocator_deinit(&arena);
     *triangle_mesh_handle = out_handle;
-    return error;
+    return state;
 }

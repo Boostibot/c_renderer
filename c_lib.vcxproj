@@ -251,7 +251,6 @@
     <ClInclude Include="lib\array.h" />
     <ClInclude Include="lib\assert.h" />
     <ClInclude Include="lib\defines.h" />
-    <ClInclude Include="lib\error.h" />
     <ClInclude Include="lib\file.h" />
     <ClInclude Include="lib\guid.h" />
     <ClInclude Include="lib\hash.h" />

@@ -48,9 +48,9 @@ EXPORT void todo_init(Todo* todo, Allocator* alloc);
 EXPORT void todo_deinit(Todo* todo);
 
 EXPORT void  todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
-EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo_marker);
-EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
-EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth);
+EXPORT bool todo_parse_file(Todo_Array* todos, String path, String todo_marker);
+EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
+EXPORT bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth);
 
 #endif
 
@@ -186,21 +186,21 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
 }
 
 
-EXPORT Error todo_parse_file(Todo_Array* todos, String path, String todo)
+EXPORT bool todo_parse_file(Todo_Array* todos, String path, String todo)
 {
     Arena arena = scratch_arena_acquire();
     String_Builder source = {&arena.allocator};
 
-    Error file_error = file_read_entire(path, &source);
+    bool file_error = file_read_entire(path, &source);
     todo_parse_source(todos, path, source.string, todo);
     
     arena_release(&arena);
     return file_error;
 }
 
-EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
+EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
-    Error error = {0};
+    bool state = true;
     Arena arena = scratch_arena_acquire();
     {
         String_Builder source = {&arena.allocator};
@@ -208,10 +208,14 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
         Platform_Directory_Entry* entries = NULL;
         isize entries_count = 0;
 
-        Platform_Error platform_error = platform_directory_list_contents_alloc(path, &entries, &entries_count, depth);
-        error = error_from_platform(platform_error);
+        if(platform_directory_list_contents_alloc(path, &entries, &entries_count, depth) != 0)
+        {
+            state = false;
+            LOG_ERROR_CHILD("todo", "todo_parse_folder error", NULL, "todo_parse_folder() couldnt open folder '%s' with todo '%s'", 
+                string_escape_ephemeral(path), string_escape_ephemeral(todo));
+        }
 
-        if(error_is_ok(error))
+        if(state)
         {
             for(isize i = 0; i < entries_count; i++)
             {
@@ -219,10 +223,11 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
                 if(entry.info.type == PLATFORM_FILE_TYPE_FILE)
                 {
                     String file_path = string_make(entry.path);
-                    Error file_error = file_read_entire(file_path, &source);
+                    bool read_state = file_read_entire(file_path, &source);
 
-                    todo_parse_source(todos, file_path, todo, source.string);
-                    error = ERROR_AND(error) file_error;
+                    if(read_state)
+                        todo_parse_source(todos, file_path, todo, source.string);
+                    state = state && read_state;
                 }
             }
         }
@@ -230,14 +235,14 @@ EXPORT Error todo_parse_folder(Todo_Array* todos, String path, String todo, isiz
         platform_directory_list_contents_free(entries);
     }
     arena_release(&arena);
-    return error;
+    return state;
 }
 
-EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
+EXPORT bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
 {
     Todo_Array todos = {0};
-    Error error = todo_parse_folder(&todos, STRING("./"), string_make(marker), depth);
-    if(error_is_ok(error))
+    bool state = todo_parse_folder(&todos, STRING("./"), string_make(marker), depth);
+    if(state)
     {
         String common_path_prefix = {0};
         for(isize i = 0; i < todos.size; i++)
@@ -281,7 +286,7 @@ EXPORT Error log_todos(const char* log_module, Log_Type log_type, const char* ma
 
         array_deinit(&todos);
     }
-    return error;
+    return state;
 }
 
 #endif
