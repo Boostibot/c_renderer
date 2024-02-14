@@ -74,12 +74,6 @@ INTERNAL Error _resource_loading_error_to_error(Resource_Loading_Error error)
     return error_make(error_module, (u32) error);
 }
 
-typedef struct Load_Error 
-{
-    String_Builder path;
-    Error error;
-} Load_Error;
-
 DEFINE_ARRAY_TYPE(Error, Error_Array);
 
 EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)

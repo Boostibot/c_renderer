@@ -137,9 +137,6 @@
     <ClInclude Include="lib\logger_file.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\_logger_memory.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="lib\math.h">
       <Filter>lib</Filter>
     </ClInclude>

@@ -1294,7 +1294,7 @@ String format_render_info_ephemeral(Render_Info info)
 
 void log_render_info(const char* module, Log_Filter type, Render_Info info)
 {
-    LOG(module, "", type, "%s", format_render_info_ephemeral(info).data);
+    LOG(module, type, "%s", format_render_info_ephemeral(info).data);
 }
 
 void render_geometry_manager_init(Render_Geometry_Manager* manager, Allocator* alloc, GL_Buffer* instance_buffer, isize memory_limit)
@@ -2790,8 +2790,11 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 #include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
+#include "lib/log_list.h"
+
 void run_test_func(void* context)
 {
+    //Arena scratch = scratch_arena_acquire();
     (void) context;
     test_all(1.0);
 }

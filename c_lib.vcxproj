@@ -259,7 +259,6 @@
     <ClInclude Include="lib\image.h" />
     <ClInclude Include="lib\log.h" />
     <ClInclude Include="lib\logger_file.h" />
-    <ClInclude Include="lib\_logger_memory.h" />
     <ClInclude Include="lib\math.h" />
     <ClInclude Include="lib\parse.h" />
     <ClInclude Include="lib\perf.h" />
