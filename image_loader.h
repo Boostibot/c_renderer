@@ -24,12 +24,12 @@ enum {
 
 EXPORT Image_File_Format image_file_format_from_extension(String extension_without_dot);
 
-EXPORT Error image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags);
-EXPORT Error image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags);
+EXPORT bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags);
+EXPORT bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags);
 
-EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format format);
-EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_File_Format format);
-EXPORT Error image_write_to_file(Subimage image, String path);
+EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format format);
+EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format format);
+EXPORT bool image_write_to_file(Subimage image, String path);
 
 #endif
 
@@ -56,44 +56,9 @@ EXPORT Error image_write_to_file(Subimage image, String path);
 
 #include "lib/log.h"
 
-INTERNAL const char* _image_loader_translate_error(u32 code, void* context)
+EXPORT bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags)
 {
-    Hash_Index* error_hash = (Hash_Index*) context;
-    isize found = hash_index_find(*error_hash, code);
-    if(found == -1)
-        return "unknown error. This is likely an internal bug.";
-    else
-    {
-        const char* string = (const char*) error_hash->entries[found].value;
-        return string;
-    }
-}
-
-INTERNAL Error _image_loader_to_error(const char* error_string)
-{
-    static u32 error_module = 0;
-    static Hash_Index error_hash = {0};
-    if(error_module == 0)
-    {
-        hash_index_init(&error_hash, allocator_get_static());
-        error_module = error_system_register_module(_image_loader_translate_error, "image_loader.h", &error_hash);
-    }
-
-    //We assume no hash collisions.
-    u32 hashed = hash64_to32((u64) error_string);
-    isize found_code = hash_index_find_or_insert(&error_hash, hashed, 0);
-
-    if(error_hash.entries[found_code].value != 0)
-        ASSERT(strcmp((const char*) error_hash.entries[found_code].value, error_string) == 0);
-
-    error_hash.entries[found_code].value = (u64) error_string;
-    return error_make(error_module, hashed);
-}
-
-
-EXPORT Error image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags)
-{
-    Error error = {0};
+    bool state = true;
     
     Allocator_Set prev_allocs = {0};
     if(image->allocator)
@@ -128,7 +93,6 @@ EXPORT Error image_read_from_memory(Image* image, String data, isize desired_cha
     }
     #pragma warning(default:4061)
 
-
     if(allocated)
     {
         image_init(image, wrapper_allocator_get_default(), channels, format);
@@ -138,27 +102,34 @@ EXPORT Error image_read_from_memory(Image* image, String data, isize desired_cha
     }
     else
     {
-        error = _image_loader_to_error(stbi_failure_reason());
+        LOG_ERROR("ASSET", "%s", stbi_failure_reason());
+        state = false;
     }
 
     allocator_set(prev_allocs);
-    return error;
+    return state;
 }
 
-EXPORT Error image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
+#include "lib/log_list.h"
+EXPORT bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
-    Error parse_error = {0};
+    LOG_INFO("ASSET", "Loading image '%s'", string_escape_ephemeral(path));
+
+    bool state = true;
     Arena arena = scratch_arena_acquire();
     {
-        String_Builder file_content = {&arena.allocator};
-        Error file_error = file_read_entire(path, &file_content);
-        parse_error = ERROR_AND(file_error) image_read_from_memory(image, file_content.string, desired_channels, format, flags);
+        Log_List list = {0};
+        log_capture(&list, &arena.allocator);
+            String_Builder file_content = {&arena.allocator};
+            state = state && file_read_entire(path, &file_content);
+            state = state && image_read_from_memory(image, file_content.string, desired_channels, format, flags);
+        log_capture_end(&list);
         
-        if(!error_is_ok(parse_error))
-            LOG_ERROR("ASSET", "Failed to load an image: \"" STRING_FMT "\": " ERROR_FMT, STRING_PRINT(path), ERROR_PRINT(parse_error));
+        if(state == false)
+            LOG_ERROR_CHILD("ASSET", "load error", list.first, "Failed to load an image: '%s'" , string_escape_ephemeral(path));
     }
     arena_release(&arena);
-    return parse_error;
+    return state;
 }
 
 EXPORT INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
@@ -168,7 +139,7 @@ EXPORT INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
     builder_append(append_into, string);
 }
 
-EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
+EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
 {
     const char* error_msg_unspecfied =          "Unspecified error while formatting into memory (Zero sized image?)";
     const char* error_msg_bad_type =            "Output format does not support the representation format data type";
@@ -176,13 +147,12 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
     const char* error_msg_bad_file_format =     "Invalid output format (IMAGE_LOAD_FILE_FORMAT_NONE or bad value)";
 
     int jpg_compression_quality = 50; //[0, 100]
-    Error out_error = {0};
+    bool state = false;
 
     builder_clear(into);
     Arena arena = scratch_arena_acquire();
     {
         Image contiguous = {0};
-
         //not contigous in memory => make contiguous copy
         if(subimage_is_contiguous(image) == false)
         {
@@ -197,74 +167,95 @@ EXPORT Error image_write_to_memory(Subimage image, String_Builder* into, Image_F
             case IMAGE_LOAD_FILE_FORMAT_PNG: {
                 isize stride = subimage_byte_stride(image);;
                 if(image.type != PIXEL_TYPE_U8)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_type);
                 else
+                {
+                    state = true;
                     had_internal_error = !stbi_write_png_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, (int) stride);
+                }
             } break;
             
             case IMAGE_LOAD_FILE_FORMAT_BMP: {
                 if(image.type != PIXEL_TYPE_U8)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_type);
                 else
+                {
+                    state = true;
                     had_internal_error = !stbi_write_bmp_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
+                }
             } break;
             
             case IMAGE_LOAD_FILE_FORMAT_TGA: {
                 if(image.type != PIXEL_TYPE_U8)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_type);
                 else
+                {
+                    state = true;
                     had_internal_error = !stbi_write_tga_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels);
+                }
             } break;
             
             case IMAGE_LOAD_FILE_FORMAT_JPG: {
                 if(image.type != PIXEL_TYPE_U8)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_type);
                 else if(channel_count > 3)
-                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_chanel_count);
                 else
+                {
+                    state = true;
                     had_internal_error = !stbi_write_jpg_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, image.pixels, jpg_compression_quality);
+                }
             } break;
             
             case IMAGE_LOAD_FILE_FORMAT_HDR: {
                 if(image.type != PIXEL_TYPE_F32)
-                    out_error = _image_loader_to_error(error_msg_bad_type);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_type);
                 else if(channel_count > 3)
-                    out_error = _image_loader_to_error(error_msg_bad_chanel_count);
+                    LOG_ERROR("Asset", "%s", error_msg_bad_chanel_count);
                 else
+                {
+                    state = true;
                     had_internal_error = !stbi_write_hdr_to_func(_stbi_write_to_memory, into, (int) image.width, (int) image.height, (int) channel_count, (float*) (void*) image.pixels);
+                }
             } break;
 
             case IMAGE_LOAD_FILE_FORMAT_NONE:
             default: 
-                out_error = _image_loader_to_error(error_msg_bad_file_format);
+                LOG_ERROR("Asset", "%s", error_msg_bad_file_format);
             break;
         }
 
+        state = state && had_internal_error == false;
         if(had_internal_error)
-            out_error = ERROR_AND(out_error) _image_loader_to_error(error_msg_unspecfied);
-
+            LOG_ERROR("Asset", "%s", error_msg_unspecfied);
     }
     arena_release(&arena);
-
-    return out_error;
+    return state;
 }
 
-EXPORT Error image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
+EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
     Arena arena = scratch_arena_acquire();
     String_Builder formatted = {&arena.allocator};
-    Error format_error = image_write_to_memory(image, &formatted, file_format);
-    Error output_error = ERROR_AND(format_error) file_write_entire(path, formatted.string);
+
+    Log_List list = {0};
+    log_capture(&list, &arena.allocator);
+        bool state = image_write_to_memory(image, &formatted, file_format);
+        state = state && file_write_entire(path, formatted.string);
+    log_capture_end(&list);
+
+    if(state == false)
+        LOG_ERROR_CHILD("ASSET", "write error", list.first, "Couldnt write an image to path '%s'", string_escape_ephemeral(path));
 
     arena_release(&arena);
-    return output_error;
+    return state;
 }
 
-EXPORT Error image_write_to_file(Subimage image, String path)
+EXPORT bool image_write_to_file(Subimage image, String path)
 {
     isize last_dot_i = string_find_last_char(path, '.') + 1;
     CHECK_BOUNDS(last_dot_i, path.size + 1);
-
+    
     String extension = string_tail(path, last_dot_i);
     Image_File_Format file_format = image_file_format_from_extension(extension);
 

@@ -394,7 +394,7 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
 Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
 {
     LOG_DEBUG("mdump", "registering type: " STRING_FMT, STRING_PRINT(info.type_name));
-    log_group_push();
+    log_group();
 
     Mdump_Type out_type = MDUMP_TYPE_NONE;
     Mdump_Type found = mdump_get_type_by_name(types, info.type_name.string);
@@ -464,7 +464,7 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
         }
     }
     
-    log_group_pop();
+    log_ungroup();
     return out_type;
 }
 

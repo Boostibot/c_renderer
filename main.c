@@ -290,10 +290,10 @@ int main()
     Stack_Allocator stack_allocator = {0};
     stack_allocator_init(&stack_allocator, NULL, 10*MEBI_BYTE, &malloc_allocator.allocator);
     
-    Arena_Stack* arena_stack = allocator_get_scratch_arena();
+    Arena_Stack* arena_stack = allocator_get_scratch_arena_stack();
     arena_init(arena_stack, 0, 0, "scratch arena");
 
-    error_system_init(&static_allocator.allocator);
+    //error_system_init(&static_allocator.allocator);
     file_logger_init_use(&global_logger, &malloc_allocator.allocator, "logs");
 
     Debug_Allocator debug_alloc = {0};
@@ -356,7 +356,7 @@ int main()
     debug_allocator_deinit(&debug_alloc);
     
     file_logger_deinit(&global_logger);
-    error_system_deinit();
+    //error_system_deinit();
 
     //@TODO: fix
     ASSERT(malloc_allocator.bytes_allocated == 0);
@@ -822,7 +822,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
         LOG_ERROR(">render", "Zero sized!");
     else
     {
-        log_group_push();
+        log_group();
         if(gl_texture_array_init(&resolution.array, NULL) == false)
             LOG_ERROR("render", "Creation failed!");
         else
@@ -833,7 +833,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
             array_push(&manager->resolutions, resolution);
             manager->memory_used  += needed_size;
         }
-        log_group_pop();
+        log_ungroup();
     }
 
     return out;
@@ -900,7 +900,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     
     f64 scaling_factor = (f64) desired_total_size / (f64) ideal_total_size;
     
-    log_group_push();
+    log_group();
     isize combined_size = 0;
     for(i32 j = 0; j < STATIC_ARRAY_SIZE(channel_counts); j++)
     {
@@ -927,7 +927,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
             }
         }
     }
-    log_group_pop();
+    log_ungroup();
 
     LOG_WARN("render", "using " MEMORY_FMT " combined RAM on textures", MEMORY_PRINT(combined_size));
 }
@@ -1292,7 +1292,7 @@ String format_render_info_ephemeral(Render_Info info)
     return format_ephemeral("%s " TIME_FMT " (gen: %i)", info.name.data, TIME_PRINT(c), (int) info.generation);
 }
 
-void log_render_info(const char* module, Log_Type type, Render_Info info)
+void log_render_info(const char* module, Log_Filter type, Render_Info info)
 {
     LOG(module, type, "%s", format_render_info_ephemeral(info).data);
 }
@@ -1369,7 +1369,7 @@ i32 render_geometry_manager_add_batch(Render_Geometry_Manager* manager, isize mi
 
 Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager* manager, const Vertex vertices[], isize vertex_count, const i32 indices[], isize index_count, String name)
 {
-    LOG_INFO("render", "render_geometry_manager_add() requested: %s %i:%i (vertex:index)", escape_string_ephemeral(name), (int) vertex_count, (int) index_count);
+    
 
     i32 batch_index = 0;
     for(isize i = 0; i < manager->batches.size; i++)
@@ -1384,9 +1384,9 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
     
     if(batch_index == 0)
     {
-        log_group_push();
+        log_group();
         batch_index = render_geometry_manager_add_batch(manager, vertex_count, index_count);
-        log_group_pop();
+        log_ungroup();
     }
 
     Render_Geometry_Batch_Index out = {0};
@@ -1412,12 +1412,13 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
         out.vertex_from = group.vertex_from;
         out.vertex_count = group.vertex_count;
         out.batch_index = batch_index;
-        LOG_DEBUG(">render", "Added to batch #%d", (int) out.batch_index);
+        LOG_INFO("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) added to batch #%i", string_escape_ephemeral(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
+
         array_push(&batch->groups, group);
     }
     else
     {
-        LOG_ERROR(">render", "FAILED");
+        LOG_ERROR("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) failed", string_escape_ephemeral(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
     }
 
     return out;
@@ -2416,38 +2417,30 @@ Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, Strin
     return render_geometry_add(render, shape.vertices.data, shape.vertices.size, (i32*) (void*) shape.triangles.data, shape.triangles.size * 3, name);
 }
 
-Error render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
+bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
 {
-    LOG_INFO("render", "reading image at path '%s' current working dir '%s'", escape_string_ephemeral(path), platform_directory_get_current_working());
-    log_group_push();
+    LOG_INFO("render", "Adding texture at path '%s' current working dir '%s'", string_escape_ephemeral(path), platform_directory_get_current_working());
+    log_group();
     PERF_COUNTER_START(image_read_counter);
 
-    Error error = {0};
+    bool state = true;
     Arena arena = scratch_arena_acquire();
     {
         Image temp_storage = {&arena.allocator};
-        error = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
-        
-        if(error_is_ok(error) == false)
-        {
-            LOG_ERROR("render", "error reading " ERROR_FMT " image!", ERROR_PRINT(error));
-            ASSERT(false);
-        }
-        else
-        {
+        state = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+        if(state)
             *out = render_texture_add(render, temp_storage, name);
-        }
     }
     arena_release(&arena);
     
     PERF_COUNTER_END(image_read_counter);
-    log_group_pop();
-    return error;
+    log_ungroup();
+    return state;
 }
 
-Error render_texture_add_from_disk(Render* render, Render_Texture_Ptr* out, String path)
+bool render_texture_add_from_disk(Render* render, Render_Texture_Ptr* out, String path)
 {
-    return render_texture_add_from_disk_named(render, out, path, path);
+    return render_texture_add_from_disk_named(render, out, path, path_get_name_from_path(path));
 }
 void run_func(void* context)
 {
@@ -2521,7 +2514,7 @@ void run_func(void* context)
     Render_Material_Ptr material_shiny_debug = {0};
     Render_Material_Ptr material_mat_floor = {0};
 
-    TEST(render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl")).code == 0);
+    TEST(render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl")));
     
     Render_Memory_Budget render_mem_budget = {0};
     render_mem_budget.geometry = GIBI_BYTE / 2;
@@ -2559,16 +2552,17 @@ void run_func(void* context)
             LOG_INFO("APP", "Refreshing shaders");
             PERF_COUNTER_START(shader_load_counter);
             
-            Error error = {0};
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.glsl"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.glsl"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.glsl"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.glsl"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.glsl"));
-            error = ERROR_AND(error) render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.glsl"));
+            bool shader_state = true;
+            shader_state = shader_state && render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.glsl"));
 
-            ASSERT(error_is_ok(error));
+            ASSERT(shader_state);
+
             {
                 GLint max_textures = 0;
                 glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_textures);
@@ -2600,16 +2594,16 @@ void run_func(void* context)
             unit_quad = shapes_make_unit_quad();
             PERF_COUNTER_END(art_counter_shapes);
 
-            Error error = {0};
+            bool texture_state = true;
             render_uv_sphere = render_geometry_add_shape(&render, uv_sphere, STRING("uv_sphere"));
             render_cube_sphere = render_geometry_add_shape(&render, cube_sphere, STRING("cube_sphere"));
             render_screen_quad = render_geometry_add_shape(&render, screen_quad, STRING("screen_quad"));
             render_cube = render_geometry_add_shape(&render, unit_cube, STRING("unit_cube"));
             render_quad = render_geometry_add_shape(&render, unit_quad, STRING("unit_cube"));
             
-            error = ERROR_AND(error) render_texture_add_from_disk(&render, &image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"));
-            error = ERROR_AND(error) render_texture_add_from_disk(&render, &image_floor, STRING("resources/floor.jpg"));
-            error = ERROR_AND(error) render_texture_add_from_disk(&render, &image_debug, STRING("resources/debug.png"));
+            texture_state = texture_state && render_texture_add_from_disk(&render, &image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"));
+            texture_state = texture_state && render_texture_add_from_disk(&render, &image_floor, STRING("resources/floor.jpg"));
+            texture_state = texture_state && render_texture_add_from_disk(&render, &image_debug, STRING("resources/debug.png"));
 
             material_shiny_debug = render_material_add(&render, STRING("material_shiny_debug"));
             material_mat_floor = render_material_add(&render, STRING("material_mat_floor"));
@@ -2631,7 +2625,7 @@ void run_func(void* context)
             render_texture_manager_generate_mips(&render.texture_manager);
 
             PERF_COUNTER_END(art_load_counter);
-            ASSERT(error_is_ok(error));
+            ASSERT(texture_state);
         }
 
         if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
@@ -2790,8 +2784,11 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 #include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
+#include "lib/log_list.h"
+
 void run_test_func(void* context)
 {
+    //Arena scratch = scratch_arena_acquire();
     (void) context;
     test_all(1.0);
 }

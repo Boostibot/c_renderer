@@ -137,9 +137,6 @@
     <ClInclude Include="lib\logger_file.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\logger_memory.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="lib\math.h">
       <Filter>lib</Filter>
     </ClInclude>
@@ -229,6 +226,9 @@
     </ClInclude>
     <ClInclude Include="mdump2.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\log_list.h">
+      <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
