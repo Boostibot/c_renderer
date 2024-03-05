@@ -152,7 +152,7 @@ void _mdump_check_overwrites(Mdump_Blocks* blocks)
     #ifdef DO_ASSERTS_SLOW
         for(isize i = curr_block->used_to; i < curr_block->size; i++)
         {
-            ASSERT_SLOW_MSG(curr_block->data[i] == MDUMP_UNUSED_MEMORY_PATTERN, 
+            ASSERT_SLOW(curr_block->data[i] == MDUMP_UNUSED_MEMORY_PATTERN, 
                 "Unused memory was found to be corrupeted. Check all functions for overrides");
         }
     #endif // DO_ASSERTS_SLOW
@@ -693,7 +693,7 @@ EXPORT void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func inf
 {
     Mdump_Type_Member out = {0};
     Allocator* alloc = parent->members.allocator;
-    ASSERT_MSG(alloc, "Parent must already be filled!");
+    ASSERT(alloc, "Parent must already be filled!");
 
     out.name = builder_from_cstring(name, alloc);
     out.offset = offset;

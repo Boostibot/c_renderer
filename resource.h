@@ -179,13 +179,13 @@ EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_
         return out;
 
     Hash_Index_Entry entry = manager->id_hash.entries[found];
-    ASSERT_MSG(entry.hash == (u64) id, "hash ptr has no hash collisions on 64 bit number!");
+    ASSERT(entry.hash == (u64) id, "hash ptr has no hash collisions on 64 bit number!");
 
     Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
     out.id = id;
     out.ptr = ptr;
 
-    ASSERT_MSG(ptr->id == id, "the hash needs to be kept up to date");
+    ASSERT(ptr->id == id, "the hash needs to be kept up to date");
     if(prev_found_and_finished_at)
         *prev_found_and_finished_at = found;
     return out;
@@ -338,7 +338,7 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
 EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
 {
     if(removed_data)
-        ASSERT_MSG(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", removed_data_size, manager->type_size);
+        ASSERT(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", removed_data_size, manager->type_size);
 
     //@TODO: This adding and especially removing from hashes is kinda a big deal. Can we make it more compact? 
     //       Can we have like a bloom filter or something? -> NO THAT ONLY MAKES THINGS WORSE!
@@ -372,7 +372,7 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
             by_name = resource_get_by_name(manager, name, &name_found);
             if(resource_is_valid(by_name) == false)
             {
-                ASSERT_MSG(false, "Must never happen");
+                ASSERT(false, "Must never happen");
                 break;
             }
         }
@@ -382,7 +382,7 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
             by_path = resource_get_by_path(manager, path, &path_found);
             if(resource_is_valid(by_path) == false)
             {
-                ASSERT_MSG(false, "Must never happen");
+                ASSERT(false, "Must never happen");
                 break;
             }
         }

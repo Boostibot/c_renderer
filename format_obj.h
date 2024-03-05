@@ -1326,7 +1326,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                     }
                     
 
-                    ASSERT_MSG(arg_i > 0, "will make progress");
+                    ASSERT(arg_i > 0, "will make progress");
                     i += arg_i;
                 }
 

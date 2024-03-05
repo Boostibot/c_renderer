@@ -293,8 +293,9 @@ int main()
     Arena_Stack* arena_stack = allocator_get_scratch_arena_stack();
     arena_init(arena_stack, 0, 0, "scratch arena");
 
+    File_Logger file_logger = {0};
     //error_system_init(&static_allocator.allocator);
-    file_logger_init_use(&global_logger, &malloc_allocator.allocator, "logs");
+    file_logger_init_use(&file_logger, &malloc_allocator.allocator, "logs");
 
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
@@ -318,7 +319,7 @@ int main()
  
     glfwInitAllocator(&allocator);
     glfwSetErrorCallback(glfw_error_func);
-    TEST_MSG(glfwInit(), "Failed to init glfw");
+    TEST(glfwInit(), "Failed to init glfw");
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
@@ -337,7 +338,7 @@ int main()
     }
  
     GLFWwindow* window = glfwCreateWindow(1600, 900, "Render", NULL, NULL);
-    TEST_MSG(window != NULL, "Failed to make glfw window");
+    TEST(window != NULL, "Failed to make glfw window");
 
     App_State app = {0};
     glfwSetWindowUserPointer(window, &app);
@@ -355,7 +356,7 @@ int main()
 
     debug_allocator_deinit(&debug_alloc);
     
-    file_logger_deinit(&global_logger);
+    file_logger_deinit(&file_logger);
     //error_system_deinit();
 
     //@TODO: fix
@@ -601,7 +602,7 @@ bool gl_texture_array_init(GL_Texture_Array* partially_filled, void* data_or_nul
     }
 
     
-    ASSERT_MSG(partially_filled->layer_count > 0 && partially_filled->width > 0 && partially_filled->height > 0, "No default!");
+    ASSERT(partially_filled->layer_count > 0 && partially_filled->width > 0 && partially_filled->height > 0, "No default!");
 
     if(partially_filled->mip_level_count == 0) partially_filled->mip_level_count = 1;
     if(partially_filled->min_filter == 0) partially_filled->min_filter = GL_LINEAR_MIPMAP_LINEAR;
@@ -1019,7 +1020,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
                 }
             }
 
-            ASSERT_MSG(out.layer != -1, "The resolution->used_layers must be wrong!");
+            ASSERT(out.layer != -1, "The resolution->used_layers must be wrong!");
             state = true;
         }
     }
@@ -2144,7 +2145,7 @@ void render_render(Render* render, Camera camera)
                     else
                     {
                         i32 resolution_index = texture->layer.resolution_index;
-                        ASSERT_MSG(resolution_index > 0, "valid textures must have valid res index. index %d", resolution_index);
+                        ASSERT(resolution_index > 0, "valid textures must have valid res index. index %d", resolution_index);
 
                         //We use dense hashtable to acelaret the search
                         // Start at the has for the texture (its id can be used as hash)
@@ -2366,7 +2367,7 @@ void render_render(Render* render, Camera camera)
 
         glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->size, 0);
 
-        ASSERT_MSG(k > j, "Must make progress k:%i > i:%i", k, j);
+        ASSERT(k > j, "Must make progress k:%i > i:%i", k, j);
         j = k;
     }
 

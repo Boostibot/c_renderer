@@ -176,7 +176,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         EXPORT Type_Name* type_name##_get_with_info(Id id, Resource_Info** info) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), id); \
             if(info) *info = found.ptr; \
-            ASSERT_MSG(resource_is_valid(found) == false || found.ptr->type_enum == TYPE_ENUM, "Inconsistent type!"); \
+            ASSERT(resource_is_valid(found) == false || found.ptr->type_enum == TYPE_ENUM, "Inconsistent type!"); \
             return (Type_Name*) (found.ptr ? found.ptr->data : NULL); \
         } \
         EXPORT Type_Name*   type_name##_get(Id id) { \
@@ -184,7 +184,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         } \
         EXPORT Type_Name* type_name##_get_sure(Id id) { \
             Type_Name* gotten = type_name##_get(id); \
-            TEST_MSG(gotten != NULL, "Didnt find the resource with id %lli", (lli) id); \
+            TEST(gotten != NULL, "Didnt find the resource with id %lli", (lli) id); \
             return gotten; \
         } \
         EXPORT Id type_name##_find_by_name(Hash_String name, isize* prev) { \
@@ -426,7 +426,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
 
     void resources_check_reloads()
     {
-        ASSERT_MSG(false, "@TODO");
+        ASSERT(false, "@TODO");
     }
 
     void resources_deinit(Resources* resources)
