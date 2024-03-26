@@ -4,6 +4,12 @@
         "utility": "c",
         "xutility": "c",
         "algorithm": "c",
-        "xmemory": "cpp"
+        "xmemory": "cpp",
+        "chrono": "cpp",
+        "optional": "cpp",
+        "system_error": "cpp",
+        "type_traits": "cpp",
+        "xlocmon": "cpp",
+        "xtr1common": "cpp"
     }
 }

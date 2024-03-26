@@ -43,6 +43,7 @@ typedef struct Map_Info {
     f32 contrast;       //default 0
 
     bool is_enabled; //whether or not to use this texture. Maybe [0, 1] float?
+    bool _padding[3];
 } Map_Info;
 
 // ========================= Descriptions =========================
@@ -55,6 +56,7 @@ typedef struct Map_Info {
 typedef struct Map_Description {
     String_Builder path;
     Map_Info info;
+    u32 _padding;
 } Map_Description;
 
 typedef union Cubemap_Description {
@@ -143,6 +145,7 @@ typedef struct Triangle_Mesh_Group_Description {
 
     i32 triangles_from;
     i32 triangles_to;
+    u32 _padding;
 } Triangle_Mesh_Group_Description;
 
 DEFINE_ARRAY_TYPE(Material_Description, Material_Description_Array);

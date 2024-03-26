@@ -99,6 +99,7 @@ typedef struct Mdump_Type_Info {
     u32 align;
     u32 flags;
 
+    bool _padding[11];
     bool is_referenced_only;
     Mdump_Type_Member_Array members;
 } Mdump_Type_Info;
@@ -317,38 +318,38 @@ void mdump_types_init(Mdump_Types* types, Allocator* alloc)
         types->allocator = allocator_get_default();
     
     typedef struct Builtin_Type_Info {
-        Mdump_Type type;
         const char* name;
+        Mdump_Type type;
         u32 size; 
         u32 align;
         u32 flags;
     } Builtin_Type_Info;
 
     Builtin_Type_Info infos[] = {
-        {MDUMP_TYPE_NONE, "none", 0, 1}, 
-        {MDUMP_TYPE_BLANK, "blank", 0, 1}, 
+        {"none", MDUMP_TYPE_NONE, 0, 1}, 
+        {"blank", MDUMP_TYPE_BLANK, 0, 1}, 
         
-        {MDUMP_TYPE_STRING, "string", sizeof(Mdump_String), MDUMP_ARRAY_ALIGN}, 
-        {MDUMP_TYPE_LONG_STRING, "long_string", sizeof(Mdump_Long_String), MDUMP_ARRAY_ALIGN}, 
+        {"string", MDUMP_TYPE_STRING, sizeof(Mdump_String), MDUMP_ARRAY_ALIGN}, 
+        {"long_string", MDUMP_TYPE_LONG_STRING, sizeof(Mdump_Long_String), MDUMP_ARRAY_ALIGN}, 
 
-        {MDUMP_TYPE_CHAR, "char", 1}, 
-        {MDUMP_TYPE_BOOL, "bool", 1}, 
-        {MDUMP_TYPE_RUNE, "rune", 4}, 
+        {"char", MDUMP_TYPE_CHAR, 1}, 
+        {"bool", MDUMP_TYPE_BOOL, 1}, 
+        {"rune", MDUMP_TYPE_RUNE, 4}, 
 
-        {MDUMP_TYPE_U8, "u8", 1}, 
-        {MDUMP_TYPE_U16, "u16", 2}, 
-        {MDUMP_TYPE_U32, "u32", 4}, 
-        {MDUMP_TYPE_U64, "u64", 8},
+        {"u8", MDUMP_TYPE_U8, 1}, 
+        {"u16", MDUMP_TYPE_U16, 2}, 
+        {"u32", MDUMP_TYPE_U32, 4}, 
+        {"u64", MDUMP_TYPE_U64, 8},
         
-        {MDUMP_TYPE_I8, "i8", 1}, 
-        {MDUMP_TYPE_I16, "i16", 2}, 
-        {MDUMP_TYPE_I32, "i32", 4}, 
-        {MDUMP_TYPE_I64, "i64", 8},
+        {"i8", MDUMP_TYPE_I8, 1}, 
+        {"i16", MDUMP_TYPE_I16, 2}, 
+        {"i32", MDUMP_TYPE_I32, 4}, 
+        {"i64", MDUMP_TYPE_I64, 8},
         
-        {MDUMP_TYPE_F8, "f8", 1}, 
-        {MDUMP_TYPE_F16, "f16", 2}, 
-        {MDUMP_TYPE_F32, "f32", 4}, 
-        {MDUMP_TYPE_F64, "f64", 8},
+        {"f8", MDUMP_TYPE_F8, 1}, 
+        {"f16", MDUMP_TYPE_F16, 2}, 
+        {"f32", MDUMP_TYPE_F32, 4}, 
+        {"f64", MDUMP_TYPE_F64, 8},
     };
     
     array_resize(&types->types, MDUMP_TYPE_MAX_RESERVED);
@@ -357,7 +358,7 @@ void mdump_types_init(Mdump_Types* types, Allocator* alloc)
         Builtin_Type_Info builtin_info = infos[i];
         Mdump_Type_Info* info = &types->types.data[builtin_info.type];
 
-        info->type_name = builder_from_cstring(builtin_info.name, types->allocator);
+        info->type_name = builder_from_cstring(types->allocator, builtin_info.name);
         info->size = builtin_info.size;
         info->align = builtin_info.align;
         info->flags = builtin_info.flags;
@@ -531,7 +532,7 @@ Mdump_Type_Info mdump_get_builtin_type_info(Mdump_Types* types, Mdump_Type type)
 {
     Mdump_Type_Info* info = mdump_get_type_info(types, type);
     Mdump_Type_Info out = {0};
-    out.type_name = builder_from_string(info->type_name.string, types->allocator);
+    out.type_name = builder_from_string(types->allocator, info->type_name.string);
     out.size = info->size;
     out.align = info->align;
     out.flags = info->flags;
@@ -629,7 +630,7 @@ EXPORT bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory, M
     }
     else
     {
-        isize chunk_count = DIV_ROUND_UP(in_memory->size, INT32_MAX);
+        isize chunk_count = DIV_CEIL(in_memory->size, INT32_MAX);
 
         *in_file = mdump_array_allocate(blocks, chunk_count, sizeof(Mdump_String), MDUMP_ARRAY_ALIGN);
         Mdump_String* chunks = MDUMP_GET_ARRAY_SURE(blocks, *in_file, Mdump_String);
@@ -682,7 +683,7 @@ EXPORT Mdump_Type_Info mdump_type_info_make(Mdump_Types* types, const char* name
     Mdump_Type_Info out = {0};
     array_init(&out.members, types->allocator);
 
-    out.type_name = builder_from_cstring(name, types->allocator);
+    out.type_name = builder_from_cstring(types->allocator, name);
     out.align = align;
     out.size = size;
     out.flags = flags;
@@ -695,14 +696,14 @@ EXPORT void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func inf
     Allocator* alloc = parent->members.allocator;
     ASSERT(alloc, "Parent must already be filled!");
 
-    out.name = builder_from_cstring(name, alloc);
+    out.name = builder_from_cstring(alloc, name);
     out.offset = offset;
     out.size = size;
     out.flags = flags;
     out.info_func = info_func;
 
     if(default_value.size != 0)
-        out.default_value = builder_from_string(default_value, alloc);
+        out.default_value = builder_from_string(alloc, default_value);
 
     array_push(&parent->members, out);
 }

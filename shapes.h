@@ -27,6 +27,7 @@ typedef struct Shape {
     Vertex_Array vertices;
     Triangle_Index_Array triangles;
     Winding_Order winding_order;
+    u32 _padding;
 } Shape;
 
 typedef struct Shape_Assembly {
@@ -34,6 +35,7 @@ typedef struct Shape_Assembly {
     Triangle_Index_Array triangles;
     Hash_Index vertices_hash;
     Winding_Order winding_order;
+    u32 _padding;
 } Shape_Assembly;
 
 

@@ -448,7 +448,7 @@ static void stbiw__write_pixel(stbi__write_context *s, int rgb_dir, int comp, in
       stbiw__write1(s, d[comp - 1]);
 }
 
-static void stbiw__write_pixels(stbi__write_context *s, int rgb_dir, int vdir, int x, int y, int comp, void *data, int write_alpha, int scanline_pad, int expand_mono)
+static void stbiw__write_pixels(stbi__write_context *s, int rgb_dir, int vdir, int x, int y, int comp, void *data, int write_alpha, int scanline_padding, int expand_mono)
 {
    stbiw_uint32 zero = 0;
    int i,j, j_end;
@@ -471,7 +471,7 @@ static void stbiw__write_pixels(stbi__write_context *s, int rgb_dir, int vdir, i
          stbiw__write_pixel(s, rgb_dir, comp, write_alpha, expand_mono, d);
       }
       stbiw__write_flush(s);
-      s->func(s->context, &zero, scanline_pad);
+      s->func(s->context, &zero, scanline_padding);
    }
 }
 

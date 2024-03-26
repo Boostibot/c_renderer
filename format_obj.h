@@ -145,7 +145,9 @@ typedef struct Format_Mtl_Material {
     bool was_set_map_pbr_metallic;           
     bool was_set_map_pbr_sheen;              
     bool was_set_map_pbr_non_standard_ambient_occlusion;  
-    bool was_set_map_pbr_rma;                 
+    bool was_set_map_pbr_rma;    
+    
+    bool _padding[2];
 } Format_Mtl_Material;
 
 typedef struct Format_Obj_Group {
@@ -259,8 +261,9 @@ typedef struct Format_Obj_Mtl_Error
 {
     isize index;
     i32 line;
-    bool unimplemented; //wheter the error is due to it being unimplemented
     Format_Obj_Mtl_Error_Statement statement;
+    bool unimplemented; //wheter the error is due to it being unimplemented
+    bool _padding[7];
 } Format_Obj_Mtl_Error;
 
 #endif
@@ -465,7 +468,7 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
     
     //Add new default group
     String_Builder_Array def_groups = {0};
-    array_push(&def_groups, builder_from_cstring("default", NULL));
+    array_push(&def_groups, builder_from_cstring(NULL, "default"));
 
     return _obj_parser_add_group(out, active_object, &def_groups, vertex_index);
 }
@@ -735,7 +738,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         if(match_whitespace_separated(line, &line_index, &group_from, &group_to))
                         {
                             String group = string_range(line, group_from, group_to);
-                            array_push(&groups, builder_from_string(group, default_alloc));
+                            array_push(&groups, builder_from_string(default_alloc, group));
                         }
                         else
                         {
@@ -773,7 +776,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         && match_whitespace_separated(line, &line_index, &from_index, &to_index))
                     {
                         String material_lib = string_range(line, from_index, to_index);
-                        array_push(&out->material_files, builder_from_string(material_lib, NULL));
+                        array_push(&out->material_files, builder_from_string(NULL, material_lib));
                     }
                     else
                     {

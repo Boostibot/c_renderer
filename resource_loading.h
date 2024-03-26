@@ -62,7 +62,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
     for(isize i = 0; i < model.material_files.size; i++)
     {
         String material_file = model.material_files.data[i].string;
-        array_push(&description->material_files, builder_from_string(material_file, NULL));
+        array_push(&description->material_files, builder_from_string(NULL, material_file));
     }
 
     //Try to guess the final needed size
@@ -343,8 +343,10 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
         Id handle;
         Map_Description* description;
         bool is_cubemap;
+        bool _padding1[3];
         i32 map_or_cubemap_i; 
         i32 face_i;
+        u32 _padding2;
     } Map_Or_Cubemap_Handles;
 
     Map_Or_Cubemap_Handles maps_or_cubemaps[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {0};
@@ -379,7 +381,7 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
             continue;
         
         String item_path = map_or_cubemap.description->path.string;
-        String dir_path = path_get_file_directory(description.path.string);
+        String dir_path = path_strip_to_containing_directory(path_parse(description.path.string)).string;
 
         //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
         String full_item_path = path_get_full_ephemeral_from(item_path, dir_path);
@@ -591,7 +593,7 @@ EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                 Triangle_Mesh_Description description = {0};
                 process_obj_triangle_mesh(out_assembly, &description, model);
 
-                String dir_path = path_get_file_directory(full_path.string);
+                String dir_path = path_strip_to_containing_directory(path_parse(full_path.string)).string;
                 for(isize i = 0; i < description.material_files.size; i++)
                 {
                     String file = description.material_files.data[i].string;

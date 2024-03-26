@@ -1,7 +1,7 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
 #pragma warning(disable:4702) //Dissable "unrelachable code"
-#pragma warning(disable:4820) //Dissable "Padding added to struct" 
+#pragma warning(error :4820) //Dissable "Padding added to struct" 
 #pragma warning(disable:4324) //Dissable "structure was padded due to alignment specifier" (when using explicti modifer to align struct)
 #pragma warning(disable:4255) //Dissable "no function prototype given: converting '()' to '(void)"  
 #pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
@@ -20,7 +20,7 @@
 #include "lib/platform.h"
 #include "lib/allocator.h"
 #include "lib/hash_index.h"
-#include "lib/logger_file.h"
+#include "lib/log_file.h"
 #include "lib/file.h"
 #include "lib/allocator_debug.h"
 #include "lib/allocator_malloc.h"
@@ -72,11 +72,13 @@ typedef struct App_State
 
     Vec3 active_object_pos;
     Vec3 player_pos;
+    f32 _padding1;
 
     f64 delta_time;
     f64 last_frame_timepoint;
 
     f32 zoom_target_fov;
+    f32 _padding2;
     f64 zoom_target_time;
     f32 zoom_change_per_sec;
 
@@ -99,6 +101,7 @@ typedef struct App_State
     Controls controls_prev;
     Control_Mapping control_mappings[CONTROL_MAPPING_SETS];
     bool key_states[GLFW_KEY_LAST + 1];
+    bool _padding3[3];
 } App_State;
 
 
@@ -746,6 +749,7 @@ typedef struct Render_Texture_Layer_Info {
     i32 used_width;
     i32 used_height;
     bool is_used;
+    bool _padding[7];
 } Render_Texture_Layer_Info;
 
 DEFINE_ARRAY_TYPE(Render_Texture_Layer_Info, Render_Texture_Layer_Info_Array);
@@ -1090,6 +1094,7 @@ typedef struct Vertex_Attribute {
     i32 index;
     i32 instance_divisor; //if 0 assume not instanced
     Pixel_Type type;
+    u32 _padding;
 } Vertex_Attribute;
 
 //i32 vertex_size;
@@ -1252,8 +1257,9 @@ typedef struct GL_Buffer {
     GLuint handle;
     i32 item_size;
     i32 item_count;
-    isize byte_size;
     bool is_static_draw;
+    bool _padding[3];
+    isize byte_size;
 } GL_Buffer;
 
 GL_Buffer gl_buffer_make(isize item_size, isize item_count, const void* data_or_null, bool is_static_draw)
@@ -1286,17 +1292,6 @@ typedef struct Render_Geometry_Manager {
 
     Allocator* allocator;
 } Render_Geometry_Manager;
-
-String format_render_info_ephemeral(Render_Info info)
-{
-    Platform_Calendar_Time c = platform_local_calendar_time_from_epoch_time(info.created_etime);
-    return format_ephemeral("%s " TIME_FMT " (gen: %i)", info.name.data, TIME_PRINT(c), (int) info.generation);
-}
-
-void log_render_info(const char* module, Log_Filter type, Render_Info info)
-{
-    LOG(module, type, "%s", format_render_info_ephemeral(info).data);
-}
 
 void render_geometry_manager_init(Render_Geometry_Manager* manager, Allocator* alloc, GL_Buffer* instance_buffer, isize memory_limit)
 {
@@ -1445,6 +1440,7 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
 typedef struct Render_Geometry {
     Render_Info info;
     Render_Geometry_Batch_Index group;
+    u32 _padding;
 } Render_Geometry;
 
 typedef struct Render_Texture {
@@ -1457,6 +1453,7 @@ typedef struct Render_Material {
     Render_Info info;
     Render_Texture_Ptr textures[MAX_TEXTURES_PER_MATERIAL];
     u8 used_textures;
+    u8 _padding[3];
 
     Vec3 diffuse_color;
     Vec3 specular_color;
@@ -1565,6 +1562,7 @@ enum {MAX_TEXTURE_SLOTS = 32};
 //Each draw must track where it bound its textures to
 typedef struct Render_Per_Draw {
     i32 instance_from;
+    u32 _padding;
     Render_Material* material;
     Render_Geometry* geometry;
 
@@ -1589,7 +1587,7 @@ typedef struct  {
     ATTRIBUTE_ALIGNED(16) Mat4 model;
 } Blinn_Phong_Per_Instance;
 
-typedef struct  {
+typedef struct Blinn_Phong_Per_Draw {
     ATTRIBUTE_ALIGNED(16) Vec4 diffuse_color;
     ATTRIBUTE_ALIGNED(16) Vec4 ambient_color;
     ATTRIBUTE_ALIGNED(16) Vec4 specular_color;
@@ -1599,14 +1597,15 @@ typedef struct  {
     ATTRIBUTE_ALIGNED(4) int map_specular; 
     ATTRIBUTE_ALIGNED(4) int map_normal; 
     ATTRIBUTE_ALIGNED(4) int map_ambient; 
+    ATTRIBUTE_ALIGNED(4) int _padding[2]; 
 } Blinn_Phong_Per_Draw;
 
-typedef struct {
+typedef struct Blinn_Phong_Light {
     ATTRIBUTE_ALIGNED(16) Vec4 pos_and_range;
     ATTRIBUTE_ALIGNED(16) Vec4 color_and_radius;
 } Blinn_Phong_Light;
 
-typedef struct {
+typedef struct Blinn_Phong_Per_Batch {
     ATTRIBUTE_ALIGNED(16) Mat4 projection;
     ATTRIBUTE_ALIGNED(16) Mat4 view;
     ATTRIBUTE_ALIGNED(16) Vec4 view_pos;
@@ -2787,9 +2786,12 @@ void error_func(void* context, Platform_Sandbox_Error error)
 #include "lib/_test_all.h"
 #include "lib/log_list.h"
 
+#define JOT_ALL_TEST
+#include "lib/list.h"
+#include "lib/path.h"
+
 void run_test_func(void* context)
 {
-    //Arena scratch = scratch_arena_acquire();
     (void) context;
     test_all(1.0);
 }

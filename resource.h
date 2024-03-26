@@ -39,6 +39,7 @@ typedef struct Resource_Info {
     i32 reference_count;
     u32 storage_index;
     u32 type_enum; //some enum value used for debugging
+    u32 _padding;
 
     i64 creation_etime;
     i64 death_etime;
@@ -69,6 +70,7 @@ typedef struct Resource_Params {
     i64 file_modified_etime;
 
     bool was_loaded;
+    bool _padding[7];
 } Resource_Params;
 
 EXPORT Resource_Params resource_params_make_simple(String name, String path);
@@ -300,8 +302,8 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     info->reference_count = 1;
     info->storage_index = (u32) index;
     Allocator* alloc = manager->storage.allocator;
-    info->path = builder_from_string(params.path, alloc);
-    info->name = builder_from_string(params.name, alloc);
+    info->path = builder_from_string(alloc, params.path);
+    info->name = builder_from_string(alloc, params.name);
     platform_capture_call_stack(info->callstack.stack_frames, STATIC_ARRAY_SIZE(info->callstack.stack_frames), 1);
     info->creation_etime = now;
     info->modified_etime = now;

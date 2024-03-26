@@ -49,6 +49,7 @@ typedef struct Shader {
 typedef struct Map {
     Id image;
     Map_Info info;
+    u32 _padding;
 } Map;
 
 typedef struct Cubemap  {    
@@ -90,6 +91,7 @@ typedef struct Triangle_Mesh_Group {
 
     i32 triangles_from;
     i32 triangles_to;
+    u32 _padding;
 } Triangle_Mesh_Group;
 
 DEFINE_ARRAY_TYPE(Material, Material_Array);

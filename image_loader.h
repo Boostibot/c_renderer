@@ -119,7 +119,7 @@ EXPORT bool image_read_from_file(Image* image, String path, isize desired_channe
     Arena arena = scratch_arena_acquire();
     {
         Log_List list = {0};
-        log_capture(&list, &arena.allocator);
+        log_list_init_capture(&list, &arena.allocator);
             String_Builder file_content = {&arena.allocator};
             state = state && file_read_entire(path, &file_content);
             state = state && image_read_from_memory(image, file_content.string, desired_channels, format, flags);
@@ -239,7 +239,7 @@ EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_Fil
     String_Builder formatted = {&arena.allocator};
 
     Log_List list = {0};
-    log_capture(&list, &arena.allocator);
+    log_list_init_capture(&list, &arena.allocator);
         bool state = image_write_to_memory(image, &formatted, file_format);
         state = state && file_write_entire(path, formatted.string);
     log_capture_end(&list);
