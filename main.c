@@ -1,15 +1,18 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
+#pragma warning(error:4820)   //error on "Padding added to struct" 
+#pragma warning(error:4324)   //error "structure was padded due to alignment specifier" (when using explicti modifer to align struct)
 #pragma warning(disable:4464) //Dissable "relative include path contains '..'"
 #pragma warning(disable:4702) //Dissable "unrelachable code"
-#pragma warning(error :4820) //Dissable "Padding added to struct" 
-#pragma warning(disable:4324) //Dissable "structure was padded due to alignment specifier" (when using explicti modifer to align struct)
 #pragma warning(disable:4255) //Dissable "no function prototype given: converting '()' to '(void)"  
 #pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
 #pragma warning(disable:4201) //Dissable "nonstandard extension used: nameless struct/union" 
 #pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
-#pragma warning(disable:4324) //Dissable "structure was padded due to alignment specifier"
+#pragma warning(disable:4996) //Dissable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
+
+
 
 #define JOT_ALL_IMPL
+#define JOT_ALL_TEST
 #define RUN_TESTS
 //#define RUN_JUST_TESTS
 
@@ -281,7 +284,7 @@ void error_func(void* context, Platform_Sandbox_Error error);
 
 int main()
 {
-    platform_init(NULL);
+    platform_init();
 
     Malloc_Allocator static_allocator = {0};
     malloc_allocator_init(&static_allocator, "static allocator");
