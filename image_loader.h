@@ -113,7 +113,7 @@ EXPORT bool image_read_from_memory(Image* image, String data, isize desired_chan
 #include "lib/log_list.h"
 EXPORT bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
-    LOG_INFO("ASSET", "Loading image '%s'", string_escape_ephemeral(path));
+    LOG_INFO("ASSET", "Loading image '%s'", cstring_ephemeral(path));
 
     bool state = true;
     Arena arena = scratch_arena_acquire();
@@ -126,7 +126,7 @@ EXPORT bool image_read_from_file(Image* image, String path, isize desired_channe
         log_capture_end(&list);
         
         if(state == false)
-            LOG_ERROR_CHILD("ASSET", "load error", list.first, "Failed to load an image: '%s'" , string_escape_ephemeral(path));
+            LOG_ERROR_CHILD("ASSET", "load error", list.first, "Failed to load an image: '%s'" , cstring_ephemeral(path));
     }
     arena_release(&arena);
     return state;
@@ -245,7 +245,7 @@ EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_Fil
     log_capture_end(&list);
 
     if(state == false)
-        LOG_ERROR_CHILD("ASSET", "write error", list.first, "Couldnt write an image to path '%s'", string_escape_ephemeral(path));
+        LOG_ERROR_CHILD("ASSET", "write error", list.first, "Couldnt write an image to path '%s'", cstring_ephemeral(path));
 
     arena_release(&arena);
     return state;

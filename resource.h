@@ -58,7 +58,7 @@ typedef struct Resource_Ptr {
     Resource_Info* ptr;
 } Resource_Ptr;
 
-DEFINE_ARRAY_TYPE(Resource_Ptr, Resource_Ptr_Array);
+typedef Array(Resource_Ptr) Resource_Ptr_Array;
 
 typedef struct Resource_Params {
     Id id;  //if 0 generates a new one
@@ -340,7 +340,7 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
 EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
 {
     if(removed_data)
-        ASSERT(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", removed_data_size, manager->type_size);
+        ASSERT(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", (lli) removed_data_size, (lli) manager->type_size);
 
     //@TODO: This adding and especially removing from hashes is kinda a big deal. Can we make it more compact? 
     //       Can we have like a bloom filter or something? -> NO THAT ONLY MAKES THINGS WORSE!

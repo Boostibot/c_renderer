@@ -87,11 +87,11 @@ typedef struct {
     u8* data;
 } Mdump_Block;
 
-DEFINE_ARRAY_TYPE(Mdump_Block, Mdump_Block_Array);
+typedef Array(Mdump_Block) Mdump_Block_Array;
 
 typedef struct Mdump_Type_Member Mdump_Type_Member;
 
-DEFINE_ARRAY_TYPE(Mdump_Type_Member, Mdump_Type_Member_Array);
+typedef Array(Mdump_Type_Member) Mdump_Type_Member_Array;
 
 typedef struct Mdump_Type_Info {
     String_Builder type_name;
@@ -104,7 +104,7 @@ typedef struct Mdump_Type_Info {
     Mdump_Type_Member_Array members;
 } Mdump_Type_Info;
 
-DEFINE_ARRAY_TYPE(Mdump_Type_Info, Mdump_Type_Info_Array);
+typedef Array(Mdump_Type_Info) Mdump_Type_Info_Array;
 
 typedef struct {
     Allocator* allocator;
@@ -430,28 +430,28 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
             if(registered_type == MDUMP_TYPE_NONE)
             {
                 LOG_ERROR("mdump", "mdump_register_type error: struct member with invlaid dump function\n"
-                    "type: %s member: %s", info.type_name, member->name);
+                    "type: %s member: %s", info.type_name.data, member->name.data);
                 break;
             }
 
             if(member->offset + member->size > info.size)
             {
                 LOG_ERROR("mdump", "mdump_register_type error: struct member outside struct memory\n"
-                    "type: %s member: %s", info.type_name, member->name);
+                    "type: %s member: %s", info.type_name.data, member->name.data);
                 break;
             }
 
             if(member_size != member->size)
             {
                 LOG_ERROR("mdump", "mdump_register_type error: struct member size does not match its registered size\n"
-                    "type: %s member: %s", info.type_name, member->name);
+                    "type: %s member: %s", info.type_name.data, member->name.data);
                 break;
             }
         
             if(member->offset % member_align != 0 || is_power_of_two(member_align) == false)
             {
                 LOG_ERROR("mdump", "mdump_register_type error: struct member is missaligned\n"
-                    "type: %s member: %s", info.type_name, member->name);
+                    "type: %s member: %s", info.type_name.data, member->name.data);
                 break;
             }
 
@@ -477,28 +477,28 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
     if(builder_is_equal(found_info->type_name, info.type_name) == false) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type name does not match found type name\n"
-            "type: "STRING_FMT" found type: "STRING_FMT, found_info->type_name, info.type_name);
+            "type: "STRING_FMT" found type: "STRING_FMT, STRING_PRINT(found_info->type_name), STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
 
     if(found_info->size != info.size) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type size does not match one found\n"
-            "type: "STRING_FMT, info.type_name);
+            "type: "STRING_FMT, STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
     
     if(found_info->members.size != info.members.size) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type memebers do not match ones found\n"
-            "type: "STRING_FMT, info.type_name);
+            "type: "STRING_FMT, STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
     
     if(found_info->flags != info.flags) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type flags do not match ones found\n"
-            "type: "STRING_FMT, info.type_name);
+            "type: "STRING_FMT, STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
             
@@ -512,7 +512,7 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
         if(found_member->offset != member->offset || found_member->flags != member->flags ||  member->size != member_info.size || builder_is_equal(found_member->name, member->name) == false)
         {
             LOG_ERROR("mdump", "mdump_validate_type_against error: type memebers do not match ones found\n"
-                "type: %s", info.type_name);
+                "type: "STRING_FMT, STRING_PRINT(info.type_name));
             return MDUMP_TYPE_NONE;
         }
 
@@ -520,7 +520,7 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
         {
             LOG_ERROR("mdump", "mdump_validate_type_against error: type default value does not match the one found.\n"
                 "Not that default value can only be used for types that dont contain pointers"
-                "type: %s", info.type_name);
+                "type: "STRING_FMT, STRING_PRINT(info.type_name));
             return MDUMP_TYPE_NONE;
         }
     }
@@ -667,7 +667,7 @@ bool mdump_array(Mdump_Blocks* blocks, void* array, isize item_size, Mdump_Array
     {
        isize item_count = 0;
        addr = mdump_get_array(blocks, *in_file, item_size, &item_count);
-       _array_resize(array, item_size, item_count, true);
+       _array_resize((Generic_Array*) array, item_size, item_count, true);
        state = item_count == in_file->size;
     }
 

@@ -8,9 +8,9 @@
 #ifndef VEC_ARRAY_DEFINED
 
     #define VEC_ARRAY_DEFINED
-    DEFINE_ARRAY_TYPE(Vec2, Vec2_Array);
-    DEFINE_ARRAY_TYPE(Vec3, Vec3_Array);
-    DEFINE_ARRAY_TYPE(Vec4, Vec4_Array);
+    typedef Array(Vec2) Vec2_Array;
+    typedef Array(Vec3) Vec3_Array;
+    typedef Array(Vec4) Vec4_Array;
 
 #endif
 
@@ -48,9 +48,9 @@ typedef struct Uniform_Transform {
     Quat rotate;
 } Uniform_Transform;
 
-DEFINE_ARRAY_TYPE(Vertex, Vertex_Array);
-DEFINE_ARRAY_TYPE(Shape_Vertex, Shape_Vertex_Array);
-DEFINE_ARRAY_TYPE(Triangle_Index, Triangle_Index_Array);
-DEFINE_ARRAY_TYPE(AABB, AABB_Array);
-DEFINE_ARRAY_TYPE(Transform, Transform_Array);
+typedef Array(Vertex) Vertex_Array;
+typedef Array(Shape_Vertex) Shape_Vertex_Array;
+typedef Array(Triangle_Index) Triangle_Index_Array;
+typedef Array(AABB) AABB_Array;
+typedef Array(Transform) Transform_Array;
 

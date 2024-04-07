@@ -42,7 +42,7 @@ typedef struct Todo
     String_Builder marker; 
 } Todo;
 
-DEFINE_ARRAY_TYPE(Todo, Todo_Array);
+typedef Array(Todo) Todo_Array;
 
 EXPORT void todo_init(Todo* todo, Allocator* alloc);
 EXPORT void todo_deinit(Todo* todo);
@@ -212,7 +212,7 @@ EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize
         {
             state = false;
             LOG_ERROR_CHILD("todo", "todo_parse_folder error", NULL, "todo_parse_folder() couldnt open folder '%s' with todo '%s'", 
-                string_escape_ephemeral(path), string_escape_ephemeral(todo));
+                cstring_ephemeral(path), cstring_ephemeral(todo));
         }
 
         if(state)

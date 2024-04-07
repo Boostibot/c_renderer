@@ -433,7 +433,7 @@ EXPORT bool material_read_entire(Id_Array* materials, String path)
     Stack_Allocator arena = {0};
     stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
 
-    LOG_INFO("ASSET", "Loading materials at '%s'", string_escape_ephemeral(path));
+    LOG_INFO("ASSET", "Loading materials at '%s'", cstring_ephemeral(path));
 
     String_Builder full_path =  builder_make(NULL, 512);
     String_Builder file_content = {0};
@@ -486,7 +486,7 @@ EXPORT bool material_read_entire(Id_Array* materials, String path)
         if(is_outdated == false)
         {
             for(isize i = 0; i < found_materials.size; i++)
-                array_push(materials, material_make_shared(found_material););
+                array_push(materials, material_make_shared(found_material));
             
             was_found = found_materials.size > 0;
         }
@@ -536,7 +536,7 @@ EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     Stack_Allocator arena = {0};
     stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
     
-    LOG_INFO("ASSET", "Loading mesh at '%s'", string_escape_ephemeral(path));
+    LOG_INFO("ASSET", "Loading mesh at '%s'", cstring_ephemeral(path));
 
     Id out_handle = {0};
     String_Builder full_path = builder_make(NULL, 512);

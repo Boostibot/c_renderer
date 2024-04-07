@@ -27,7 +27,7 @@ typedef enum Resource_Type {
     RESOURCE_TYPE_ENUM_COUNT
 } Resource_Type;
 
-DEFINE_ARRAY_TYPE(Id, Id_Array);
+typedef Array(Id) Id_Array;
 
 typedef struct Resources {
     Allocator* allocator;
@@ -94,9 +94,9 @@ typedef struct Triangle_Mesh_Group {
     u32 _padding;
 } Triangle_Mesh_Group;
 
-DEFINE_ARRAY_TYPE(Material, Material_Array);
-DEFINE_ARRAY_TYPE(Triangle_Mesh_Group, Triangle_Mesh_Group_Array);
-DEFINE_ARRAY_TYPE(Triangle_Mesh_Leaf_Group, Triangle_Mesh_Leaf_Group_Array);
+typedef Array(Material) Material_Array;
+typedef Array(Triangle_Mesh_Group) Triangle_Mesh_Group_Array;
+typedef Array(Triangle_Mesh_Leaf_Group) Triangle_Mesh_Leaf_Group_Array;
 
 typedef struct Triangle_Mesh
 {

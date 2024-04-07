@@ -20,9 +20,9 @@
 
 #ifndef VEC_ARRAY_DEFINED
     #define VEC_ARRAY_DEFINED
-    DEFINE_ARRAY_TYPE(Vec2, Vec2_Array);
-    DEFINE_ARRAY_TYPE(Vec3, Vec3_Array);
-    DEFINE_ARRAY_TYPE(Vec4, Vec4_Array);
+    typedef Array(Vec2) Vec2_Array;
+    typedef Array(Vec3) Vec3_Array;
+    typedef Array(Vec4) Vec4_Array;
 #endif
 typedef struct Format_Mtl_Map {
     String_Builder path;        
@@ -177,9 +177,9 @@ typedef struct Format_Obj_Vertex_Index
     i32 norm_i1;
 } Format_Obj_Vertex_Index;
 
-DEFINE_ARRAY_TYPE(Format_Obj_Group, Format_Obj_Group_Array);
-DEFINE_ARRAY_TYPE(Format_Mtl_Material, Format_Mtl_Material_Array);
-DEFINE_ARRAY_TYPE(Format_Obj_Vertex_Index, Format_Obj_Vertex_Index_Array);
+typedef Array(Format_Obj_Group) Format_Obj_Group_Array;
+typedef Array(Format_Mtl_Material) Format_Mtl_Material_Array;
+typedef Array(Format_Obj_Vertex_Index) Format_Obj_Vertex_Index_Array;
 
 typedef struct Format_Obj_Model {
     Vec3_Array positions; 

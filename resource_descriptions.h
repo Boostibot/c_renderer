@@ -148,8 +148,8 @@ typedef struct Triangle_Mesh_Group_Description {
     u32 _padding;
 } Triangle_Mesh_Group_Description;
 
-DEFINE_ARRAY_TYPE(Material_Description, Material_Description_Array);
-DEFINE_ARRAY_TYPE(Triangle_Mesh_Group_Description, Triangle_Mesh_Group_Description_Array);
+typedef Array(Material_Description) Material_Description_Array;
+typedef Array(Triangle_Mesh_Group_Description) Triangle_Mesh_Group_Description_Array;
 
 typedef struct Triangle_Mesh_Description {
     String_Builder name;

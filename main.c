@@ -13,10 +13,11 @@
 
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
+#define JOT_COUPLED
 #define RUN_TESTS
 //#define RUN_JUST_TESTS
 
-#include "mdump.h"
+//#include "mdump.h"
 
 #include "lib/profile_utils.h"
 #include "lib/string.h"
@@ -296,9 +297,6 @@ int main()
     Stack_Allocator stack_allocator = {0};
     stack_allocator_init(&stack_allocator, NULL, 10*MEBI_BYTE, &malloc_allocator.allocator);
     
-    Arena_Stack* arena_stack = allocator_get_scratch_arena_stack();
-    arena_init(arena_stack, 0, 0, "scratch arena");
-
     File_Logger file_logger = {0};
     //error_system_init(&static_allocator.allocator);
     file_logger_init_use(&file_logger, &malloc_allocator.allocator, "logs");
@@ -755,7 +753,7 @@ typedef struct Render_Texture_Layer_Info {
     bool _padding[7];
 } Render_Texture_Layer_Info;
 
-DEFINE_ARRAY_TYPE(Render_Texture_Layer_Info, Render_Texture_Layer_Info_Array);
+typedef Array(Render_Texture_Layer_Info) Render_Texture_Layer_Info_Array;
 
 typedef struct Render_Texture_Resolution {
     GL_Texture_Array array;
@@ -765,7 +763,7 @@ typedef struct Render_Texture_Resolution {
     
 } Render_Texture_Resolution;
 
-DEFINE_ARRAY_TYPE(Render_Texture_Resolution, Render_Texture_Resolution_Array);
+typedef Array(Render_Texture_Resolution) Render_Texture_Resolution_Array;
 
 //@TODO: what to do with outliers?
 //@TODO: what to do with different formats?
@@ -1159,7 +1157,7 @@ typedef struct Render_Geometry_Batch_Group {
     i32 vertex_count;
 } Render_Geometry_Batch_Group;
 
-DEFINE_ARRAY_TYPE(Render_Geometry_Batch_Group, Render_Batch_Group_Info_Array);
+typedef Array(Render_Geometry_Batch_Group) Render_Batch_Group_Info_Array;
 
 
 typedef struct Render_Geometry_Batch{
@@ -1189,7 +1187,7 @@ typedef struct Render_Geometry_Batch{
     Render_Batch_Group_Info_Array groups;
 } Render_Geometry_Batch;
 
-DEFINE_ARRAY_TYPE(Render_Geometry_Batch, Render_Geometry_Batch_Array);
+typedef Array(Render_Geometry_Batch) Render_Geometry_Batch_Array;
 
 void render_geometry_batch_init(Render_Geometry_Batch* mesh, Allocator* alloc, isize vertex_count, isize index_count, GLuint instance_buffer)
 {
@@ -1411,13 +1409,13 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
         out.vertex_from = group.vertex_from;
         out.vertex_count = group.vertex_count;
         out.batch_index = batch_index;
-        LOG_INFO("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) added to batch #%i", string_escape_ephemeral(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
+        LOG_INFO("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) added to batch #%i", cstring_ephemeral(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
 
         array_push(&batch->groups, group);
     }
     else
     {
-        LOG_ERROR("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) failed", string_escape_ephemeral(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
+        LOG_ERROR("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) failed", cstring_ephemeral(name), (int) vertex_count, (int) index_count);
     }
 
     return out;
@@ -1488,7 +1486,7 @@ typedef struct Render_Phong_Command {
     Render_Environment_Ptr environment;
 } Render_Phong_Command;
 
-DEFINE_ARRAY_TYPE(Render_Phong_Command, Render_Phong_Command_Array);
+typedef Array(Render_Phong_Command) Render_Phong_Command_Array;
 
 typedef struct Render_Command_Expanded {
     Render_Material* material;
@@ -1500,11 +1498,11 @@ typedef struct Render_Command_Expanded {
     i32 geometry_batch_index;
 } Render_Command_Expanded;
 
-DEFINE_ARRAY_TYPE(Render_Geometry_Ptr, Render_Geometry_Ptr_Array);
-DEFINE_ARRAY_TYPE(Render_Material_Ptr, Render_Material_Ptr_Array);
-DEFINE_ARRAY_TYPE(Render_Environment_Ptr, Render_Environment_Ptr_Array);
-DEFINE_ARRAY_TYPE(Render_Command_Expanded, Render_Command_Expanded_Array);
-DEFINE_ARRAY_TYPE(Mat4, Mat4_Array);
+typedef Array(Render_Geometry_Ptr) Render_Geometry_Ptr_Array;
+typedef Array(Render_Material_Ptr) Render_Material_Ptr_Array;
+typedef Array(Render_Environment_Ptr) Render_Environment_Ptr_Array;
+typedef Array(Render_Command_Expanded) Render_Command_Expanded_Array;
+typedef Array(Mat4) Mat4_Array;
 
 #define COMMAND_BUFFER_TRANSFORM_BIT 1
 #define COMMAND_BUFFER_GEOMETRY_BIT 2
@@ -1527,11 +1525,6 @@ typedef struct Render_Queue {
 
 typedef Render_Shader GL_Shader;
 
-typedef struct Render_Per_Draw Render_Per_Draw; 
-typedef struct Render_Per_Instance Render_Per_Instance;
-
-DEFINE_ARRAY_TYPE(Render_Per_Draw, Render_Per_Draw_Array);
-DEFINE_ARRAY_TYPE(Render_Per_Instance, Render_Per_Instance_Array);
 
 enum {MAX_TEXTURE_SLOTS = 32};
 
@@ -1576,6 +1569,9 @@ typedef struct Render_Per_Instance {
     Mat4 model;
 } Render_Per_Instance;
 
+typedef Array(Render_Per_Draw) Render_Per_Draw_Array;
+typedef Array(Render_Per_Instance) Render_Per_Instance_Array;
+
 typedef  struct {
     GLuint count;
     GLuint instance_count;
@@ -1584,7 +1580,7 @@ typedef  struct {
     GLuint base_instance;
 } Gl_Draw_Elements_Indirect_Command;
 
-DEFINE_ARRAY_TYPE(Gl_Draw_Elements_Indirect_Command, Gl_Draw_Elements_Indirect_Command_Array);
+typedef Array(Gl_Draw_Elements_Indirect_Command) Gl_Draw_Elements_Indirect_Command_Array;
 
 typedef struct  {
     ATTRIBUTE_ALIGNED(16) Mat4 model;
@@ -1622,9 +1618,9 @@ typedef struct Blinn_Phong_Per_Batch {
     ATTRIBUTE_ALIGNED(16) Blinn_Phong_Light lights[MAX_LIGHTS];
 } Blinn_Phong_Per_Batch;
 
-DEFINE_ARRAY_TYPE(Blinn_Phong_Per_Instance, Blinn_Phong_Per_Instance_Array);
-DEFINE_ARRAY_TYPE(Blinn_Phong_Per_Draw, Blinn_Phong_Per_Draw_Array);
-DEFINE_ARRAY_TYPE(Blinn_Phong_Per_Batch, Blinn_Phong_Per_Batch_Array);
+typedef Array(Blinn_Phong_Per_Instance) Blinn_Phong_Per_Instance_Array;
+typedef Array(Blinn_Phong_Per_Draw) Blinn_Phong_Per_Draw_Array;
+typedef Array(Blinn_Phong_Per_Batch) Blinn_Phong_Per_Batch_Array;
 
 //The main idea of this new rendere is to use the incredibly efficient
 // command buffer instanced calls (see below) to drastically reduce the number of draw calls,
@@ -2369,7 +2365,7 @@ void render_render(Render* render, Camera camera)
 
         glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->size, 0);
 
-        ASSERT(k > j, "Must make progress k:%i > i:%i", k, j);
+        ASSERT(k > j, "Must make progress k:%i > i:%i", (int) k, (int) j);
         j = k;
     }
 
@@ -2422,7 +2418,7 @@ Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, Strin
 
 bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
 {
-    LOG_INFO("render", "Adding texture at path '%s' current working dir '%s'", string_escape_ephemeral(path), platform_directory_get_current_working());
+    LOG_INFO("render", "Adding texture at path '%s' current working dir '%s'", cstring_ephemeral(path), platform_directory_get_current_working());
     log_group();
     PERF_COUNTER_START(image_read_counter);
 
@@ -2784,6 +2780,8 @@ void error_func(void* context, Platform_Sandbox_Error error)
     LOG_TRACE("APP", "printing trace:");
     log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
 }
+
+//#include "mdump2.h"
 
 #include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
