@@ -14,7 +14,7 @@
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
 #define JOT_COUPLED
-#define RUN_TESTS
+//#define RUN_TESTS
 //#define RUN_JUST_TESTS
 
 //#include "mdump.h"
@@ -2439,7 +2439,7 @@ bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out,
 
 bool render_texture_add_from_disk(Render* render, Render_Texture_Ptr* out, String path)
 {
-    return render_texture_add_from_disk_named(render, out, path, path_get_name_from_path(path));
+    return render_texture_add_from_disk_named(render, out, path, path_get_filename_without_extension(path_parse(path)));
 }
 void run_func(void* context)
 {
@@ -2528,9 +2528,25 @@ void run_func(void* context)
 
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     
+    Platform_File_Watch watch = {0};
+    platform_file_watch(&watch, STRING("./"), PLATFORM_FILE_WATCH_ALL | PLATFORM_FILE_WATCH_SUBDIRECTORIES, NULL, NULL);
 
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
+        Platform_File_Watch_Event file_event = {0};
+        while(platform_file_watch_poll(watch, &file_event))
+        {
+            const char* event = "";
+            switch(file_event.action) {
+                case PLATFORM_FILE_WATCH_CREATED : event = "CREATED"; break;
+                case PLATFORM_FILE_WATCH_DELETED : event = "DELETED"; break;
+                case PLATFORM_FILE_WATCH_MODIFIED: event = "MODIFIED"; break;
+                case PLATFORM_FILE_WATCH_RENAMED : event = "RENAMED"; break;
+            }
+
+            LOG_OKAY("FILE WATCH", "%s: %s '%s' -> '%s'", event, file_event.watched_path, file_event.old_path, file_event.path);
+        }
+
         glfwSwapBuffers(window);
         f64 start_frame_time = clock_s();
         app->delta_time = start_frame_time - app->last_frame_timepoint; 
@@ -2783,6 +2799,8 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 //#include "mdump2.h"
 
+#include "lib/custom_format.h"
+
 #include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
 #include "lib/log_list.h"
@@ -2793,6 +2811,10 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 void run_test_func(void* context)
 {
+    Formatter fmt = Fint(10); (void) fmt;
+    printf("%i", *(int*) fmt.value);
+    CLOG("hello world ", fmt, " bye!\n");
+
     (void) context;
     test_all(1.0);
 }

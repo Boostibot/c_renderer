@@ -380,11 +380,11 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
         if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.size <= 0)
             continue;
         
-        String item_path = map_or_cubemap.description->path.string;
-        String dir_path = path_strip_to_containing_directory(path_parse(description.path.string)).string;
+        Path item_path = path_parse(map_or_cubemap.description->path.string);
+        Path dir_path = path_strip_to_containing_directory(path_parse(description.path.string));
 
         //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
-        String full_item_path = path_get_full_ephemeral_from(item_path, dir_path);
+        String full_item_path = path_relative_ephemeral(item_path, dir_path).string;
         bool load_state = true;
         
         Id found_image = image_find_by_path(hash_string_make(full_item_path), NULL);
@@ -392,7 +392,7 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
 
         Resource_Params params = {0};
         params.path = full_item_path;
-        params.name = path_get_name_from_path(params.path);
+        params.name = path_get_filename_without_extension(path_parse(params.path));
         params.was_loaded = true;
 
         if(found_image != NULL)
@@ -435,90 +435,87 @@ EXPORT bool material_read_entire(Id_Array* materials, String path)
 
     LOG_INFO("ASSET", "Loading materials at '%s'", cstring_ephemeral(path));
 
-    String_Builder full_path =  builder_make(NULL, 512);
     String_Builder file_content = {0};
     Format_Mtl_Material_Array mtl_materials = {0};
     Material_Description material_desription = {0};
-
-    bool state = path_get_full(&full_path, path);
-    if(state)
-    {
-        //@TODO: In the future we will want to separate the concept of resource from
-        //       path and name. Resource is simply the data and name and path are a means
-        //       of acessing that data. There sould be a bidirectional hash amp linakge between
-        //       name/path and handle. This repository could also contain when the file was loaded and other things.
-        //       In addition to being nicer to work with it will also be faster since we will not need to 
-        //       iterate all resources when looking for path.
-
-        Platform_File_Info file_info = {0};
-        Platform_Error file_info_error = platform_file_info(full_path.string, &file_info);
-        if(file_info_error != PLATFORM_ERROR_OK)
-            LOG_ERROR("ASSET", "error getting info of object file '%s': %s", full_path.data, platform_translate_error(file_info_error));
-
-        bool was_found = false;
-        bool is_outdated = false;
     
-        Id_Array found_materials = {0};
-        array_init_with_capacity(&found_materials, NULL, 16);
+    String_Builder full_path = path_make_absolute(NULL, path_get_current_working_directory(), path_parse(path)).builder;
+    //@TODO: In the future we will want to separate the concept of resource from
+    //       path and name. Resource is simply the data and name and path are a means
+    //       of acessing that data. There sould be a bidirectional hash amp linakge between
+    //       name/path and handle. This repository could also contain when the file was loaded and other things.
+    //       In addition to being nicer to work with it will also be faster since we will not need to 
+    //       iterate all resources when looking for path.
 
-        isize last = -1;
-        Id found_material = {0};
-        while(true)
+    Platform_File_Info file_info = {0};
+    Platform_Error file_info_error = platform_file_info(full_path.string, &file_info);
+    if(file_info_error != PLATFORM_ERROR_OK)
+        LOG_ERROR("ASSET", "error getting info of object file '%s': %s", full_path.data, platform_translate_error(file_info_error));
+
+    bool state = true;
+    bool was_found = false;
+    bool is_outdated = false;
+
+    Id_Array found_materials = {0};
+    array_init_with_capacity(&found_materials, NULL, 16);
+
+    isize last = -1;
+    Id found_material = {0};
+    while(true)
+    {
+        found_material = material_find_by_path(hash_string_make(full_path.string), &last);
+        if(found_material == NULL)
+            break;
+
+        if(file_info_error == PLATFORM_ERROR_OK)
         {
-            found_material = material_find_by_path(hash_string_make(full_path.string), &last);
-            if(found_material == NULL)
+            Resource_Info* material_info = NULL;
+            material_get_with_info(found_material, &material_info);
+            if(material_info->load_etime < file_info.last_write_epoch_time)
+            {
+                is_outdated = true;
                 break;
-
-            if(file_info_error == PLATFORM_ERROR_OK)
-            {
-                Resource_Info* material_info = NULL;
-                material_get_with_info(found_material, &material_info);
-                if(material_info->load_etime < file_info.last_write_epoch_time)
-                {
-                    is_outdated = true;
-                    break;
-                }
             }
-
-            array_push(&found_materials, found_material);
         }
 
-        if(is_outdated == false)
-        {
-            for(isize i = 0; i < found_materials.size; i++)
-                array_push(materials, material_make_shared(found_material));
-            
-            was_found = found_materials.size > 0;
-        }
+        array_push(&found_materials, found_material);
+    }
 
-        if((was_found == false || is_outdated))
+    if(is_outdated == false)
+    {
+        for(isize i = 0; i < found_materials.size; i++)
+            array_push(materials, material_make_shared(found_material));
+        
+        was_found = found_materials.size > 0;
+    }
+
+    if((was_found == false || is_outdated))
+    {
+        state = state && file_read_entire(full_path.string, &file_content);
+        if(state)
         {
-            state = state && file_read_entire(full_path.string, &file_content);
-            if(state)
+            Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
+            isize had_mtl_errors = 0;
+            format_mtl_read(&mtl_materials, file_content.string, mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
+
+            for(isize i = 0; i < had_mtl_errors; i++)
+                LOG_ERROR("ASSET", "bool parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
+        
+            for(isize i = 0; i < mtl_materials.size; i++)
             {
-                Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
-                isize had_mtl_errors = 0;
-                format_mtl_read(&mtl_materials, file_content.string, mtl_errors, FLAT_ERRORS_COUNT, &had_mtl_errors);
-
-                for(isize i = 0; i < had_mtl_errors; i++)
-                    LOG_ERROR("ASSET", "bool parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
+                process_mtl_material(&material_desription, mtl_materials.data[i]);
+                builder_assign(&material_desription.path, full_path.string);
             
-                for(isize i = 0; i < mtl_materials.size; i++)
-                {
-                    process_mtl_material(&material_desription, mtl_materials.data[i]);
-                    builder_assign(&material_desription.path, full_path.string);
-                
-                    Resource_Params params = {0};
-                    params.name = material_desription.name.string;
-                    params.path = material_desription.path.string;
-                    params.was_loaded = true;
+                Resource_Params params = {0};
+                params.name = material_desription.name.string;
+                params.path = material_desription.path.string;
+                params.was_loaded = true;
 
-                    Id local_handle = material_insert(params);
-                    Material* material = material_get(local_handle);
-                    material_load_images(material, material_desription);
-                    
-                    array_push(materials, local_handle);
-                }
+                Id local_handle = material_insert(params);
+                Material* material = material_get(local_handle);
+                material_load_images(material, material_desription);
+                
+                array_push(materials, local_handle);
             }
         }
     }
@@ -539,112 +536,108 @@ EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     LOG_INFO("ASSET", "Loading mesh at '%s'", cstring_ephemeral(path));
 
     Id out_handle = {0};
-    String_Builder full_path = builder_make(NULL, 512);
-    bool state = path_get_full(&full_path, path);
+    String_Builder full_path = path_make_absolute(NULL, path_get_current_working_directory(), path_parse(path)).builder;
     
-    if(state)
+    bool state = true;
+    Platform_File_Info file_info = {0};
+    Platform_Error file_info_error = platform_file_info(full_path.string, &file_info);
+    if(file_info_error != PLATFORM_ERROR_OK)
+        LOG_ERROR("ASSET", "error getting info of object file '%s': %s", full_path.data, platform_translate_error(file_info_error));
+
+    Id found_mesh = triangle_mesh_find_by_path(hash_string_make(full_path.string), NULL);
+    if(found_mesh != NULL)
     {
-        Platform_File_Info file_info = {0};
-        Platform_Error file_info_error = platform_file_info(full_path.string, &file_info);
-        if(file_info_error != PLATFORM_ERROR_OK)
-            LOG_ERROR("ASSET", "error getting info of object file '%s': %s", full_path.data, platform_translate_error(file_info_error));
+        Resource_Info* resource_info = NULL;
+        triangle_mesh_get_with_info(found_mesh, &resource_info);
+        if(resource_info->load_etime >= file_info.last_write_epoch_time)
+            out_handle = triangle_mesh_make_shared(found_mesh);
+    }
 
-        Id found_mesh = triangle_mesh_find_by_path(hash_string_make(full_path.string), NULL);
-        if(found_mesh != NULL)
+    if(out_handle == NULL)
+    {
+        String_Builder file_content = {0};
+        state = state && file_read_entire(full_path.string, &file_content);
+        if(state == false)
+            LOG_ERROR("ASSET", "Failed to load triangle_mesh file '%s'", full_path.data);
+        else
         {
-            Resource_Info* resource_info = NULL;
-            triangle_mesh_get_with_info(found_mesh, &resource_info);
-            if(resource_info->load_etime >= file_info.last_write_epoch_time)
-                out_handle = triangle_mesh_make_shared(found_mesh);
-        }
+            Format_Obj_Model model = {0};
+            format_obj_model_init(&model, NULL);
 
-        if(out_handle == NULL)
-        {
-            String_Builder file_content = {0};
-            state = state && file_read_entire(full_path.string, &file_content);
-            if(state == false)
-                LOG_ERROR("ASSET", "Failed to load triangle_mesh file '%s'", full_path.data);
-            else
+            Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
+            isize had_obj_errors = 0;
+            format_obj_read(&model, file_content.string, obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
+
+            //@NOTE: So that we dont waste too much memory while loading
+            builder_deinit(&file_content); 
+
+            for(isize i = 0; i < had_obj_errors; i++)
+                LOG_ERROR("ASSET", "bool parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
+
+            Resource_Params params = {0};
+            params.path = full_path.string;
+            params.name = path_get_filename_without_extension(path_parse(params.path));
+            params.was_loaded = true;
+
+            out_handle = triangle_mesh_insert(params);
+            Triangle_Mesh* triangle_mesh = triangle_mesh_get(out_handle);
+
+            triangle_mesh->shape = shape_insert(params);
+            Shape_Assembly* out_assembly = shape_get(triangle_mesh->shape);
+
+            Triangle_Mesh_Description description = {0};
+            process_obj_triangle_mesh(out_assembly, &description, model);
+
+            Path dir_path = path_strip_to_containing_directory(path_parse(full_path.string));
+            for(isize i = 0; i < description.material_files.size; i++)
             {
-                Format_Obj_Model model = {0};
-                format_obj_model_init(&model, NULL);
+                String file = description.material_files.data[i].string;
+                Path mtl_path = path_absolute_ephemeral(dir_path, path_parse(file));
+                if(material_read_entire(&triangle_mesh->materials, mtl_path.string) == false)
+                    LOG_ERROR("ASSET", "Failed to load material file '%.*s' while loading '%.*s'", STRING_PRINT(mtl_path.string), STRING_PRINT(full_path));
+            }
 
-                Format_Obj_Mtl_Error obj_errors[FLAT_ERRORS_COUNT] = {0};
-                isize had_obj_errors = 0;
-                format_obj_read(&model, file_content.string, obj_errors, FLAT_ERRORS_COUNT, &had_obj_errors);
-
-                //@NOTE: So that we dont waste too much memory while loading
-                builder_deinit(&file_content); 
-
-                for(isize i = 0; i < had_obj_errors; i++)
-                    LOG_ERROR("ASSET", "bool parsing obj file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(obj_errors[i]));
-
-                Resource_Params params = {0};
-                params.path = full_path.string;
-                params.name = path_get_name_from_path(params.path);
-                params.was_loaded = true;
-
-                out_handle = triangle_mesh_insert(params);
-                Triangle_Mesh* triangle_mesh = triangle_mesh_get(out_handle);
-
-                triangle_mesh->shape = shape_insert(params);
-                Shape_Assembly* out_assembly = shape_get(triangle_mesh->shape);
-
-                Triangle_Mesh_Description description = {0};
-                process_obj_triangle_mesh(out_assembly, &description, model);
-
-                String dir_path = path_strip_to_containing_directory(path_parse(full_path.string)).string;
-                for(isize i = 0; i < description.material_files.size; i++)
-                {
-                    String file = description.material_files.data[i].string;
-                    String mtl_path = path_get_full_ephemeral_from(file, dir_path);
-
-                    if(material_read_entire(&triangle_mesh->materials, mtl_path) == false)
-                        LOG_ERROR("ASSET", "Failed to load material file '%s' while loading '%s'", mtl_path.data, full_path.data);
-                }
-
-                for(isize i = 0; i < description.groups.size; i++)
-                {
-                    Triangle_Mesh_Group_Description* group_desc = &description.groups.data[i];
+            for(isize i = 0; i < description.groups.size; i++)
+            {
+                Triangle_Mesh_Group_Description* group_desc = &description.groups.data[i];
         
-                    bool unable_to_find_group = true;
-                    for(isize j = 0; j < triangle_mesh->materials.size; j++)
-                    {
-                        Id material_handle = triangle_mesh->materials.data[j];
+                bool unable_to_find_group = true;
+                for(isize j = 0; j < triangle_mesh->materials.size; j++)
+                {
+                    Id material_handle = triangle_mesh->materials.data[j];
 
                         
-                        Resource_Info* material_info = NULL;
-                        if(material_get_with_info(material_handle, &material_info) == NULL)
-                            continue;
+                    Resource_Info* material_info = NULL;
+                    if(material_get_with_info(material_handle, &material_info) == NULL)
+                        continue;
 
-                        String material_name = material_info->name.string;
-                        if(string_is_equal(material_name, group_desc->material_name.string))
-                        {
-                            unable_to_find_group = false;
+                    String material_name = material_info->name.string;
+                    if(string_is_equal(material_name, group_desc->material_name.string))
+                    {
+                        unable_to_find_group = false;
 
-                            Triangle_Mesh_Group group = {0};
+                        Triangle_Mesh_Group group = {0};
 
-                            group.name = name_make(material_name);
-                            group.material_i1 = (i32) j + 1;
+                        group.name = name_make(material_name);
+                        group.material_i1 = (i32) j + 1;
 
-                            //group.next_i1 = group_desc->next_i1;
-                            //group.child_i1 = group_desc->child_i1;
-                            //group.depth = group_desc->depth;
+                        //group.next_i1 = group_desc->next_i1;
+                        //group.child_i1 = group_desc->child_i1;
+                        //group.depth = group_desc->depth;
 
-                            group.triangles_from = group_desc->triangles_from;
-                            group.triangles_to = group_desc->triangles_to;
+                        group.triangles_from = group_desc->triangles_from;
+                        group.triangles_to = group_desc->triangles_to;
 
-                            array_push(&triangle_mesh->groups, group);
-                        }
-
-                        //find the default material
-                        if(triangle_mesh->material == NULL && string_is_equal(material_name, STRING("default")))
-                            triangle_mesh->material = material_make_shared(material_handle);
+                        array_push(&triangle_mesh->groups, group);
                     }
-                    
-                    if(unable_to_find_group)
-                        LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
+
+                    //find the default material
+                    if(triangle_mesh->material == NULL && string_is_equal(material_name, STRING("default")))
+                        triangle_mesh->material = material_make_shared(material_handle);
                 }
+                    
+                if(unable_to_find_group)
+                    LOG_ERROR("ASSET", "Failed to find a material called %s while loadeing %s", group_desc->material_name.data, description.path.data);
             }
         }
     }

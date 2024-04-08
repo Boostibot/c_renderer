@@ -224,6 +224,7 @@
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
     <ClInclude Include="lib\arena.h" />
+    <ClInclude Include="lib\custom_format.h" />
     <ClInclude Include="lib\hash_index.h" />
     <ClInclude Include="lib\list.h" />
     <ClInclude Include="lib\log_list.h" />
