@@ -484,7 +484,7 @@ typedef enum Mdump_Type_ID {
 
 #define _DEFINE_MDUMP_BUILTIN_TYPE(name, type, ID) \
     Mdump_Type_User mdump_type_##name() { \
-        return BRACE_INIT(Mdump_Type_User){STRING(#name), ID, mdump_type_##name, sizeof(type), __alignof(char)}; \
+        return BRACE_INIT(Mdump_Type_User){STRING(#name), mdump_type_##name, ID, sizeof(type), __alignof(char)}; \
     } \
 
 #define _DECLARE_MDUMP_BUILTINT_TYPE(name, type) \
@@ -497,7 +497,7 @@ typedef enum Mdump_Type_ID {
     _DECLARE_MDUMP_BUILTINT_TYPE(name, type) \
 
 //Bool is define so we have to do this manually for it in case of C
-Mdump_Type_User mdump_type_bool() { return BRACE_INIT(Mdump_Type_User){STRING("bool"), MDUMP_TYPE_BOOL, mdump_type_bool, sizeof(bool), __alignof(bool)}; }
+Mdump_Type_User mdump_type_bool() { return BRACE_INIT(Mdump_Type_User){STRING("bool"), mdump_type_bool, MDUMP_TYPE_BOOL, sizeof(bool), __alignof(bool)}; }
 void mdump_bool(Mdump* mdump, bool* user, bool* file, Mdump_Action action) { mdump_raw(mdump, user, file, sizeof *user, action); }
 
 //_DEFINE_AND_DECLARE_MDUMP_BUILTIN(bool, bool, MDUMP_TYPE_BOOL)
@@ -562,7 +562,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
 }
 
 //this can be simplified a lot using some defines...
-#define DEFINE_MDUMP_TYPE_ALIGNED(Type, mdum_type_func, align, ...) \
+#define DEFINE_MDUMP_TYPE_ALIGNED(Type, mdum_type_func, _align, ...) \
     Mdump_Type_User mdum_type_func() \
     { \
         typedef Type T; /* so that MDUMP_MEMBER can use it */\
@@ -570,19 +570,23 @@ Mdump_Type_User_Query mdump_type_float(isize size)
             __VA_ARGS__ \
         }; \
         \
-        Mdump_Type_User out = {#Type, sizeof(Type), align, members, STATIC_ARRAY_SIZE(members)}; \
+        Mdump_Type_User out = {0}; \
+        out.name = STRING(#Type); \
+        out.size = sizeof(Type); \
+        out.align = _align; \
+        out.members = members; \
+        out.member_count = STATIC_ARRAY_SIZE(members); \
         return out; \
     } \
-    
+
 #define DEFINE_MDUMP_TYPE(Type, mdum_type_func, ...) DEFINE_MDUMP_TYPE_ALIGNED(Type, mdum_type_func, __alignof(Type), ##__VA_ARGS__) 
+#define MDUMP_MEMBER(name, type, ...)               {STRING(#name), type, MDUMP_TYPE_NONE, offsetof(T, name), sizeof(((T*)0)->name), ##__VA_ARGS__}, 
 
-#define MDUMP_MEMBER(name, type, ...) {#name, type, offsetof(T, name), sizeof(((T*)0)->name), ##__VA_ARGS__}, 
-
-#define _IS_UNSIGNED(a) ((a) >= 0 && ~(a) >= 0) 
-
-#define MDUMP_ENUM_VALUE_NAMED(name, value) {(name), 0, 0, 0, MDUMP_FLAG_ENUM, (value)},
+#define MDUMP_ENUM_VALUE_NAMED(name, value) {STRING(#name), NULL, MDUMP_TYPE_NONE, 0, 0, MDUMP_FLAG_ENUM, (value)},
 #define MDUMP_ENUM_VALUE(value)             MDUMP_ENUM_VALUE_NAMED(#value, (value))
     
+#define _IS_UNSIGNED(a) ((a) >= 0 && ~(a) >= 0) 
+
 #define DEFINE_MDUMP_ENUM(Type, mdum_type_func, ...) \
     Mdump_Type_User mdum_type_func() \
     { \
@@ -605,7 +609,13 @@ Mdump_Type_User_Query mdump_type_float(isize size)
         } \
         \
         u32 flags = is_unsigned ? MDUMP_FLAG_ENUM_UNSIGNED : MDUMP_FLAG_ENUM; \
-        Mdump_Type_User out = {#Type, sizeof(Type), sizeof(Type), members, STATIC_ARRAY_SIZE(members), flags}; \
+        Mdump_Type_User out = {0}; \
+        out.name = STRING(#Type); \
+        out.size = sizeof(Type); \
+        out.align = sizeof(Type); \
+        out.members = members; \
+        out.member_count = STATIC_ARRAY_SIZE(members); \
+        out.flags = flags; \
         return out; \
     } \
 
@@ -652,7 +662,35 @@ bool mdump_array_prepare(Mdump* mdump, Mdump_Array* array,
         return true;
     }
 }
-
+bool mdump_array_prepare2(Mdump* mdump, Generic_Array user, Mdump_Array* file, isize file_item_size, isize file_align, 
+    bool copy, Mdump_Action action)
+{
+    if(action == MDUMP_READ)
+    {
+        void* data = mdump_get(mdump, file->data, file->size * file_item_size);
+        if(data == NULL && file->size != 0)
+        {
+            generic_array_resize(user, 0, true);
+            return false;
+        }
+        else
+        {
+            generic_array_resize(user, 0, true);
+            if(copy)
+                memcpy(user.array->data, data, file->size*user.item_size);
+            return true;
+        }
+    }
+    else
+    {
+        void* adress = NULL;
+        file->data = mdump_file_allocate(mdump, user.array->size*file_item_size, file_align, &adress);
+        file->size = user.array->size;
+        if(copy)
+            memcpy(adress, user.array->data, user.array->size*file_item_size);
+        return true;
+    }
+}
 
 bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isize file_item_size, isize file_align,
     bool copy, Mdump_Action action)
@@ -733,13 +771,14 @@ DEFINE_MDUMP_ENUM(Mdump_Type_ID, mdump_type_mdump_type_id,
     MDUMP_ENUM_VALUE(MDUMP_TYPE_STRING)
     MDUMP_ENUM_VALUE(MDUMP_TYPE_MAX_RESERVED)
 )
-     
+
 DEFINE_MDUMP_TYPE(Mdump_Member_File, mdump_type_mdump_member, 
     MDUMP_MEMBER(name, mdump_type_string)
+    MDUMP_MEMBER(id, mdump_type_mdump_type_id)
     MDUMP_MEMBER(offset, mdump_type_u32)
     MDUMP_MEMBER(flags, mdump_type_u32)
     MDUMP_MEMBER(size, mdump_type_u32)
-    MDUMP_MEMBER(id, mdump_type_mdump_type_id)
+    MDUMP_MEMBER(enum_value, mdump_type_u64)
 )
 
 DEFINE_MDUMP_TYPE(Mdump_Type_File, mdump_type_mdump_type, 
@@ -796,7 +835,7 @@ typedef struct Mdump_Type_Info {
 
 String string_dup(Arena* arena, String str)
 {
-    char* duped = arena_push_nonzero(arena, str.size + 1, 1);
+    char* duped = (char*) arena_push_nonzero(arena, str.size + 1, 1);
     memcpy(duped, str.data, str.size);
     duped[str.size] = '\0';
     String out = {duped, str.size};
@@ -819,6 +858,7 @@ isize _mdump_type_by_id(Mdump_Type_User_Array* types, Mdump_Type_ID id, Mdump_Ty
     return -1;
 }
 
+#include "lib/log.h"
 void mdump_types_add(Mdump_Type_Info* info, Mdump_Type_User user_type)
 {
     //Only add the type if not already present!
@@ -943,8 +983,6 @@ void mdump_types_add_builtins(Mdump_Type_Info* info)
     mdump_types_add(info, mdump_type_string());
 }
 
-#define array_to_gen(arr) array_make_generic(arr)
-
 bool mdump_mdump_types(Mdump* mdump, Mdump_Type_Info* user, Mdump_List* file, Mdump_Action action)
 {
     //@NOTE: append only. @TODO: make oevrwite
@@ -968,11 +1006,11 @@ void mdump_write(String_Builder* into, Mdump* mdump, Mdump_Ptr root_ptr, String 
     header.version = 1;
     header.root_ptr = root_ptr;
 
-    builder_append(into, BRACE_INIT(String){(char*) &header, sizeof(header)})
+    builder_append(into, BRACE_INIT(String){(char*) &header, sizeof(header)});
 }
 
 
-void main()
+void test_mdump2()
 {
     Arena arena = scratch_arena_acquire();
 

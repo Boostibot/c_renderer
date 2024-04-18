@@ -2799,8 +2799,6 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 //#include "mdump2.h"
 
-#include "lib/custom_format.h"
-
 #include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
 #include "lib/log_list.h"
@@ -2811,10 +2809,6 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 void run_test_func(void* context)
 {
-    Formatter fmt = Fint(10); (void) fmt;
-    printf("%i", *(int*) fmt.value);
-    CLOG("hello world ", fmt, " bye!\n");
-
     (void) context;
     test_all(1.0);
 }
