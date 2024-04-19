@@ -159,8 +159,7 @@ bool mdump_string(Mdump* mdump, String* user_string, Mdump_String* file_string, 
         }
         else
         {
-            String str = {data, file_string->size};
-            *user_string = lpf_string_duplicate(mdump->user_arena, str);
+            *user_string = lpf_string_duplicate(mdump->user_arena, string_make(data, file_string->size));
             return true;
         }
     }
@@ -667,6 +666,8 @@ bool mdump_array_prepare2(Mdump* mdump, Generic_Array user, Mdump_Array* file, i
 {
     if(action == MDUMP_READ)
     {
+        if(user.array->allocator == NULL)
+            user.array->allocator = &mdump->user_arena->allocator;
         void* data = mdump_get(mdump, file->data, file->size * file_item_size);
         if(data == NULL && file->size != 0)
         {
@@ -697,6 +698,8 @@ bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isiz
 {
     if(action == MDUMP_READ)
     {
+        if(user.array->allocator == NULL)
+            user.array->allocator = &mdump->user_arena->allocator;
         generic_array_reserve(user, file->size);
         if(copy)
         {
@@ -838,8 +841,7 @@ String string_dup(Arena* arena, String str)
     char* duped = (char*) arena_push_nonzero(arena, str.size + 1, 1);
     memcpy(duped, str.data, str.size);
     duped[str.size] = '\0';
-    String out = {duped, str.size};
-    return out;
+    return string_make(duped, str.size);
 }
 
 String cstring_dup(Arena* arena, const char* str)
@@ -1006,9 +1008,15 @@ void mdump_write(String_Builder* into, Mdump* mdump, Mdump_Ptr root_ptr, String 
     header.version = 1;
     header.root_ptr = root_ptr;
 
-    builder_append(into, BRACE_INIT(String){(char*) &header, sizeof(header)});
+    builder_append(into, string_make((char*) &header, sizeof header));
+
+
 }
 
+void mdump_read(Mdump* mdump, String string)
+{
+    
+}
 
 void test_mdump2()
 {

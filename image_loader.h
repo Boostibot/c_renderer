@@ -132,11 +132,10 @@ EXPORT bool image_read_from_file(Image* image, String path, isize desired_channe
     return state;
 }
 
-EXPORT INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
+INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
 {
     String_Builder* append_into = (String_Builder*) context;
-    String string = {data, size};
-    builder_append(append_into, string);
+    builder_append(append_into, string_make(data, size));
 }
 
 EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
