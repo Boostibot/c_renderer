@@ -823,7 +823,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
     isize out = -1;
     isize needed_size = (isize) width * height * layers * channel_count * pixel_type_size(type);
     if(manager->memory_used + needed_size > manager->memory_budget)
-        LOG_ERROR(">render", "Out of texture memory! Using " MEMORY_FMT " / " MEMORY_FMT " (%lli%%)", MEMORY_PRINT(manager->memory_used), MEMORY_PRINT(manager->memory_budget), (lli) manager->memory_used * 100 / manager->memory_budget);
+        LOG_ERROR(">render", "Out of texture memory! Using %s / %s (%lli%%)", fmt_bytes(manager->memory_used), fmt_bytes(manager->memory_budget), (lli) manager->memory_used * 100 / manager->memory_budget);
     else if(layers == 0 || width == 0 || height == 0)
         LOG_ERROR(">render", "Zero sized!");
     else
@@ -872,8 +872,8 @@ void render_texture_manager_init(Render_Texture_Manager* manager, Allocator* all
 void render_texture_manager_add_default_resolutions(Render_Texture_Manager* manager, f64 fraction_of_remaining_memory_budget)
 {
     isize remaining_budget = manager->memory_budget - manager->memory_used;
-    LOG_INFO("render", "Adding default resolutions for %lf of remainign memory budget (" MEMORY_FMT ") Using " MEMORY_FMT " / " MEMORY_FMT, 
-        fraction_of_remaining_memory_budget, MEMORY_PRINT(remaining_budget), MEMORY_PRINT(manager->memory_used), MEMORY_PRINT(manager->memory_budget));
+    LOG_INFO("render", "Adding default resolutions for %lf of remainign memory budget (%s) Using %s / %s", 
+        fraction_of_remaining_memory_budget, fmt_bytes(remaining_budget), fmt_bytes(manager->memory_used), fmt_bytes(manager->memory_budget));
 
     Pixel_Type pixel_type = PIXEL_TYPE_U8;
     i32 channel_counts[4] = {1, 2, 3, 0};
@@ -935,7 +935,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     }
     log_ungroup();
 
-    LOG_WARN("render", "using " MEMORY_FMT " combined RAM on textures", MEMORY_PRINT(combined_size));
+    LOG_WARN("render", "using %s combined RAM on textures", fmt_bytes(combined_size));
 }
 
 typedef enum Found_Type{
@@ -1344,7 +1344,7 @@ i32 render_geometry_manager_add_batch(Render_Geometry_Manager* manager, isize mi
     isize memory_requirement = min_vertex_count * sizeof(Vertex) + min_index_count * sizeof(i32);
 
     if(manager->used_memory >= manager->memory_limit * 3/4)
-        LOG_WARN("render", "Geometry manager nearly out of memory. Using " MEMORY_FMT " out of " MEMORY_FMT, MEMORY_PRINT(manager->used_memory), MEMORY_PRINT(manager->memory_limit));
+        LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", fmt_bytes(manager->used_memory), fmt_bytes(manager->memory_limit));
     
     i32 out = 0;
     if(memory_requirement + manager->used_memory <= manager->memory_limit)

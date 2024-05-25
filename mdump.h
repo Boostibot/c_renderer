@@ -394,7 +394,7 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
 
 Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
 {
-    LOG_DEBUG("mdump", "registering type: " STRING_FMT, STRING_PRINT(info.type_name));
+    LOG_DEBUG("mdump", "registering type: %.*s", STRING_PRINT(info.type_name));
     log_group();
 
     Mdump_Type out_type = MDUMP_TYPE_NONE;
@@ -471,34 +471,34 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
 
 Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info, Mdump_Type against)
 {
-    LOG_DEBUG("mdump", "validating type: " STRING_FMT, STRING_PRINT(info.type_name));
+    LOG_DEBUG("mdump", "validating type: %.*s", STRING_PRINT(info.type_name));
 
     Mdump_Type_Info* found_info = mdump_get_type_info(types, against);
     if(builder_is_equal(found_info->type_name, info.type_name) == false) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type name does not match found type name\n"
-            "type: "STRING_FMT" found type: "STRING_FMT, STRING_PRINT(found_info->type_name), STRING_PRINT(info.type_name));
+            "type: %.*s found type: %.*s", STRING_PRINT(found_info->type_name), STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
 
     if(found_info->size != info.size) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type size does not match one found\n"
-            "type: "STRING_FMT, STRING_PRINT(info.type_name));
+            "type: %.*s", STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
     
     if(found_info->members.size != info.members.size) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type memebers do not match ones found\n"
-            "type: "STRING_FMT, STRING_PRINT(info.type_name));
+            "type: %.*s", STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
     
     if(found_info->flags != info.flags) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type flags do not match ones found\n"
-            "type: "STRING_FMT, STRING_PRINT(info.type_name));
+            "type: %.*s", STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
             
@@ -512,7 +512,7 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
         if(found_member->offset != member->offset || found_member->flags != member->flags ||  member->size != member_info.size || builder_is_equal(found_member->name, member->name) == false)
         {
             LOG_ERROR("mdump", "mdump_validate_type_against error: type memebers do not match ones found\n"
-                "type: "STRING_FMT, STRING_PRINT(info.type_name));
+                "type: %.*s", STRING_PRINT(info.type_name));
             return MDUMP_TYPE_NONE;
         }
 
@@ -520,7 +520,7 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
         {
             LOG_ERROR("mdump", "mdump_validate_type_against error: type default value does not match the one found.\n"
                 "Not that default value can only be used for types that dont contain pointers"
-                "type: "STRING_FMT, STRING_PRINT(info.type_name));
+                "type: %.*s", STRING_PRINT(info.type_name));
             return MDUMP_TYPE_NONE;
         }
     }

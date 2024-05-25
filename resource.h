@@ -264,7 +264,7 @@ void _resource_log_wrong_id(Resource_Ptr out)
     {
         if(out.ptr)
             log_callstack("RESOURCE", LOG_ERROR, 1, "Wrong id %lli used. \n"
-                    "curr name: " STRING_FMT " path:" STRING_FMT "\n",
+                    "curr name: %.*s path:%.*s\n",
                     (lli) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
         else
             log_callstack("RESOURCE", LOG_ERROR, 1, "Wrong id %lli used", (lli) out.id);
@@ -283,8 +283,8 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     if(out.id != NULL)
     {
         LOG_ERROR("RESOURCE", "Duplicate id %lli added. \n"
-            "Old name: " STRING_FMT " path:" STRING_FMT "\n"
-            "New name: " STRING_FMT " path:" STRING_FMT "\n", 
+            "Old name: %.*s path:%.*s\n"
+            "New name: %.*s path:%.*s\n", 
             (lli) params.id, 
             STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path), 
             STRING_PRINT(params.name), STRING_PRINT(params.path));
