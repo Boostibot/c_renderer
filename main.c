@@ -9,12 +9,10 @@
 #pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
 #pragma warning(disable:4996) //Dissable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
 
-
-
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
 #define JOT_COUPLED
-//#define RUN_TESTS
+#define RUN_TESTS
 //#define RUN_JUST_TESTS
 
 //#include "mdump.h"
@@ -2806,9 +2804,13 @@ void error_func(void* context, Platform_Sandbox_Error error)
 #define JOT_ALL_TEST
 #include "lib/list.h"
 #include "lib/path.h"
+#include "lib/pool_allocator.h"
 
 void run_test_func(void* context)
 {
     (void) context;
-    test_all(1.0);
+    benchmark_pool_alloc(6.0);
+    test_pool_alloc(3.0);
+    
+    //test_all(1.0);
 }

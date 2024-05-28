@@ -19,7 +19,7 @@ typedef struct Resource_Callstack {
 typedef enum Resource_Lifetime {
     RESOURCE_LIFETIME_REFERENCED = 0,   //cleaned up when reference count reaches 0
     RESOURCE_LIFETIME_PERSISTANT = 2,   //cleaned up when explicitly demanded
-    RESOURCE_LIFETIME_TIMED = 4,         //cleaned up when time is up
+    RESOURCE_LIFETIME_TIMED = 4,        //cleaned up when time is up
     RESOURCE_LIFETIME_SINGLE_FRAME = 8, //cleaned up automatically when this frame ends
     RESOURCE_LIFETIME_EPHEMERAL = 16,   //cleaned up on some subsequent call to this function. Should be immediately used or coppied
 } Resource_Lifetime;

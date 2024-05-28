@@ -229,6 +229,7 @@
     <ClInclude Include="lib\log_list.h" />
     <ClInclude Include="lib\lpf.h" />
     <ClInclude Include="lib\path.h" />
+    <ClInclude Include="lib\pool_allocator.h" />
     <ClInclude Include="lib\profile_utils.h" />
     <ClInclude Include="lib\_test_all.h" />
     <ClInclude Include="lib\_test_arena.h" />
@@ -278,11 +279,13 @@
     <ClInclude Include="lib\_test_math.h" />
     <ClInclude Include="lib\_test_random.h" />
     <ClInclude Include="lib\_test_stable_array.h" />
+    <ClInclude Include="link_table.h" />
     <ClInclude Include="mdump.h" />
     <ClInclude Include="mdump2.h" />
     <ClInclude Include="name.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="resources.h" />
+    <ClInclude Include="resource_2.h" />
     <ClInclude Include="resource_descriptions.h" />
     <ClInclude Include="resource_loading.h" />
     <ClInclude Include="shapes.h" />
