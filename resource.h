@@ -149,7 +149,7 @@ EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, i
 
 EXPORT void resource_manager_deinit(Resource_Manager* manager)
 {
-    STABLE_ARRAY_FOR_EACH_BEGIN(manager->storage, Resource_Info*, info, isize, index)
+    STABLE_ARRAY_FOR_EACH_BEGIN_UNTYPED(manager->storage, Resource_Info*, info, isize, index)
         if(manager->destructor)
             manager->destructor(info->data);
             

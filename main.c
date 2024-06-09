@@ -2809,8 +2809,8 @@ void error_func(void* context, Platform_Sandbox_Error error)
 void run_test_func(void* context)
 {
     (void) context;
-    benchmark_pool_alloc(6.0);
-    test_pool_alloc(3.0);
+    //benchmark_pool_alloc(6.0);
+    //test_pool_alloc(3.0);
     
-    //test_all(1.0);
+    test_all(3.0);
 }
