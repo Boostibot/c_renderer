@@ -242,6 +242,9 @@
     <ClInclude Include="lib\pool_allocator.h">
       <Filter>lib</Filter>
     </ClInclude>
+    <ClInclude Include="link_table2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\equi_to_cubemap.glsl">

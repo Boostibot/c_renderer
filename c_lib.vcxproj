@@ -280,6 +280,7 @@
     <ClInclude Include="lib\_test_random.h" />
     <ClInclude Include="lib\_test_stable_array.h" />
     <ClInclude Include="link_table.h" />
+    <ClInclude Include="link_table2.h" />
     <ClInclude Include="mdump.h" />
     <ClInclude Include="mdump2.h" />
     <ClInclude Include="name.h" />

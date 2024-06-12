@@ -2421,14 +2421,14 @@ bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out,
     PERF_COUNTER_START(image_read_counter);
 
     bool state = true;
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     {
         Image temp_storage = {&arena.allocator};
         state = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
         if(state)
             *out = render_texture_add(render, temp_storage, name);
     }
-    arena_release(&arena);
+    arena_frame_release(&arena);
     
     PERF_COUNTER_END(image_read_counter);
     log_ungroup();

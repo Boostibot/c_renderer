@@ -74,8 +74,8 @@ typedef struct Mdump_Header_File {
 
 typedef struct Mdump {
     Arena_Stack file_arena_stack;
-    Arena file_arena;
-    Arena* user_arena;
+    Arena_Frame file_arena;
+    Arena_Frame* user_arena;
 } Mdump;
 
 
@@ -109,11 +109,11 @@ Mdump_Ptr mdump_unget(Mdump* mdump, const void* addr, isize size)
     return ptr;
 }
 
-void mdump_init(Mdump* mdump, Arena* user_arena)
+void mdump_init(Mdump* mdump, Arena_Frame* user_arena)
 {
     mdump->user_arena = user_arena;
     arena_init(&mdump->file_arena_stack, 0, 0, "mdump arena");
-    mdump->file_arena = arena_acquire(&mdump->file_arena_stack);
+    mdump->file_arena = arena_frame_acquire(&mdump->file_arena_stack);
 }
 
 #define MDUMP_GET_ARRAY(mdump, mdump_array, Type) ((Type*) mdump_get((mdump), (mdump_array).data, (mdump_array).size * sizeof(Type)))
@@ -124,8 +124,8 @@ void mdump_init(Mdump* mdump, Arena* user_arena)
 u64 mdump_file_allocate(Mdump* mdump, isize size, isize align, void* out_ptr_or_null)
 {
     
-    u8* out_ptr = (u8*) arena_push(&mdump->file_arena, size, align);
-    i64 offset = out_ptr - mdump->file_arena_stack.data;
+    u8* out_ptr = (u8*) arena_frame_push(&mdump->file_arena, size, align);
+    i64 offset = out_ptr - mdump->file_arena_stack.arena.data;
     ASSERT(offset >= 0);
     
     if(out_ptr_or_null)
@@ -144,7 +144,7 @@ Mdump_Array mdump_file_array_allocate(Mdump* mdump, isize item_count, isize item
 
 void* mdump_user_allocate(Mdump* mdump, isize size, isize align)
 {
-    return arena_push(mdump->user_arena, size, align);;
+    return arena_frame_push(mdump->user_arena, size, align);;
 }
 
 bool mdump_string(Mdump* mdump, String* user_string, Mdump_String* file_string, Mdump_Action action)
@@ -832,11 +832,11 @@ typedef Array(Mdump_Type_User) Mdump_Type_User_Array;
 typedef Array(Mdump_Member_User) Mdump_Member_User_Array;
 
 typedef struct Mdump_Type_Info {
-    Arena arena;
+    Arena_Frame arena;
     Mdump_Type_User_Array types;
 } Mdump_Type_Info;
 
-String string_dup(Arena* arena, String str)
+String string_dup(Arena_Frame* arena, String str)
 {
     char* duped = (char*) arena_push_nonzero(arena, str.size + 1, 1);
     memcpy(duped, str.data, str.size);
@@ -844,7 +844,7 @@ String string_dup(Arena* arena, String str)
     return string_make(duped, str.size);
 }
 
-String cstring_dup(Arena* arena, const char* str)
+String cstring_dup(Arena_Frame* arena, const char* str)
 {
     return string_dup(arena, string_make(str));
 }
@@ -866,7 +866,7 @@ void mdump_types_add(Mdump_Type_Info* info, Mdump_Type_User user_type)
     //Only add the type if not already present!
     if(_mdump_type_by_id(&info->types, user_type.id, user_type.query) == -1)
     {
-        Arena scratch = scratch_arena_acquire();
+        Arena_Frame scratch = scratch_arena_acquire();
 
         //Gather all dependent types & check for cycles or uknowns
         Mdump_Type_User_Array add_stack = {&scratch.allocator};
@@ -957,7 +957,7 @@ void mdump_types_add(Mdump_Type_Info* info, Mdump_Type_User user_type)
         }
 
         array_deinit(&add_stack);
-        arena_release(&scratch); 
+        arena_frame_release(&scratch); 
     }
 }
 
@@ -1020,7 +1020,7 @@ void mdump_read(Mdump* mdump, String string)
 
 void test_mdump2()
 {
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
 
     Mdump dump = {0};
     mdump_init(&dump, &arena);

@@ -494,7 +494,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
 
     String active_object = {0};
     Format_Obj_Group* active_group = NULL;
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     {
         array_init_with_capacity(&out->groups, &arena.allocator, 64);
         i32 trinagle_index = 0;
@@ -834,7 +834,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
 
         *had_errors = error_count;
     }
-    arena_release(&arena);
+    arena_frame_release(&arena);
 
     return had_error;
 }

@@ -188,20 +188,20 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
 
 EXPORT bool todo_parse_file(Todo_Array* todos, String path, String todo)
 {
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     String_Builder source = {&arena.allocator};
 
     bool file_error = file_read_entire(path, &source);
     todo_parse_source(todos, path, source.string, todo);
     
-    arena_release(&arena);
+    arena_frame_release(&arena);
     return file_error;
 }
 
 EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
     bool state = true;
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     {
         String_Builder source = {&arena.allocator};
 
@@ -234,7 +234,7 @@ EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize
 
         platform_directory_list_contents_free(entries);
     }
-    arena_release(&arena);
+    arena_frame_release(&arena);
     return state;
 }
 

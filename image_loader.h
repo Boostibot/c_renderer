@@ -116,7 +116,7 @@ EXPORT bool image_read_from_file(Image* image, String path, isize desired_channe
     LOG_INFO("ASSET", "Loading image '%s'", cstring_ephemeral(path));
 
     bool state = true;
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     {
         Log_List list = {0};
         log_list_init_capture(&list, &arena.allocator);
@@ -128,7 +128,7 @@ EXPORT bool image_read_from_file(Image* image, String path, isize desired_channe
         if(state == false)
             LOG_ERROR_CHILD("ASSET", "load error", list.first, "Failed to load an image: '%s'" , cstring_ephemeral(path));
     }
-    arena_release(&arena);
+    arena_frame_release(&arena);
     return state;
 }
 
@@ -149,7 +149,7 @@ EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_Fi
     bool state = false;
 
     builder_clear(into);
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     {
         Image contiguous = {0};
         //not contigous in memory => make contiguous copy
@@ -228,13 +228,13 @@ EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_Fi
         if(had_internal_error)
             LOG_ERROR("Asset", "%s", error_msg_unspecfied);
     }
-    arena_release(&arena);
+    arena_frame_release(&arena);
     return state;
 }
 
 EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
-    Arena arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_acquire();
     String_Builder formatted = {&arena.allocator};
 
     Log_List list = {0};
@@ -246,7 +246,7 @@ EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_Fil
     if(state == false)
         LOG_ERROR_CHILD("ASSET", "write error", list.first, "Couldnt write an image to path '%s'", cstring_ephemeral(path));
 
-    arena_release(&arena);
+    arena_frame_release(&arena);
     return state;
 }
 
