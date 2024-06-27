@@ -5,7 +5,7 @@
 #include "lib/string.h"
 #include "lib/file.h"
 
-#include "lib/allocator_wrapper.h"
+//#include "lib/allocator_wrapper.h"
 
 typedef enum Image_File_Format {
     IMAGE_LOAD_FILE_FORMAT_NONE = 0,
@@ -36,16 +36,9 @@ EXPORT bool image_write_to_file(Subimage image, String path);
 #if (defined(LIB_ALL_IMPL) || defined(LIB_IMAGE_LOADER_IMPL)) && !defined(LIB_IMAGE_LOADER_HAS_IMPL)
 #define LIB_IMAGE_LOADER_HAS_IMPL
 // ========================= IMPL =====================
-
-#define STBI_MALLOC(size)           wrapper_allocator_malloc(allocator_get_default(), size, DEF_ALIGN)
-#define STBI_REALLOC(ptr, new_size) wrapper_allocator_realloc(allocator_get_default(), ptr, new_size, DEF_ALIGN)
-#define STBI_FREE(ptr)              wrapper_allocator_free(ptr)
 #define STBI_ASSERT(x)              ASSERT(x)
 #define STBI_WINDOWS_UTF8
 
-#define STBIW_MALLOC(size)           STBI_MALLOC(size)
-#define STBIW_REALLOC(ptr, new_size) STBI_REALLOC(ptr, new_size)
-#define STBIW_FREE(ptr)              STBI_FREE(ptr)
 #define STBIW_ASSERT(x)              STBI_ASSERT(x)
 #define STBIW_WINDOWS_UTF8
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -59,11 +52,6 @@ EXPORT bool image_write_to_file(Subimage image, String path);
 EXPORT bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags)
 {
     bool state = true;
-    
-    Allocator_Set prev_allocs = {0};
-    if(image->allocator)
-        prev_allocs = allocator_set_default(image->allocator);
-
     int width = 0;
     int height = 0;
     int channels = 0;
@@ -95,10 +83,8 @@ EXPORT bool image_read_from_memory(Image* image, String data, isize desired_chan
 
     if(allocated)
     {
-        image_init(image, wrapper_allocator_get_default(), channels, format);
-        image->pixels = (u8*) allocated;
-        image->width = (i32) width;
-        image->height = (i32) height;
+        Subimage subimage = subimage_make(allocated, width, height, channels*pixel_type_size(format), format);
+        image_assign(image, subimage);
     }
     else
     {
@@ -106,7 +92,7 @@ EXPORT bool image_read_from_memory(Image* image, String data, isize desired_chan
         state = false;
     }
 
-    allocator_set(prev_allocs);
+    free(allocated);
     return state;
 }
 
@@ -156,7 +142,7 @@ EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_Fi
         if(subimage_is_contiguous(image) == false)
         {
             contiguous = image_from_subimage(image, &arena.allocator);
-            image = subimage_make(contiguous);
+            image = subimage_of(contiguous);
         }
 
         isize channel_count = subimage_channel_count(image);

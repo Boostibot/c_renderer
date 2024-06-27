@@ -223,13 +223,13 @@
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
+    <ClInclude Include="lib\allocator_tlsf.h" />
     <ClInclude Include="lib\arena.h" />
     <ClInclude Include="lib\hash_index.h" />
     <ClInclude Include="lib\list.h" />
     <ClInclude Include="lib\log_list.h" />
     <ClInclude Include="lib\lpf.h" />
     <ClInclude Include="lib\path.h" />
-    <ClInclude Include="lib\pool_allocator.h" />
     <ClInclude Include="lib\profile_utils.h" />
     <ClInclude Include="lib\_test_all.h" />
     <ClInclude Include="lib\_test_arena.h" />

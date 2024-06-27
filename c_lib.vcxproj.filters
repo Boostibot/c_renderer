@@ -239,11 +239,11 @@
     <ClInclude Include="resource_2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\pool_allocator.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="link_table2.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator_tlsf.h">
+      <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

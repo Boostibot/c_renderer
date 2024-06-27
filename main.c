@@ -12,7 +12,7 @@
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
 #define JOT_COUPLED
-#define RUN_TESTS
+//#define RUN_TESTS
 //#define RUN_JUST_TESTS
 
 //#include "mdump.h"
@@ -668,7 +668,7 @@ void gl_texture_array_set(GL_Texture_Array* array, i32 layer, i32 x, i32 y, Imag
 //The image needs to be smaller than the texture array.
 //That is the corner pixels will be expanded to fill the remianing size around the image.
 //If the image is exactly the size of the array jsut copies it over.
-bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image, bool regenerate_mips, Image* temp_builder_or_null)
+bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image, bool regenerate_mips)
 {
     bool state = true;
     CHECK_BOUNDS(layer, array->layer_count);
@@ -692,26 +692,20 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
     {
         LOG_WARN("render", "image of size %d x %d doesnt fit exactly. Resorting back to extending it.", image.width, image.height);
 
+        Arena_Frame arena = scratch_arena_acquire();
         Image temp_storage = {0};
-        Image* temp_builder = temp_builder_or_null;
-
-        if(temp_builder_or_null == NULL)
-        {
-            image_init_unshaped(&temp_storage, allocator_get_default());
-            temp_builder = &temp_storage;
-        }
+        image_init_sized(&temp_storage, &arena.allocator, array->width, array->height, image.pixel_size, image.type, NULL);
 
         ASSERT(image.height > 0 && image.width > 0);
-
-        image_assign(temp_builder, image);
+        image_copy(&temp_storage, subimage_of(image), 0, 0);
         
-        isize stride = image_byte_stride(*temp_builder);
-        i32 pixel_size = temp_builder->pixel_size;
+        isize stride = image_byte_stride(temp_storage);
+        i32 pixel_size = temp_storage.pixel_size;
 
         //Extend sideways
         for(i32 y = 0; y < image.height; y++)
         {
-            u8* curr_row = temp_builder->pixels + stride*y;
+            u8* curr_row = temp_storage.pixels + stride*y;
             u8* last_pixel = curr_row + pixel_size*(image.width - 1);
 
             //memset_pattern(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, color, pixel_size);
@@ -719,18 +713,17 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
         }
 
         //Extend downwards
-        u8* last_row = temp_builder->pixels + stride*(image.height - 1);
-        for(i32 y = image.height; y < temp_builder->height; y++)
+        u8* last_row = temp_storage.pixels + stride*(image.height - 1);
+        for(i32 y = image.height; y < temp_storage.height; y++)
         {
-            u8* curr_row = temp_builder->pixels + stride*y;
+            u8* curr_row = temp_storage.pixels + stride*y;
             memmove(curr_row, last_row, stride);
         }
         
-        //memset_pattern(temp_builder->pixels, image_all_pixels_size(*temp_builder), color, sizeof(color));
+        //memset_pattern(temp_storage->pixels, image_all_pixels_size(*temp_storage), color, sizeof(color));
+        gl_texture_array_set(array, layer, 0, 0, temp_storage, regenerate_mips);
 
-        gl_texture_array_set(array, layer, 0, 0, *temp_builder, regenerate_mips);
-
-        image_deinit(&temp_storage);
+        arena_frame_release(&arena);
     }
 
     return state;
@@ -1078,7 +1071,7 @@ Render_Texture_Layer render_texture_manager_add(Render_Texture_Manager* manager,
         layer_info->used_height = image.height;
         layer_info->name = name_make(name);
 
-        bool fill_state = gl_texture_array_fill_layer(&resolution->array, empty_slot.layer, image, false, NULL);
+        bool fill_state = gl_texture_array_fill_layer(&resolution->array, empty_slot.layer, image, false);
         ASSERT(fill_state);
     }
 
@@ -2804,13 +2797,15 @@ void error_func(void* context, Platform_Sandbox_Error error)
 #define JOT_ALL_TEST
 #include "lib/list.h"
 #include "lib/path.h"
-#include "lib/pool_allocator.h"
+#include "lib/allocator_tlsf.h"
 
 void run_test_func(void* context)
 {
     (void) context;
-    //benchmark_pool_alloc(6.0);
-    //test_pool_alloc(3.0);
+    //test_allocator_tlsf(6.0);
+    //benchmark_allocator_tlsf(false, 4.0);
     
-    test_all(3.0);
+    //log_perf_counters("bench", LOG_INFO, PERF_SORT_BY_TIME);
+
+    test_all(1.0);
 }

@@ -444,7 +444,7 @@ INTERNAL Format_Obj_Group* _obj_parser_add_group(Format_Obj_Model* out, String a
     }
 
     Format_Obj_Group new_group = {0};
-    format_obj_group_init(&new_group, allocator_get_default());
+    format_obj_group_init(&new_group, out->groups.allocator);
     new_group.trinagles_from = (i32) vertex_index;
     new_group.groups = *active_groups;
     builder_assign(&new_group.object, active_object);
@@ -475,10 +475,8 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
 
 EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
-    Allocator* default_alloc = allocator_get_default();
     Allocator* alloc = out->indeces.allocator;
-    if(alloc == NULL)
-        alloc = default_alloc;
+    ASSERT(alloc);
 
     format_obj_model_init(out, alloc);
     
@@ -729,7 +727,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                 
                 //Group: g [group1] [group2] ...
                 case 'g': {
-                    String_Builder_Array groups = {default_alloc};
+                    String_Builder_Array groups = {alloc};
                     isize line_index = 1;
                     while(true)
                     {
@@ -738,7 +736,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         if(match_whitespace_separated(line, &line_index, &group_from, &group_to))
                         {
                             String group = string_range(line, group_from, group_to);
-                            array_push(&groups, builder_from_string(default_alloc, group));
+                            array_push(&groups, builder_from_string(alloc, group));
                         }
                         else
                         {
@@ -877,7 +875,8 @@ INTERNAL bool _match_space_separated_optional_vec3(String str, isize* index, Vec
 
 EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
-    Allocator* def_alloc = allocator_get_default();
+    Allocator* def_alloc = out->allocator;
+    ASSERT(def_alloc);
     Format_Mtl_Material* material = NULL;
     isize error_count = 0;
     bool had_error = false;
@@ -1368,6 +1367,5 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
     *had_errors = error_count;
     return had_error;
 }
-
 
 #endif

@@ -69,7 +69,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
     array_reserve(&shape_assembly->triangles, shape_assembly->triangles.size + model.indeces.size/3); //divided by three since are triangles
     array_reserve(&shape_assembly->vertices, shape_assembly->vertices.size + model.indeces.size/2); //divide by two since some vertices are shared
 
-    Allocator* def_alloc = allocator_get_default();
+    Allocator* def_alloc = shape_assembly->triangles.allocator;
 
     //Deduplicate groups
     for(isize parent_group_i = 0; parent_group_i < model.groups.size; parent_group_i++)
@@ -211,7 +211,6 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
         builder_assign(&group_desc.material_name, parent_group->material.string);
         if(parent_group->groups.size > 0)
             builder_assign(&group_desc.name, parent_group->groups.data[0].string);
-
 
         //link the previous group to this one
         if(description->groups.size > 0)
@@ -430,8 +429,7 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
 
 EXPORT bool material_read_entire(Id_Array* materials, String path)
 {
-    Stack_Allocator arena = {0};
-    stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
+    Arena_Frame arena = scratch_arena_acquire();
 
     LOG_INFO("ASSET", "Loading materials at '%s'", cstring_ephemeral(path));
 
@@ -523,16 +521,13 @@ EXPORT bool material_read_entire(Id_Array* materials, String path)
     if(state == false)
         LOG_ERROR("ASSET", "Error loading material file '%s'", full_path.data);
 
-    stack_allocator_deinit(&arena);
-
+    arena_frame_release(&arena);
     return state;
 }
 
 EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
-    Stack_Allocator arena = {0};
-    stack_allocator_init_use(&arena, NULL, 10*MEBI_BYTE, allocator_get_scratch());
-    
+    Arena_Frame arena = scratch_arena_acquire();
     LOG_INFO("ASSET", "Loading mesh at '%s'", cstring_ephemeral(path));
 
     Id out_handle = {0};
@@ -645,7 +640,7 @@ EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     if(state == false)
         LOG_ERROR("ASSET", "Error rading mesh file '%s'", full_path.data);
     
-    stack_allocator_deinit(&arena);
+    arena_frame_release(&arena);
     *triangle_mesh_handle = out_handle;
     return state;
 }

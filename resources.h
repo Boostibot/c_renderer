@@ -252,7 +252,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
 
     void _image_copy(Image* out, const Image* in)
     {
-        image_assign(out, *in);
+        image_assign(out, subimage_of(*in));
     }
 
     void _image_deinit(Image* out)
@@ -586,8 +586,10 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         
         bool state = true;
         
+        Arena_Frame arena = scratch_arena_acquire();
+        
         Map_Info default_values = {0};
-        map_info_init(&default_values, allocator_get_default());
+        map_info_init(&default_values, &arena.allocator);
 
         serialize_vec3(serialize_locate(entry, "offset", action),       &info->offset, default_values.offset, action);
         serialize_vec3(serialize_locate(entry, "scale", action),        &info->scale, default_values.scale, action);
@@ -614,7 +616,8 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
 
         if(state && action == SERIALIZE_WRITE)
             serialize_entry_set_identity(entry, STRING("Map_Info"), LPF_COLLECTION);
-
+            
+        arena_frame_release(&arena);
         return state;
     }
     
