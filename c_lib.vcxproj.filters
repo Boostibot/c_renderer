@@ -98,12 +98,6 @@
     <ClInclude Include="lib\allocator_malloc.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\allocator_stack.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator_wrapper.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="lib\array.h">
       <Filter>lib</Filter>
     </ClInclude>
@@ -243,6 +237,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\allocator_tlsf.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\slz4.h">
       <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>

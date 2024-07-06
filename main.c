@@ -15,6 +15,7 @@
 //#define RUN_TESTS
 //#define RUN_JUST_TESTS
 
+
 //#include "mdump.h"
 
 #include "lib/profile_utils.h"
@@ -26,7 +27,6 @@
 #include "lib/file.h"
 #include "lib/allocator_debug.h"
 #include "lib/allocator_malloc.h"
-#include "lib/allocator_stack.h"
 #include "lib/random.h"
 #include "lib/math.h"
 #include "lib/guid.h"
@@ -292,9 +292,6 @@ int main()
     Malloc_Allocator malloc_allocator = {0};
     malloc_allocator_init(&malloc_allocator, "fallback allocator");
 
-    Stack_Allocator stack_allocator = {0};
-    stack_allocator_init(&stack_allocator, NULL, 10*MEBI_BYTE, &malloc_allocator.allocator);
-    
     File_Logger file_logger = {0};
     //error_system_init(&static_allocator.allocator);
     file_logger_init_use(&file_logger, &malloc_allocator.allocator, "logs");
@@ -2522,6 +2519,7 @@ void run_func(void* context)
     Platform_File_Watch watch = {0};
     platform_file_watch(&watch, STRING("./"), PLATFORM_FILE_WATCH_ALL | PLATFORM_FILE_WATCH_SUBDIRECTORIES, NULL, NULL);
 
+
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
         Platform_File_Watch_Event file_event = {0};
@@ -2789,23 +2787,10 @@ void error_func(void* context, Platform_Sandbox_Error error)
 }
 
 //#include "mdump2.h"
-
-#include "lib/_test_lpf.h"
 #include "lib/_test_all.h"
-#include "lib/log_list.h"
-
-#define JOT_ALL_TEST
-#include "lib/list.h"
-#include "lib/path.h"
-#include "lib/allocator_tlsf.h"
 
 void run_test_func(void* context)
 {
     (void) context;
-    //test_allocator_tlsf(6.0);
-    //benchmark_allocator_tlsf(false, 4.0);
-    
-    //log_perf_counters("bench", LOG_INFO, PERF_SORT_BY_TIME);
-
-    test_all(1.0);
+    test_all(3.0);
 }

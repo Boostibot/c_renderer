@@ -231,6 +231,7 @@
     <ClInclude Include="lib\lpf.h" />
     <ClInclude Include="lib\path.h" />
     <ClInclude Include="lib\profile_utils.h" />
+    <ClInclude Include="lib\slz4.h" />
     <ClInclude Include="lib\_test_all.h" />
     <ClInclude Include="lib\_test_arena.h" />
     <ClInclude Include="lib\_test_debug_allocator.h" />
@@ -249,8 +250,6 @@
     <ClInclude Include="lib\allocator.h" />
     <ClInclude Include="lib\allocator_debug.h" />
     <ClInclude Include="lib\allocator_malloc.h" />
-    <ClInclude Include="lib\allocator_stack.h" />
-    <ClInclude Include="lib\allocator_wrapper.h" />
     <ClInclude Include="lib\array.h" />
     <ClInclude Include="lib\assert.h" />
     <ClInclude Include="lib\defines.h" />
