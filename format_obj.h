@@ -1132,7 +1132,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
                 Mtl_Map_Table_Entry map = map_table[k];
                 for(isize j = 0; j < 2; j++)
                 {
-                    String str_sequence = string_make(map.sequences[j]);
+                    String str_sequence = string_of(map.sequences[j]);
                     if(str_sequence.size != 0 && match_sequence(line, &i, str_sequence))
                     {
                         map_table_matched_i = k;

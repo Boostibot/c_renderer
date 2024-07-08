@@ -2,7 +2,7 @@
 #define LIB_TODO
 
 // This is a file that presents functions for curling @TODOs @NOTEs and other such tags from files.
-// This is mainly for fun and to remind me of what needs to be done more than actual ussefulness.
+// This is mainly for fun and to remind me of what needs to be done more than actual usefulness.
 // 
 // The general syntax is:
 // 
@@ -21,8 +21,8 @@
 // 
 // @SIGIL todo missing everything
 //
-// Alternatively markers can appear with the same syntax inside strings. Those are howver only limited to songle line.
-// The string parsing is really really simplsitic and doesnt take into account escaping.
+// Alternatively markers can appear with the same syntax inside strings. Those are however only limited to single line.
+// The string parsing is really really simplistic and doesnt take into account escaping.
 //
 // assert(1 > 0 && "this is an assert @TODO: make better!  ");
 // will get parsed into: 
@@ -222,7 +222,7 @@ EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize
                 Platform_Directory_Entry entry = entries[i];
                 if(entry.info.type == PLATFORM_FILE_TYPE_FILE)
                 {
-                    String file_path = string_make(entry.path);
+                    String file_path = string_of(entry.path);
                     bool read_state = file_read_entire(file_path, &source);
 
                     if(read_state)
@@ -241,7 +241,7 @@ EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize
 EXPORT bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
 {
     Todo_Array todos = {0};
-    bool state = todo_parse_folder(&todos, STRING("./"), string_make(marker), depth);
+    bool state = todo_parse_folder(&todos, STRING("./"), string_of(marker), depth);
     if(state)
     {
         String common_path_prefix = {0};
@@ -275,9 +275,9 @@ EXPORT bool log_todos(const char* log_module, Log_Type log_type, const char* mar
                 path = string_safe_tail(path, common_path_prefix.size);
 
             if(todo.signature.size > 0)
-                LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.signature.data), cstring_escape(todo.comment.data));
+                LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", path.data, (lli) todo.line, todo.marker.data, todo.signature.data, todo.comment.data);
             else
-                LOG(log_module, log_type, "%-20s %4lli %s %s\n", cstring_escape(path.data), (lli) todo.line, cstring_escape(todo.marker.data), cstring_escape(todo.comment.data));
+                LOG(log_module, log_type, "%-20s %4lli %s %s\n", path.data, (lli) todo.line, todo.marker.data, todo.comment.data);
         }
         log_ungroup();
     
