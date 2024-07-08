@@ -160,14 +160,14 @@ typedef struct Format_Obj_Group {
 
     //Each group has info and some number of trinagles.
     //Trinagles from this group are inside the shared trinagles array
-    //with the indeces in range [trinagles_from, trinagles_from + trinagles_count)
+    //with the indices in range [trinagles_from, trinagles_from + trinagles_count)
     i32 trinagles_from;
     i32 trinagles_count;
 } Format_Obj_Group;
 
 typedef struct Format_Obj_Vertex_Index
 {
-    //one based indeces into the appropraite arrays.
+    //one based indices into the appropraite arrays.
     //If value is 0 means not present.
 
     //THESE INDECES ARE NOT VALIDATED!
@@ -185,7 +185,7 @@ typedef struct Format_Obj_Model {
     Vec3_Array positions; 
     Vec2_Array uvs; 
     Vec3_Array normals;
-    Format_Obj_Vertex_Index_Array indeces;
+    Format_Obj_Vertex_Index_Array indices;
     Format_Obj_Group_Array groups;
     String_Builder_Array material_files;
 } Format_Obj_Model;
@@ -262,7 +262,7 @@ typedef struct Format_Obj_Mtl_Error
     isize index;
     i32 line;
     Format_Obj_Mtl_Error_Statement statement;
-    bool unimplemented; //wheter the error is due to it being unimplemented
+    bool unimplemented; //whether the error is due to it being unimplemented
     bool _padding[7];
 } Format_Obj_Mtl_Error;
 
@@ -352,7 +352,7 @@ EXPORT void format_obj_model_deinit(Format_Obj_Model* info)
     array_deinit(&info->positions);
     array_deinit(&info->uvs);
     array_deinit(&info->normals);
-    array_deinit(&info->indeces);
+    array_deinit(&info->indices);
     array_deinit(&info->groups);
     builder_array_deinit(&info->material_files);
 }
@@ -373,7 +373,7 @@ EXPORT void format_obj_model_init(Format_Obj_Model* info, Allocator* alloc)
     array_init(&info->positions, alloc);
     array_init(&info->uvs, alloc);
     array_init(&info->normals, alloc);
-    array_init(&info->indeces, alloc);
+    array_init(&info->indices, alloc);
     array_init(&info->groups, alloc);
     array_init(&info->material_files, alloc);
 }
@@ -475,7 +475,7 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
 
 EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
-    Allocator* alloc = out->indeces.allocator;
+    Allocator* alloc = out->indices.allocator;
     ASSERT(alloc);
 
     format_obj_model_init(out, alloc);
@@ -485,7 +485,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
     
     //Try to guess the needed size based on a simple heurestic
     isize expected_line_count = obj_source.size / 32 + 128;
-    array_reserve(&out->indeces, expected_line_count);
+    array_reserve(&out->indices, expected_line_count);
     array_reserve(&out->positions, expected_line_count);
     array_reserve(&out->uvs, expected_line_count);
     array_reserve(&out->normals, expected_line_count);
@@ -590,7 +590,7 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                     bool has_double_slash = string_find_first(line, STRING("//") , 0) != -1;
                     bool has_slash = string_find_first_char(line, '/' , 0) != -1;
 
-                    Format_Obj_Vertex_Index indeces[3] = {0};
+                    Format_Obj_Vertex_Index indices[3] = {0};
                     
                     bool ok = false;
                     isize line_index = 1;
@@ -602,17 +602,17 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         line_index = 1;
                         ok = true
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].pos_i1)
                                 && match_sequence(line, &line_index, STRING("//"))
-                                && match_decimal_i32(line, &line_index, &indeces[0].norm_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].norm_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].pos_i1)
                                 && match_sequence(line, &line_index, STRING("//"))
-                                && match_decimal_i32(line, &line_index, &indeces[1].norm_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].norm_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[2].pos_i1)
                                 && match_sequence(line, &line_index, STRING("//"))
-                                && match_decimal_i32(line, &line_index, &indeces[2].norm_i1);
+                                && match_decimal_i32(line, &line_index, &indices[2].norm_i1);
                     }
                     //f 1 2 3
                     else if(!has_slash)
@@ -620,11 +620,11 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         line_index = 1;
                         ok = true
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].pos_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].pos_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1);
+                                && match_decimal_i32(line, &line_index, &indices[2].pos_i1);
                     }
                     
                     //f 1/1/1 2/2/2 3/3/3
@@ -633,23 +633,23 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         line_index = 1;
                         ok = true
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].pos_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[0].uv_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].uv_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[0].norm_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].norm_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].pos_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[1].uv_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].uv_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[1].norm_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].norm_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[2].pos_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[2].uv_i1)
+                                && match_decimal_i32(line, &line_index, &indices[2].uv_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[2].norm_i1);
+                                && match_decimal_i32(line, &line_index, &indices[2].norm_i1);
                     }
 
                     //f 1/1 2/2 3/3
@@ -658,27 +658,27 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                         line_index = 1;
                         ok = true
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[0].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].pos_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[0].uv_i1)
+                                && match_decimal_i32(line, &line_index, &indices[0].uv_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[1].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].pos_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[1].uv_i1)
+                                && match_decimal_i32(line, &line_index, &indices[1].uv_i1)
                                 && match_whitespace(line, &line_index)
-                                && match_decimal_i32(line, &line_index, &indeces[2].pos_i1)
+                                && match_decimal_i32(line, &line_index, &indices[2].pos_i1)
                                 && match_char(line, &line_index, '/')
-                                && match_decimal_i32(line, &line_index, &indeces[2].uv_i1);
+                                && match_decimal_i32(line, &line_index, &indices[2].uv_i1);
                     }
 
                     if(!ok)
                         error = FORMAT_OBJ_ERROR_FACE;
 
-                    //correct negative values indeces. If index is negative it refers to the -i-nth last parsed
+                    //correct negative values indices. If index is negative it refers to the -i-nth last parsed
                     // value in the given category. If the category does not recieve data (NULL) set the index to 0
                     for(isize i = 0; i < 3; i++)
                     {
-                        Format_Obj_Vertex_Index index = indeces[i];
+                        Format_Obj_Vertex_Index index = indices[i];
                         if(index.pos_i1 < 0)
                             index.pos_i1 = (u32) out->positions.size + index.pos_i1 + 1;
                         
@@ -689,9 +689,9 @@ EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj
                             index.norm_i1 = (u32) out->normals.size + index.norm_i1 + 1;
                     }
 
-                    array_push(&out->indeces, indeces[0]); 
-                    array_push(&out->indeces, indeces[1]); 
-                    array_push(&out->indeces, indeces[2]);
+                    array_push(&out->indices, indices[0]); 
+                    array_push(&out->indices, indices[1]); 
+                    array_push(&out->indices, indices[2]);
 
                     trinagle_index += 1;
                 } break;
@@ -1127,7 +1127,7 @@ EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, F
 
             //try to match any of the sequences from the above table
             isize map_table_matched_i = -1;
-            for(isize k = 0; k < STATIC_ARRAY_SIZE(map_table); k++)
+            for(isize k = 0; k < ARRAY_SIZE(map_table); k++)
             {
                 Mtl_Map_Table_Entry map = map_table[k];
                 for(isize j = 0; j < 2; j++)

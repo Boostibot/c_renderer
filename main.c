@@ -480,11 +480,11 @@ GLuint get_uniform_block_info(GLuint program_handle, const char* block_name, con
     if(block_size_or_null)
         glGetActiveUniformBlockiv(program_handle, blockIndex, GL_UNIFORM_BLOCK_DATA_SIZE, block_size_or_null);
 
-    enum {max_indeces = 256};
-    if(querried_count > max_indeces)
-        querried_count = max_indeces;
+    enum {max_indices = 256};
+    if(querried_count > max_indices)
+        querried_count = max_indices;
 
-    GLuint indices[max_indeces] = {0};
+    GLuint indices[max_indices] = {0};
     glGetUniformIndices(program_handle, querried_count, querried_names, indices);
 
     if(offsets_or_null)
@@ -532,7 +532,7 @@ GL_Shader_Block_Info shader_storage_block_make(GLuint program_handle, const char
     GLuint index = glGetProgramResourceIndex(program_handle, GL_SHADER_STORAGE_BLOCK, name);
 
     //GLenum queried_properties[] = {GL_BUFFER_DATA_SIZE};
-    //glGetProgramResourceiv(program_handle, GL_SHADER_STORAGE_BUFFER, out.index, STATIC_ARRAY_SIZE(queried_properties), queried_properties, 1, NULL, &out.buffer_size);
+    //glGetProgramResourceiv(program_handle, GL_SHADER_STORAGE_BUFFER, out.index, ARRAY_SIZE(queried_properties), queried_properties, 1, NULL, &out.buffer_size);
 
     glShaderStorageBlockBinding(program_handle, index, binding_point);
 
@@ -878,7 +878,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     layer_counts[int_log2_lower_bound(4096)] = 8;
 
     isize combined_layer_size = 0;
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(layer_counts); i++)
+    for(isize i = 0; i < ARRAY_SIZE(layer_counts); i++)
     {
         i32 size = 1 << i;
         i32 layers = layer_counts[i];
@@ -886,7 +886,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     }
     
     isize combined_channel_count = 0;
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(channel_counts); i++)
+    for(isize i = 0; i < ARRAY_SIZE(channel_counts); i++)
         combined_channel_count += channel_counts[i];
 
     isize ideal_total_size = combined_channel_count * combined_layer_size * pixel_type_size(pixel_type);
@@ -896,9 +896,9 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     
     log_group();
     isize combined_size = 0;
-    for(i32 j = 0; j < STATIC_ARRAY_SIZE(channel_counts); j++)
+    for(i32 j = 0; j < ARRAY_SIZE(channel_counts); j++)
     {
-        for(i32 i = 0; i < STATIC_ARRAY_SIZE(layer_counts); i++)
+        for(i32 i = 0; i < ARRAY_SIZE(layer_counts); i++)
         {
             i32 size = 1 << i;
             i32 channels = channel_counts[j];
@@ -1236,10 +1236,10 @@ void render_geometry_batch_init(Render_Geometry_Batch* mesh, Allocator* alloc, i
     gl_check_error();
 }
 
-void render_geometry_batch_set_data(Render_Geometry_Batch* mesh, const Vertex vertices[], i32 vertex_count, i32 vertex_offset, const i32 indeces[], i32 index_count, i32 index_offset)
+void render_geometry_batch_set_data(Render_Geometry_Batch* mesh, const Vertex vertices[], i32 vertex_count, i32 vertex_offset, const i32 indices[], i32 index_count, i32 index_offset)
 {
     glNamedBufferSubData(mesh->vertex_buffer_handle, sizeof(Vertex)*vertex_offset, sizeof(Vertex)*vertex_count, vertices);
-    glNamedBufferSubData(mesh->index_buffer_handle, sizeof(i32)*index_offset, sizeof(i32)*index_count, indeces);
+    glNamedBufferSubData(mesh->index_buffer_handle, sizeof(i32)*index_offset, sizeof(i32)*index_count, indices);
 }
 
 typedef struct GL_Buffer {
@@ -1617,7 +1617,7 @@ typedef Array(Blinn_Phong_Per_Batch) Blinn_Phong_Per_Batch_Array;
 // We do this by keeping geometry in 'batches'. A batch is a single GL buffer 
 // containing aggragate of multiple different meshes or submeshes (groups in OBJ format - sponza has about a hundred). 
 // However a single model can be at most in one batch (ie we never split because too big).
-// The command buffer commands can dispatch any number of sub ranges of indeces (so meshes/groups in out batch) across any 
+// The command buffer commands can dispatch any number of sub ranges of indices (so meshes/groups in out batch) across any 
 // number of instances within single draw call. (So we can draw just the pot and plant from sponza.obj 100x at once!)
 // 
 // To use this we need:
@@ -1637,7 +1637,7 @@ typedef Array(Blinn_Phong_Per_Batch) Blinn_Phong_Per_Batch_Array;
 //          1 - use "bindless textures" and store them just like above - this is probably the more optimal solution
 //              and its call overhead is esentially zero
 //          2 - Have an array of sampler uniforms but since we are limited by the number of samplers we 'allocate' these slots
-//              so that we place indeces to the appropriate maps into the uniform buffer. This requires fancy code and might not be
+//              so that we place indices to the appropriate maps into the uniform buffer. This requires fancy code and might not be
 //              worth doing.
 //
 //
@@ -1649,9 +1649,9 @@ for(int draw_i = 0; draw_i < command_count; draw_i++)
     Gl_Draw_Elements_Indirect_Command c = commands[draw_i];
     for(int instance_i = 0; instance_i < c.instance_count; instance_i++)
     {
-        for(int i = c.indeces_from; i < c.indeces_from + c.indeces_count; i++)
+        for(int i = c.indices_from; i < c.indices_from + c.indices_count; i++)
         {
-            GLuint gl_VertexID = indeces[i] + c.base_vertex;
+            GLuint gl_VertexID = indices[i] + c.base_vertex;
             GLuint gl_InstanceID = instance_i + c.base_instance;
             GLuint gl_DrawID = draw_i;
  
@@ -2781,7 +2781,7 @@ void error_func(void* context, Platform_Sandbox_Error error)
     (void) context;
     const char* msg = platform_exception_to_string(error.exception);
     
-    LOG_ERROR("APP", "%s exception occured", msg);
+    LOG_ERROR("APP", "%s exception occurred", msg);
     LOG_TRACE("APP", "printing trace:");
     log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
 }

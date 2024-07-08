@@ -26,7 +26,7 @@ typedef struct Map_Info {
     Vec3 resolution;
 
     i32 channels_count; //the number of channels this texture should have. Is in range [0, MAX_CHANNELS] 
-    i32 channels_idices1[MAX_CHANNELS]; //One based indeces into the image channels. 
+    i32 channels_idices1[MAX_CHANNELS]; //One based indices into the image channels. 
     //If value is 0 then it is assumed to be equal to its index ie.:
     // channels_idices1 = {0, 0, 0, 0} ~~assumed~~> channels_idices1 = {1, 2, 3, 4}
 

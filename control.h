@@ -77,7 +77,7 @@ typedef enum Input_Type
 } Input_Type;
 
 //An abstarct set of game actions to be used by the game code
-//we represent all values as ammount and the number of interactions
+//we represent all values as amountand the number of interactions
 //this allows us to rebind pretty much everything to everything including 
 //keys to control camera and mouse to control movement.
 //This is useful for example because controllers use smooth controls for movement while keyboard does not

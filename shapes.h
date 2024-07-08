@@ -42,7 +42,7 @@ typedef struct Shape_Assembly {
 void shape_init(Shape* shape);
 void shape_deinit(Shape* shape);
 void shape_tranform(Shape* shape, Mat4 transform);
-void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize trinagles_count);
+void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indices, isize trinagles_count);
 
 u64 vertex_hash64(Vertex vertex, u64 seed);
 Shape shapes_make_unit_quad();
@@ -173,7 +173,7 @@ void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in)
     hash_index_copy(&out->vertices_hash, in->vertices_hash);
 }
 
-void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indeces, isize trinagles_count)
+void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indices, isize trinagles_count)
 {
     isize vertex_count_before = shape->vertices.size;
     isize triangle_count_before = shape->triangles.size;
@@ -182,7 +182,7 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
     array_resize(&shape->triangles, triangle_count_before + trinagles_count);
     for(isize i = 0; i < trinagles_count; i++)
     {
-        Triangle_Index index = indeces[i];
+        Triangle_Index index = indices[i];
         CHECK_BOUNDS(index.vertex_i[0], vertices_count);
         CHECK_BOUNDS(index.vertex_i[1], vertices_count);
         CHECK_BOUNDS(index.vertex_i[2], vertices_count);
@@ -223,8 +223,8 @@ u64 vertex_hash64(Vertex vertex, u64 seed)
 Shape shapes_make_unit_quad()
 {
     Shape out = {0};
-    isize vertex_count = STATIC_ARRAY_SIZE(XZ_QUAD_VERTICES);
-    isize index_count = STATIC_ARRAY_SIZE(XZ_QUAD_INDECES);
+    isize vertex_count = ARRAY_SIZE(XZ_QUAD_VERTICES);
+    isize index_count = ARRAY_SIZE(XZ_QUAD_INDECES);
     array_append(&out.vertices, XZ_QUAD_VERTICES, vertex_count);
     array_append(&out.triangles, XZ_QUAD_INDECES, index_count);
 
@@ -236,8 +236,8 @@ Shape shapes_make_unit_cube()
 {
     
     Shape out = {0};
-    isize vertex_count = STATIC_ARRAY_SIZE(CUBE_VERTICES);
-    isize index_count = STATIC_ARRAY_SIZE(CUBE_INDECES);
+    isize vertex_count = ARRAY_SIZE(CUBE_VERTICES);
+    isize index_count = ARRAY_SIZE(CUBE_INDECES);
     array_append(&out.vertices, CUBE_VERTICES, vertex_count);
     array_append(&out.triangles, CUBE_INDECES, index_count);
 
@@ -405,7 +405,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
         
     PERF_COUNTER_START();
     isize vertices_before = into->vertices.size;
-    isize indeces_before = into->triangles.size;
+    isize indices_before = into->triangles.size;
 
     const Vec3 origin = vec3(0, 0, 0);
     const Vec3 corners[4] = {
@@ -418,7 +418,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
     const f32 y_angle = vec3_angle_between(vec3_sub(corners[0], origin), vec3_sub(corners[1], origin));
     const f32 x_angle = vec3_angle_between(vec3_sub(corners[2], origin), vec3_sub(corners[3], origin));
     
-    array_reserve(&into->triangles, indeces_before + (iters) * (iters) * 2);
+    array_reserve(&into->triangles, indices_before + (iters) * (iters) * 2);
     array_reserve(&into->vertices, vertices_before + (iters + 1) * (iters + 1));
     
     const Mat4 local_matrix = mat4_local_matrix(side_front, side_normal, offset);

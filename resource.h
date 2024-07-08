@@ -304,7 +304,7 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     Allocator* alloc = manager->storage.allocator;
     info->path = builder_from_string(alloc, params.path);
     info->name = builder_from_string(alloc, params.name);
-    platform_capture_call_stack(info->callstack.stack_frames, STATIC_ARRAY_SIZE(info->callstack.stack_frames), 1);
+    platform_capture_call_stack(info->callstack.stack_frames, ARRAY_SIZE(info->callstack.stack_frames), 1);
     info->creation_etime = now;
     info->modified_etime = now;
     info->death_etime = params.death_etime;

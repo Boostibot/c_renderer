@@ -56,7 +56,7 @@ INTERNAL const char* _resource_loading_translate_error(u32 code, void* context)
 
 EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
-    hash_index_reserve(&shape_assembly->vertices_hash, model.indeces.size);
+    hash_index_reserve(&shape_assembly->vertices_hash, model.indices.size);
     
     //Copy over materials
     for(isize i = 0; i < model.material_files.size; i++)
@@ -66,8 +66,8 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
     }
 
     //Try to guess the final needed size
-    array_reserve(&shape_assembly->triangles, shape_assembly->triangles.size + model.indeces.size/3); //divided by three since are triangles
-    array_reserve(&shape_assembly->vertices, shape_assembly->vertices.size + model.indeces.size/2); //divide by two since some vertices are shared
+    array_reserve(&shape_assembly->triangles, shape_assembly->triangles.size + model.indices.size/3); //divided by three since are triangles
+    array_reserve(&shape_assembly->vertices, shape_assembly->vertices.size + model.indices.size/2); //divide by two since some vertices are shared
 
     Allocator* def_alloc = shape_assembly->triangles.allocator;
 
@@ -122,7 +122,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
             isize i_min = (child_group->trinagles_from)*3;
             isize i_max = (child_group->trinagles_from + child_group->trinagles_count)*3;
 
-            //Iterate all indeces using a hash map to deduplicate vertex data
+            //Iterate all indices using a hash map to deduplicate vertex data
             //and shape it into the vertex structure. 
             //Discards all triangles that dont have a valid position
             bool discard_triangle = false;
@@ -138,7 +138,7 @@ EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_M
                 isize error_index = 0;
 
                 Vertex composed_vertex = {0};
-                Format_Obj_Vertex_Index index = model.indeces.data[i];
+                Format_Obj_Vertex_Index index = model.indices.data[i];
                 if(index.norm_i1 < 0 || index.norm_i1 > model.normals.size)
                 {
                     error = INVALID_NORM_INDEX;
@@ -371,7 +371,7 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
     }
 
     //Load everything
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(maps_or_cubemaps); i++)
+    for(isize i = 0; i < ARRAY_SIZE(maps_or_cubemaps); i++)
     {
         Map_Or_Cubemap_Handles map_or_cubemap = maps_or_cubemaps[i];
 

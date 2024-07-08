@@ -19,7 +19,7 @@ typedef union {
 #define MDUMP_UNUSED_MEMORY_PATTERN 0x55
 
 //@TODO: Linked list structure?
-//@TOOD: move Mdump_Type_Info into reserved?
+//@TODO: move Mdump_Type_Info into reserved?
 #define MDUMP_FLAG_ARRAY 0x1
 #define MDUMP_FLAG_PTR 0x2
 #define MDUMP_FLAG_OPTIONAL 0x4 
@@ -353,7 +353,7 @@ void mdump_types_init(Mdump_Types* types, Allocator* alloc)
     };
     
     array_resize(&types->types, MDUMP_TYPE_MAX_RESERVED);
-    for(isize i = 0; i < STATIC_ARRAY_SIZE(infos); i++)
+    for(isize i = 0; i < ARRAY_SIZE(infos); i++)
     {
         Builtin_Type_Info builtin_info = infos[i];
         Mdump_Type_Info* info = &types->types.data[builtin_info.type];

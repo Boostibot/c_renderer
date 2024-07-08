@@ -509,10 +509,10 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         state = state && serialize_id(serialize_locate(entry, "id", action),            &info->id, NULL, action);
         state = state && serialize_string(serialize_locate(entry, "name", action),      &info->name, STRING(""), action);
         serialize_string(serialize_locate(entry, "path", action),                       &info->path, STRING(""), action);
-        serialize_enum(serialize_locate(entry, "type_enum", action),                    &info->type_enum, sizeof(info->type_enum), 0, resource_type_enum, STATIC_ARRAY_SIZE(resource_type_enum), action);
+        serialize_enum(serialize_locate(entry, "type_enum", action),                    &info->type_enum, sizeof(info->type_enum), 0, resource_type_enum, ARRAY_SIZE(resource_type_enum), action);
 
-        state = state && serialize_enum(serialize_locate(entry, "lifetime", action),    &info->lifetime, sizeof(info->lifetime), 0, resource_lifetime_enum, STATIC_ARRAY_SIZE(resource_lifetime_enum), action);
-        state = state && serialize_enum(serialize_locate(entry, "reload", action),      &info->reload, sizeof(info->reload), 0, resource_reload_enum, STATIC_ARRAY_SIZE(resource_reload_enum), action);
+        state = state && serialize_enum(serialize_locate(entry, "lifetime", action),    &info->lifetime, sizeof(info->lifetime), 0, resource_lifetime_enum, ARRAY_SIZE(resource_lifetime_enum), action);
+        state = state && serialize_enum(serialize_locate(entry, "reload", action),      &info->reload, sizeof(info->reload), 0, resource_reload_enum, ARRAY_SIZE(resource_reload_enum), action);
     
         if(state)
         {
@@ -551,7 +551,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             Vec3 resolution;
 
             i32 channels_count; //the number of channels this texture should have. Is in range [0, MAX_CHANNELS] 
-            i32 channels_idices1[MAX_CHANNELS]; //One based indeces into the image channels. 
+            i32 channels_idices1[MAX_CHANNELS]; //One based indices into the image channels. 
             //If value is 0 then it is assumed to be equal to its index ie.:
             // channels_idices1 = {0, 0, 0, 0} ~~assumed~~> channels_idices1 = {1, 2, 3, 4}
 
@@ -599,15 +599,15 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         
         if(state)
         {
-            STATIC_ASSERT(STATIC_ARRAY_SIZE(info->channels_idices1) == 4);
+            STATIC_ASSERT(ARRAY_SIZE(info->channels_idices1) == 4);
             serialize_int_count_typed(serialize_locate(entry, "channels_count", action), info->channels_idices1, sizeof(*info->channels_idices1), default_values.channels_idices1, 4, action);
 
-            serialize_enum(serialize_locate(entry, "filter_minify", action), &info->filter_minify, sizeof(info->filter_minify), default_values.filter_minify, map_scale, STATIC_ARRAY_SIZE(map_scale), action);
-            serialize_enum(serialize_locate(entry, "filter_magnify", action), &info->filter_magnify, sizeof(info->filter_magnify), default_values.filter_magnify, map_scale, STATIC_ARRAY_SIZE(map_scale), action);
+            serialize_enum(serialize_locate(entry, "filter_minify", action), &info->filter_minify, sizeof(info->filter_minify), default_values.filter_minify, map_scale, ARRAY_SIZE(map_scale), action);
+            serialize_enum(serialize_locate(entry, "filter_magnify", action), &info->filter_magnify, sizeof(info->filter_magnify), default_values.filter_magnify, map_scale, ARRAY_SIZE(map_scale), action);
 
-            serialize_enum(serialize_locate(entry, "repeat_u", action),     &info->repeat_u, sizeof(info->repeat_u), default_values.repeat_u, map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
-            serialize_enum(serialize_locate(entry, "repeat_v", action),     &info->repeat_v, sizeof(info->repeat_v), default_values.repeat_v, map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
-            serialize_enum(serialize_locate(entry, "repeat_w", action),     &info->repeat_w, sizeof(info->repeat_w), default_values.repeat_w, map_repeat, STATIC_ARRAY_SIZE(map_repeat), action);
+            serialize_enum(serialize_locate(entry, "repeat_u", action),     &info->repeat_u, sizeof(info->repeat_u), default_values.repeat_u, map_repeat, ARRAY_SIZE(map_repeat), action);
+            serialize_enum(serialize_locate(entry, "repeat_v", action),     &info->repeat_v, sizeof(info->repeat_v), default_values.repeat_v, map_repeat, ARRAY_SIZE(map_repeat), action);
+            serialize_enum(serialize_locate(entry, "repeat_w", action),     &info->repeat_w, sizeof(info->repeat_w), default_values.repeat_w, map_repeat, ARRAY_SIZE(map_repeat), action);
         
             serialize_f32(serialize_locate(entry, "gamma", action),         &info->gamma, default_values.gamma, action);
             serialize_f32(serialize_locate(entry, "brigthness", action),    &info->brigthness, default_values.brigthness, action);
@@ -643,7 +643,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             SERIALIZE_ENUM_VALUE(MAP_TYPE_EMMISIVE),
         };
     
-        return serialize_enum(entry, type, sizeof(*type), 0, map_type, STATIC_ARRAY_SIZE(map_type), action);
+        return serialize_enum(entry, type, sizeof(*type), 0, map_type, ARRAY_SIZE(map_type), action);
     }
     
     EXPORT bool serialize_cubemap_type(Lpf_Entry* entry, Cubemap_Type* type, Read_Or_Write action)
@@ -658,7 +658,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             SERIALIZE_ENUM_VALUE(CUBEMAP_TYPE_ENUM_COUNT),
         };
     
-        return serialize_enum(entry, type, sizeof(*type), 0, cubemap_type, STATIC_ARRAY_SIZE(cubemap_type), action);
+        return serialize_enum(entry, type, sizeof(*type), 0, cubemap_type, ARRAY_SIZE(cubemap_type), action);
     }
     
     EXPORT bool serialize_material_info(Lpf_Entry* entry, Material_Info* info, Read_Or_Write action)
@@ -733,7 +733,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         state = state && serialize_i32(serialize_locate(entry, "height", action),        &image->height, 0, action);
         state = state && serialize_i32(serialize_locate(entry, "height", action),        &image->height, 0, action);
 
-        bool pixel_format_state = serialize_enum(serialize_locate(entry, "type", action), &image->type, sizeof(image->type), PIXEL_TYPE_U8, type, STATIC_ARRAY_SIZE(type), action);
+        bool pixel_format_state = serialize_enum(serialize_locate(entry, "type", action), &image->type, sizeof(image->type), PIXEL_TYPE_U8, type, ARRAY_SIZE(type), action);
         if(pixel_format_state == false)
             state = serialize_i32(serialize_locate(entry, "type", action), (i32*) &image->type, PIXEL_TYPE_U8, action);
         else
