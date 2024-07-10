@@ -15,10 +15,8 @@
 //#define RUN_TESTS
 //#define RUN_JUST_TESTS
 
-
 //#include "mdump.h"
 
-#include "lib/profile_utils.h"
 #include "lib/string.h"
 #include "lib/platform.h"
 #include "lib/allocator.h"
@@ -292,6 +290,8 @@ int main()
     Malloc_Allocator malloc_allocator = {0};
     malloc_allocator_init(&malloc_allocator, "fallback allocator");
 
+    profile_init(&malloc_allocator.allocator);
+
     File_Logger file_logger = {0};
     //error_system_init(&static_allocator.allocator);
     file_logger_init_use(&file_logger, &malloc_allocator.allocator, "logs");
@@ -299,9 +299,11 @@ int main()
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
+    #ifdef RUN_TESTS
     platform_exception_sandbox(
         run_test_func, NULL, 
         error_func, NULL);
+    #endif
 
     bool quit = false;
     #ifdef RUN_JUST_TESTS
@@ -370,7 +372,7 @@ int main()
 void process_first_person_input(App_State* app, f64 start_frame_time)
 {
     App_Settings* settings = &app->settings;
-    PERF_COUNTER_START(input_counter);
+    PROFILE_START(input_counter);
 
     //Movement
     {
@@ -466,7 +468,7 @@ void process_first_person_input(App_State* app, f64 start_frame_time)
             settings->fov = app->zoom_target_fov;
     }
             
-    PERF_COUNTER_END(input_counter);
+    PROFILE_END(input_counter);
 }
 
 Mat4 mat4_from_transform(Transform trans)
@@ -811,7 +813,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
     isize out = -1;
     isize needed_size = (isize) width * height * layers * channel_count * pixel_type_size(type);
     if(manager->memory_used + needed_size > manager->memory_budget)
-        LOG_ERROR(">render", "Out of texture memory! Using %s / %s (%lli%%)", fmt_bytes(manager->memory_used), fmt_bytes(manager->memory_budget), (lli) manager->memory_used * 100 / manager->memory_budget);
+        LOG_ERROR(">render", "Out of texture memory! Using %s / %s (%lli%%)", format_bytes(manager->memory_used, 0).data, format_bytes(manager->memory_budget, 0).data, (lli) manager->memory_used * 100 / manager->memory_budget);
     else if(layers == 0 || width == 0 || height == 0)
         LOG_ERROR(">render", "Zero sized!");
     else
@@ -861,7 +863,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
 {
     isize remaining_budget = manager->memory_budget - manager->memory_used;
     LOG_INFO("render", "Adding default resolutions for %lf of remainign memory budget (%s) Using %s / %s", 
-        fraction_of_remaining_memory_budget, fmt_bytes(remaining_budget), fmt_bytes(manager->memory_used), fmt_bytes(manager->memory_budget));
+        fraction_of_remaining_memory_budget, format_bytes(remaining_budget, 0).data, format_bytes(manager->memory_used, 0).data, format_bytes(manager->memory_budget, 0).data);
 
     Pixel_Type pixel_type = PIXEL_TYPE_U8;
     i32 channel_counts[4] = {1, 2, 3, 0};
@@ -923,7 +925,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     }
     log_ungroup();
 
-    LOG_WARN("render", "using %s combined RAM on textures", fmt_bytes(combined_size));
+    LOG_WARN("render", "using %s combined RAM on textures", format_bytes(combined_size, 0).data);
 }
 
 typedef enum Found_Type{
@@ -935,7 +937,7 @@ typedef enum Found_Type{
 
 Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager, Found_Type* found_type_or_null, i32 width, i32 height, Pixel_Type type, i32 channel_count, bool used)
 {
-    PERF_COUNTER_START(render_texture_manager_find_counter);
+    PROFILE_START(render_texture_manager_find_counter);
     Render_Texture_Layer out = {0};
 
     bool state = false;
@@ -1021,7 +1023,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
     if(found_type_or_null)
         *found_type_or_null = found_type;
 
-    PERF_COUNTER_END(render_texture_manager_find_counter);
+    PROFILE_END(render_texture_manager_find_counter);
     return out;
 }
 
@@ -1332,7 +1334,7 @@ i32 render_geometry_manager_add_batch(Render_Geometry_Manager* manager, isize mi
     isize memory_requirement = min_vertex_count * sizeof(Vertex) + min_index_count * sizeof(i32);
 
     if(manager->used_memory >= manager->memory_limit * 3/4)
-        LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", fmt_bytes(manager->used_memory), fmt_bytes(manager->memory_limit));
+        LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", format_bytes(manager->used_memory, 0).data, format_bytes(manager->memory_limit, 0).data);
     
     i32 out = 0;
     if(memory_requirement + manager->used_memory <= manager->memory_limit)
@@ -1739,7 +1741,7 @@ void render_queue_init(Render_Queue* buffers, Allocator* allocator, isize total_
 void render_queue_submit_phong(Render* render, const Render_Phong_Command* command)
 {
     Render_Queue* buffers = &render->render_queue;
-    PERF_COUNTER_START(render_queue_submit);
+    PROFILE_START(render_queue_submit);
     
     //#if defined(DO_MONO_RENDER_QUEUE)
 
@@ -1808,12 +1810,12 @@ void render_queue_submit_phong(Render* render, const Render_Phong_Command* comma
     }
 
     #endif
-    PERF_COUNTER_END(render_queue_submit);
+    PROFILE_END(render_queue_submit);
 }
 
 void render_queue_expand(Render* render)
 {
-    PERF_COUNTER_START(render_queue_expand);
+    PROFILE_START(render_queue_expand);
     Render_Queue* buffers = &render->render_queue;
     array_clear(&buffers->expanded);
     
@@ -1877,7 +1879,7 @@ void render_queue_expand(Render* render)
 
     if(skipped_meshes_count > 0)
         LOG_WARN("render", "render_queue_expand detected %i / %i are invalid meshes!", (int) skipped_meshes_count, (int) buffers->masks.size);
-    PERF_COUNTER_END(render_queue_expand);
+    PROFILE_END(render_queue_expand);
 }
 
 void render_queue_clear(Render_Queue* buffers)
@@ -2049,9 +2051,9 @@ void render_render(Render* render, Camera camera)
     render_queue_expand(render);
     #endif
 
-    PERF_COUNTER_START(render_queue_sort);
+    PROFILE_START(render_queue_sort);
     qsort(buffers->expanded.data, buffers->expanded.size, sizeof *buffers->expanded.data, command_buffer_compare_func);
-    PERF_COUNTER_END(render_queue_sort);
+    PROFILE_END(render_queue_sort);
 
     glEnable(GL_DEPTH_TEST); 
     glEnable(GL_CULL_FACE);  
@@ -2074,7 +2076,7 @@ void render_render(Render* render, Camera camera)
     i32 not_found_textures = 0;
     for(isize j = 0; j < buffers->expanded.size; )
     {
-        PERF_COUNTER_START(batch_prepare);
+        PROFILE_START(batch_prepare);
 
         Render_Command_Expanded first = buffers->expanded.data[j];
 
@@ -2294,12 +2296,12 @@ void render_render(Render* render, Camera camera)
             blinn_environment.lights[1].pos_and_range = vec4(0, 0, 10, 100);
         }
         
-        PERF_COUNTER_END(batch_prepare);
+        PROFILE_END(batch_prepare);
         
-        PERF_COUNTER_START(batch_flush);
+        PROFILE_START(batch_flush);
 
         
-        PERF_COUNTER_START(texture_set);
+        PROFILE_START(texture_set);
         render_shader_use(&render->shader_blinn_phong);
         GLuint map_array_loc = render_shader_get_uniform_location(&render->shader_blinn_phong, "u_map_resolutions");
 
@@ -2319,7 +2321,7 @@ void render_render(Render* render, Camera camera)
             }
         }
         glUniform1iv(map_array_loc, (GLsizei) MAX_TEXTURE_SLOTS, tex_slots);
-        PERF_COUNTER_END(texture_set);
+        PROFILE_END(texture_set);
 
         ASSERT(sizeof(blinn_environment) <= render->uniform_block_environment.buffer_size);
         //ASSERT(array_byte_size(render->blinn_phong_per_draw) <= render->uniform_block_draw.buffer_size);
@@ -2330,15 +2332,15 @@ void render_render(Render* render, Camera camera)
         ASSERT(batch_instances->size <= render->buffer_instance.item_count);
 
         
-        PERF_COUNTER_START(batch_upload);
+        PROFILE_START(batch_upload);
         glNamedBufferSubData(render->buffer_environment_uniform.handle, 0, sizeof(blinn_environment), &blinn_environment);
         glNamedBufferSubData(render->buffer_draw_uniform.handle, 0, array_byte_size(render->blinn_phong_per_draw), render->blinn_phong_per_draw.data);
         glNamedBufferSubData(render->buffer_instance.handle, 0, array_byte_size(render->render_per_instance), render->render_per_instance.data);
         //glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, render->buffer_draw_uniform.handle); //@TEMP
-        PERF_COUNTER_END(batch_upload);
+        PROFILE_END(batch_upload);
 
         
-        PERF_COUNTER_START(draw_call);
+        PROFILE_START(draw_call);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER , render->buffer_command.handle);
         glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, batch_draws->size * sizeof *indirect_commands, indirect_commands);
 
@@ -2347,9 +2349,9 @@ void render_render(Render* render, Camera camera)
         glBindVertexArray(geometry_batch->vertex_array_handle);
         //glBindBuffer(GL_ARRAY_BUFFER, geometry_batch->vertex_buffer_handle);
         glBindBuffer(GL_ARRAY_BUFFER, render->buffer_instance.handle);
-        PERF_COUNTER_END(draw_call);
+        PROFILE_END(draw_call);
 
-        PERF_COUNTER_END(batch_flush);
+        PROFILE_END(batch_flush);
 
         glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->size, 0);
 
@@ -2408,7 +2410,7 @@ bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out,
 {
     LOG_INFO("render", "Adding texture at path '%s' current working dir '%s'", cstring_ephemeral(path), platform_directory_get_current_working());
     log_group();
-    PERF_COUNTER_START(image_read_counter);
+    PROFILE_START(image_read_counter);
 
     bool state = true;
     Arena_Frame arena = scratch_arena_acquire();
@@ -2420,7 +2422,7 @@ bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out,
     }
     arena_frame_release(&arena);
     
-    PERF_COUNTER_END(image_read_counter);
+    PROFILE_END(image_read_counter);
     log_ungroup();
     return state;
 }
@@ -2516,25 +2518,24 @@ void run_func(void* context)
 
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     
-    Platform_File_Watch watch = {0};
-    platform_file_watch(&watch, STRING("./"), PLATFORM_FILE_WATCH_ALL | PLATFORM_FILE_WATCH_SUBDIRECTORIES, NULL, NULL);
-
+    //Platform_File_Watch watch = {0};
+    //platform_file_watch(&watch, STRING("./"), PLATFORM_FILE_WATCH_ALL | PLATFORM_FILE_WATCH_SUBDIRECTORIES, NULL, NULL);
 
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
-        Platform_File_Watch_Event file_event = {0};
-        while(platform_file_watch_poll(watch, &file_event))
-        {
-            const char* event = "";
-            switch(file_event.action) {
-                case PLATFORM_FILE_WATCH_CREATED : event = "CREATED"; break;
-                case PLATFORM_FILE_WATCH_DELETED : event = "DELETED"; break;
-                case PLATFORM_FILE_WATCH_MODIFIED: event = "MODIFIED"; break;
-                case PLATFORM_FILE_WATCH_RENAMED : event = "RENAMED"; break;
-            }
+        //Platform_File_Watch_Event file_event = {0};
+        //while(platform_file_watch_poll(watch, &file_event))
+        //{
+        //    const char* event = "";
+        //    switch(file_event.action) {
+        //        case PLATFORM_FILE_WATCH_CREATED : event = "CREATED"; break;
+        //        case PLATFORM_FILE_WATCH_DELETED : event = "DELETED"; break;
+        //        case PLATFORM_FILE_WATCH_MODIFIED: event = "MODIFIED"; break;
+        //        case PLATFORM_FILE_WATCH_RENAMED : event = "RENAMED"; break;
+        //    }
 
-            LOG_OKAY("FILE WATCH", "%s: %s '%s' -> '%s'", event, file_event.watched_path, file_event.old_path, file_event.path);
-        }
+        //    LOG_OKAY("FILE WATCH", "%s: %s '%s' -> '%s'", event, file_event.watched_path, file_event.old_path, file_event.path);
+        //}
 
         glfwSwapBuffers(window);
         f64 start_frame_time = clock_s();
@@ -2554,7 +2555,7 @@ void run_func(void* context)
             || frame_num == 0)
         {
             LOG_INFO("APP", "Refreshing shaders");
-            PERF_COUNTER_START(shader_load_counter);
+            PROFILE_START(shader_load_counter);
             
             bool shader_state = true;
             shader_state = shader_state && render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.glsl"));
@@ -2573,7 +2574,7 @@ void run_func(void* context)
                 LOG_WARN("app", "max textures %i", max_textures);
             }
 
-            PERF_COUNTER_END(shader_load_counter);
+            PROFILE_END(shader_load_counter);
         }
 
 
@@ -2582,9 +2583,9 @@ void run_func(void* context)
             || frame_num == 0)
         {
             LOG_INFO("APP", "Refreshing art");
-            PERF_COUNTER_START(art_load_counter);
+            PROFILE_START(art_load_counter);
 
-            PERF_COUNTER_START(art_counter_shapes);
+            PROFILE_START(art_counter_shapes);
             shape_deinit(&uv_sphere);
             shape_deinit(&cube_sphere);
             shape_deinit(&screen_quad);
@@ -2596,7 +2597,7 @@ void run_func(void* context)
             screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
             unit_cube = shapes_make_unit_cube();
             unit_quad = shapes_make_unit_quad();
-            PERF_COUNTER_END(art_counter_shapes);
+            PROFILE_END(art_counter_shapes);
 
             bool texture_state = true;
             render_uv_sphere = render_geometry_add_shape(&render, uv_sphere, STRING("uv_sphere"));
@@ -2628,7 +2629,7 @@ void run_func(void* context)
 
             render_texture_manager_generate_mips(&render.texture_manager);
 
-            PERF_COUNTER_END(art_load_counter);
+            PROFILE_END(art_load_counter);
             ASSERT(texture_state);
         }
 
@@ -2639,7 +2640,7 @@ void run_func(void* context)
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
         {
-            log_perf_counters("app", LOG_INFO, true);
+            profile_log_all("app", LOG_INFO, true);
         }
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
@@ -2664,7 +2665,7 @@ void run_func(void* context)
         
         //================ FIRST PASS ==================
         {
-            PERF_COUNTER_START(first_pass_counter);
+            PROFILE_START(first_pass_counter);
             //render_screen_frame_buffers_msaa_render_begin(&screen_buffers);
             glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -2676,7 +2677,7 @@ void run_func(void* context)
             };
 
 
-            PERF_COUNTER_START(submit_counter);
+            PROFILE_START(submit_counter);
             for(isize y = 0; y < GRID_Y; y++)
                 for(isize x = 0; x < GRID_X; x++)
                 {
@@ -2717,7 +2718,7 @@ void run_func(void* context)
 
                     render_queue_submit_phong(&render, &phong_command);
                 }
-            PERF_COUNTER_END(submit_counter);
+            PROFILE_END(submit_counter);
             render_render(&render, app->camera);
   
 
@@ -2729,16 +2730,16 @@ void run_func(void* context)
             //}
 
             //render_screen_frame_buffers_msaa_render_end(&screen_buffers);
-            PERF_COUNTER_END(first_pass_counter);
+            PROFILE_END(first_pass_counter);
         }
 
         //// ============== POST PROCESSING PASS ==================
         //{
-        //    PERF_COUNTER_START(second_pass_counter);
+        //    PROFILE_START(second_pass_counter);
         //    render_screen_frame_buffers_msaa_post_process_begin(&screen_buffers);
         //    render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, settings->screen_gamma, settings->screen_exposure);
         //    render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
-        //    PERF_COUNTER_END(second_pass_counter);
+        //    PROFILE_END(second_pass_counter);
         //}
 
         f64 end_frame_time = clock_s();
@@ -2765,7 +2766,7 @@ void run_func(void* context)
 
     resources_deinit(&resources);
     
-    log_perf_counters("APP", LOG_INFO, true);
+    profile_log_all("APP", LOG_INFO, true);
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
     log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
@@ -2789,8 +2790,20 @@ void error_func(void* context, Platform_Sandbox_Error error)
 //#include "mdump2.h"
 #include "lib/_test_all.h"
 
+
+ATTRIBUTE_INLINE_NEVER 
+void profile_smartness_tester()
+{
+    for(int i = 0; i < 1000; i++)
+    {
+        PROFILE_COUNTER();
+    }
+}
+
 void run_test_func(void* context)
 {
+    profile_smartness_tester();
+    //test_profile();
     (void) context;
     test_all(3.0);
 }

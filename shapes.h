@@ -7,7 +7,6 @@
 #include "engine_types.h"
 #include "lib/profile.h"
 
-
 typedef enum Geometry_Primitive_Type {
     GEOMETRY_PRIMITIVE_TRIANGLE = 0,
     GEOMETRY_PRIMITIVE_LINE_STRIP = 1,
@@ -199,7 +198,7 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
 
 void shape_tranform(Shape* shape, Mat4 transform)
 {
-    PERF_COUNTER_START();
+    PROFILE_START();
 
     Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
 
@@ -210,15 +209,14 @@ void shape_tranform(Shape* shape, Mat4 transform)
         vertex->norm = mat4_mul_vec3(normal_matrix, vertex->norm);
     }
 
-    PERF_COUNTER_END();
+    PROFILE_END();
 }
 
 u64 vertex_hash64(Vertex vertex, u64 seed)
 {
-    u64 out = hash64_murmur(&vertex, sizeof vertex, seed);
+    u64 out = xxhash64(&vertex, sizeof vertex, seed);
     return out;
 }
-
 
 Shape shapes_make_unit_quad()
 {
@@ -262,7 +260,6 @@ Shape shapes_make_quad(f32 side_size, Vec3 up_dir, Vec3 front_dir, Vec3 offset)
     return quad;
 }
 
-
 Winding_Order triangle_get_winding_order(const Vertex v1, const Vertex v2, const Vertex v3)
 {
     Vec3 avg_norm = vec3_add(vec3_add(v1.norm, v2.norm), v3.norm);
@@ -301,7 +298,7 @@ Winding_Order triangle_get_winding_order_at_index(const Vertex* vertices, isize 
 
 u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
 {
-    PERF_COUNTER_START();
+    PROFILE_START();
     u64 hashed = vertex_hash64(vertex, 0);
 
     //The index of a new vertex if it was to be inserted
@@ -325,16 +322,16 @@ u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, V
         if(is_equal == false)
         {
             //if hash collision add the hash again.
-            PERF_COUNTER_START(hash_collisions);
+            PROFILE_START(hash_collisions);
             hash_index_insert(hash, hashed, inserted_i);
             array_push(vertices, vertex);
             entry = inserted_i;
-            PERF_COUNTER_END(hash_collisions);
+            PROFILE_END(hash_collisions);
         }
     }
     
     CHECK_BOUNDS(entry, vertices->size);
-    PERF_COUNTER_END();
+    PROFILE_END();
     return (u32) entry;
 
 }
@@ -403,7 +400,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
     if(iters <= 0)
         return;
         
-    PERF_COUNTER_START();
+    PROFILE_START();
     isize vertices_before = into->vertices.size;
     isize indices_before = into->triangles.size;
 
@@ -469,7 +466,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
         }
         
     }
-    PERF_COUNTER_END();
+    PROFILE_END();
 }
 
 Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset)
@@ -481,7 +478,7 @@ Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Ve
 
 Shape shapes_make_cube_sphere(isize iters, f32 radius)
 {
-    PERF_COUNTER_START();
+    PROFILE_START();
     Shape out = {0};
     array_reserve(&out.triangles, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
@@ -493,13 +490,13 @@ Shape shapes_make_cube_sphere(isize iters, f32 radius)
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3_of(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(-1, 0, 0), vec3_of(0));
     
-    PERF_COUNTER_END();
+    PROFILE_END();
     return out;
 }
 
 Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
 {
-    PERF_COUNTER_START();
+    PROFILE_START();
     Shape out = {0};
     array_reserve(&out.triangles, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
@@ -511,14 +508,14 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3_of(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(0, -1, 0), vec3_of(0));
     
-    PERF_COUNTER_END();
+    PROFILE_END();
     return out;
 }
 
 Shape shapes_make_uv_sphere(isize iters, f32 radius)
 {
     (void) radius;
-    PERF_COUNTER_START();
+    PROFILE_START();
     ASSERT(radius > 0);
     ASSERT(iters >= 0);
 
@@ -603,6 +600,6 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
 
     out_shape.triangles = triangles;
     out_shape.vertices = vertices;
-    PERF_COUNTER_END();
+    PROFILE_END();
     return out_shape;
 }

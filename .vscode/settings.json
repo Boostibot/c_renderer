@@ -17,6 +17,12 @@
         "xstring": "cpp",
         "sstream": "c",
         "xlocale": "c",
-        "format": "c"
+        "format": "c",
+        "profile.h": "c",
+        "string.h": "c",
+        "hash_index.h": "c",
+        "profile_defs.h": "c",
+        "platform.h": "c",
+        "defines.h": "c"
     }
 }
