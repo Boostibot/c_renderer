@@ -158,30 +158,30 @@ typedef struct Triangle_Mesh_Description {
     String_Builder_Array material_files;
 } Triangle_Mesh_Description;
 
-EXPORT void map_info_init(Map_Info* description, Allocator* alloc);
-EXPORT void map_info_deinit(Map_Info* description);
+EXTERNAL void map_info_init(Map_Info* description, Allocator* alloc);
+EXTERNAL void map_info_deinit(Map_Info* description);
 
-EXPORT void map_description_init(Map_Description* description, Allocator* alloc);
-EXPORT void map_description_deinit(Map_Description* description);
+EXTERNAL void map_description_init(Map_Description* description, Allocator* alloc);
+EXTERNAL void map_description_deinit(Map_Description* description);
 
-EXPORT void cubemap_description_init(Cubemap_Description* description, Allocator* alloc);
-EXPORT void cubemap_description_deinit(Cubemap_Description* description);
+EXTERNAL void cubemap_description_init(Cubemap_Description* description, Allocator* alloc);
+EXTERNAL void cubemap_description_deinit(Cubemap_Description* description);
 
-EXPORT void material_description_init(Material_Description* description, Allocator* alloc);
-EXPORT void material_description_deinit(Material_Description* description);
+EXTERNAL void material_description_init(Material_Description* description, Allocator* alloc);
+EXTERNAL void material_description_deinit(Material_Description* description);
 
-EXPORT void triangle_mesh_group_description_init(Triangle_Mesh_Group_Description* description, Allocator* alloc);
-EXPORT void triangle_mesh_group_description_deinit(Triangle_Mesh_Group_Description* description);
+EXTERNAL void triangle_mesh_group_description_init(Triangle_Mesh_Group_Description* description, Allocator* alloc);
+EXTERNAL void triangle_mesh_group_description_deinit(Triangle_Mesh_Group_Description* description);
 
-EXPORT void triangle_mesh_description_init(Triangle_Mesh_Description* description, Allocator* alloc);
-EXPORT void triangle_mesh_description_deinit(Triangle_Mesh_Description* description);
+EXTERNAL void triangle_mesh_description_init(Triangle_Mesh_Description* description, Allocator* alloc);
+EXTERNAL void triangle_mesh_description_deinit(Triangle_Mesh_Description* description);
 
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_RESOURCE_DESCRIPTIONS_IMPL)) && !defined(LIB_RESOURCE_DESCRIPTIONS_HAS_IMPL)
 #define LIB_RESOURCE_DESCRIPTIONS_HAS_IMPL
 
-EXPORT void map_info_init(Map_Info* description, Allocator* alloc)
+EXTERNAL void map_info_init(Map_Info* description, Allocator* alloc)
 {
     //Nothing so far but we might add dynamic behaviour later
     (void) alloc;
@@ -203,37 +203,37 @@ EXPORT void map_info_init(Map_Info* description, Allocator* alloc)
     description->brigthness = 0;     
     description->contrast = 1;       
 }
-EXPORT void map_info_deinit(Map_Info* description)
+EXTERNAL void map_info_deinit(Map_Info* description)
 {
     //Nothing so far but we might add dynamic behaviour later
     memset(description, 0, sizeof *description);
 }
 
-EXPORT void map_description_init(Map_Description* description, Allocator* alloc)
+EXTERNAL void map_description_init(Map_Description* description, Allocator* alloc)
 {
     map_description_deinit(description);
     map_info_init(&description->info, alloc);
     builder_init(&description->path, alloc);
 }
-EXPORT void map_description_deinit(Map_Description* description)
+EXTERNAL void map_description_deinit(Map_Description* description)
 {
     builder_deinit(&description->path);
     map_info_deinit(&description->info);
     memset(description, 0, sizeof *description);
 }
 
-EXPORT void cubemap_description_init(Cubemap_Description* description, Allocator* alloc)
+EXTERNAL void cubemap_description_init(Cubemap_Description* description, Allocator* alloc)
 {
     for(isize i = 0; i < 6; i++)
         map_description_init(&description->faces[i], alloc);
 }
-EXPORT void cubemap_description_deinit(Cubemap_Description* description)
+EXTERNAL void cubemap_description_deinit(Cubemap_Description* description)
 {
     for(isize i = 0; i < 6; i++)
         map_description_deinit(&description->faces[i]);
 }
 
-EXPORT void material_description_init(Material_Description* description, Allocator* alloc)
+EXTERNAL void material_description_init(Material_Description* description, Allocator* alloc)
 {
     material_description_deinit(description);
 
@@ -248,7 +248,7 @@ EXPORT void material_description_init(Material_Description* description, Allocat
 
     memset(description, 0, sizeof *description);
 }
-EXPORT void material_description_deinit(Material_Description* description)
+EXTERNAL void material_description_deinit(Material_Description* description)
 {
     builder_deinit(&description->path);
     builder_deinit(&description->name);
@@ -263,7 +263,7 @@ EXPORT void material_description_deinit(Material_Description* description)
     memset(description, 0, sizeof *description);
 }
 
-EXPORT void triangle_mesh_group_description_init(Triangle_Mesh_Group_Description* description, Allocator* alloc)
+EXTERNAL void triangle_mesh_group_description_init(Triangle_Mesh_Group_Description* description, Allocator* alloc)
 {
     triangle_mesh_group_description_deinit(description);
 
@@ -271,7 +271,7 @@ EXPORT void triangle_mesh_group_description_init(Triangle_Mesh_Group_Description
     builder_init(&description->material_name, alloc);
     builder_init(&description->material_path, alloc);
 }
-EXPORT void triangle_mesh_group_description_deinit(Triangle_Mesh_Group_Description* description)
+EXTERNAL void triangle_mesh_group_description_deinit(Triangle_Mesh_Group_Description* description)
 {
     builder_deinit(&description->name);
     builder_deinit(&description->material_name);
@@ -280,7 +280,7 @@ EXPORT void triangle_mesh_group_description_deinit(Triangle_Mesh_Group_Descripti
     memset(description, 0, sizeof *description);
 }
 
-EXPORT void triangle_mesh_description_init(Triangle_Mesh_Description* description, Allocator* alloc)
+EXTERNAL void triangle_mesh_description_init(Triangle_Mesh_Description* description, Allocator* alloc)
 {
     triangle_mesh_description_deinit(description);
 
@@ -289,7 +289,7 @@ EXPORT void triangle_mesh_description_init(Triangle_Mesh_Description* descriptio
     array_init(&description->groups, alloc);
     array_init(&description->material_files, alloc);
 }
-EXPORT void triangle_mesh_description_deinit(Triangle_Mesh_Description* description)
+EXTERNAL void triangle_mesh_description_deinit(Triangle_Mesh_Description* description)
 {
     builder_deinit(&description->name);
     builder_deinit(&description->path);

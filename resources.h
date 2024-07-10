@@ -120,19 +120,19 @@ void resources_check_reloads();
 
 
 #define RESOURCE_FUNCTION_DECL(Type_Name, TYPE_ENUM, name)       \
-    EXPORT Type_Name*   name##_get(Id ptr); \
-    EXPORT Type_Name*   name##_get_sure(Id id); \
-    EXPORT Type_Name*   name##_get_with_info(Id ptr, Resource_Info** info); \
-    EXPORT Id           name##_find_by_name(Hash_String name, isize* prev_found_and_finished_at); \
-    EXPORT Id           name##_find_by_path(Hash_String path, isize* prev_found_and_finished_at); \
+    EXTERNAL Type_Name*   name##_get(Id ptr); \
+    EXTERNAL Type_Name*   name##_get_sure(Id id); \
+    EXTERNAL Type_Name*   name##_get_with_info(Id ptr, Resource_Info** info); \
+    EXTERNAL Id           name##_find_by_name(Hash_String name, isize* prev_found_and_finished_at); \
+    EXTERNAL Id           name##_find_by_path(Hash_String path, isize* prev_found_and_finished_at); \
                                                                 \
-    EXPORT Id           name##_insert(Resource_Params params); \
-    EXPORT bool         name##_remove(Id resource); \
-    EXPORT bool         name##_force_remove(Id resource); \
+    EXTERNAL Id           name##_insert(Resource_Params params); \
+    EXTERNAL bool         name##_remove(Id resource); \
+    EXTERNAL bool         name##_force_remove(Id resource); \
                                                             \
-    EXPORT Id           name##_make_shared(Id resource); \
-    EXPORT Id           name##_make_unique(Id info, Resource_Params params); \
-    EXPORT Id           name##_duplicate(Id info, Resource_Params params); \
+    EXTERNAL Id           name##_make_shared(Id resource); \
+    EXTERNAL Id           name##_make_unique(Id info, Resource_Params params); \
+    EXTERNAL Id           name##_duplicate(Id info, Resource_Params params); \
 
 RESOURCE_FUNCTION_DECL(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
 RESOURCE_FUNCTION_DECL(Image,   RESOURCE_TYPE_IMAGE,            image)
@@ -175,46 +175,46 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     }
 
     #define RESOURCE_FUNCTION_DEF(Type_Name, TYPE_ENUM, type_name)       \
-        EXPORT Type_Name* type_name##_get_with_info(Id id, Resource_Info** info) { \
+        EXTERNAL Type_Name* type_name##_get_with_info(Id id, Resource_Info** info) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), id); \
             if(info) *info = found.ptr; \
             ASSERT(resource_is_valid(found) == false || found.ptr->type_enum == TYPE_ENUM, "Inconsistent type!"); \
             return (Type_Name*) (found.ptr ? found.ptr->data : NULL); \
         } \
-        EXPORT Type_Name*   type_name##_get(Id id) { \
+        EXTERNAL Type_Name*   type_name##_get(Id id) { \
             return type_name##_get_with_info(id, NULL); \
         } \
-        EXPORT Type_Name* type_name##_get_sure(Id id) { \
+        EXTERNAL Type_Name* type_name##_get_sure(Id id) { \
             Type_Name* gotten = type_name##_get(id); \
             TEST(gotten != NULL, "Didnt find the resource with id %lli", (lli) id); \
             return gotten; \
         } \
-        EXPORT Id type_name##_find_by_name(Hash_String name, isize* prev) { \
+        EXTERNAL Id type_name##_find_by_name(Hash_String name, isize* prev) { \
             return resource_get_by_name(resources_get_type(TYPE_ENUM), name, prev).id; \
         } \
-        EXPORT Id type_name##_find_by_path(Hash_String path, isize* prev) { \
+        EXTERNAL Id type_name##_find_by_path(Hash_String path, isize* prev) { \
             return resource_get_by_path(resources_get_type(TYPE_ENUM), path, prev).id; \
         } \
-        EXPORT Id type_name##_insert(Resource_Params params) { \
+        EXTERNAL Id type_name##_insert(Resource_Params params) { \
             return resource_insert(resources_get_type(TYPE_ENUM), params).id; \
         } \
-        EXPORT bool type_name##_remove(Id resource) { \
+        EXTERNAL bool type_name##_remove(Id resource) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
             return resource_remove(resources_get_type(TYPE_ENUM), found);  \
         } \
-        EXPORT bool type_name##_force_remove(Id resource) { \
+        EXTERNAL bool type_name##_force_remove(Id resource) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
             return resource_remove(resources_get_type(TYPE_ENUM), found); \
         } \
-        EXPORT Id type_name##_make_shared(Id resource) { \
+        EXTERNAL Id type_name##_make_shared(Id resource) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
             return resource_share(resources_get_type(TYPE_ENUM), found).id; \
         } \
-        EXPORT Id type_name##_make_unique(Id resource, Resource_Params params) { \
+        EXTERNAL Id type_name##_make_unique(Id resource, Resource_Params params) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
             return resource_make_unique(resources_get_type(TYPE_ENUM), found, params).id; \
         } \
-        EXPORT Id type_name##_duplicate(Id resource, Resource_Params params) { \
+        EXTERNAL Id type_name##_duplicate(Id resource, Resource_Params params) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
             return resource_duplicate(resources_get_type(TYPE_ENUM), found, params).id; \
         } \
@@ -439,7 +439,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         memset(resources, 0, sizeof *resources);
     }
     
-    EXPORT bool serialize_resource_info(Lpf_Entry* entry, Resource_Info* info, Read_Or_Write action)
+    EXTERNAL bool serialize_resource_info(Lpf_Entry* entry, Resource_Info* info, Read_Or_Write action)
     {
         #if 0
         typedef enum Resource_Lifetime {
@@ -528,7 +528,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         return state;
     }
 
-    EXPORT bool serialize_map_info(Lpf_Entry* entry, Map_Info* info, Read_Or_Write action)
+    EXTERNAL bool serialize_map_info(Lpf_Entry* entry, Map_Info* info, Read_Or_Write action)
     {
         #if 0
         typedef enum Map_Scale_Filter {
@@ -621,7 +621,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         return state;
     }
     
-    EXPORT bool serialize_map_type(Lpf_Entry* entry, Map_Type* type, Read_Or_Write action)
+    EXTERNAL bool serialize_map_type(Lpf_Entry* entry, Map_Type* type, Read_Or_Write action)
     {
         const Serialize_Enum map_type[] = {
             SERIALIZE_ENUM_VALUE(MAP_TYPE_ALBEDO),
@@ -646,7 +646,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         return serialize_enum(entry, type, sizeof(*type), 0, map_type, ARRAY_SIZE(map_type), action);
     }
     
-    EXPORT bool serialize_cubemap_type(Lpf_Entry* entry, Cubemap_Type* type, Read_Or_Write action)
+    EXTERNAL bool serialize_cubemap_type(Lpf_Entry* entry, Cubemap_Type* type, Read_Or_Write action)
     {
         const Serialize_Enum cubemap_type[] = {
             SERIALIZE_ENUM_VALUE(CUBEMAP_TYPE_SKYBOX),
@@ -661,7 +661,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         return serialize_enum(entry, type, sizeof(*type), 0, cubemap_type, ARRAY_SIZE(cubemap_type), action);
     }
     
-    EXPORT bool serialize_material_info(Lpf_Entry* entry, Material_Info* info, Read_Or_Write action)
+    EXTERNAL bool serialize_material_info(Lpf_Entry* entry, Material_Info* info, Read_Or_Write action)
     {
         #if 0
         typedef struct Material_Info {
@@ -718,7 +718,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     }
 
     
-    EXPORT bool serialize_image(Lpf_Entry* entry, Image* image, Read_Or_Write action)
+    EXTERNAL bool serialize_image(Lpf_Entry* entry, Image* image, Read_Or_Write action)
     {
         const Serialize_Enum type[] = {
             SERIALIZE_ENUM_VALUE(PIXEL_TYPE_U8),

@@ -540,7 +540,7 @@ Mdump_Type_Info mdump_get_builtin_type_info(Mdump_Types* types, Mdump_Type type)
 }
 
 #define _DEFINE_MDUMP_BUILTINT_POD(MDUMP_ENUM_TYPE, type, Type)   \
-    EXPORT void mdump_##type(Mdump_Blocks* blocks, Type* in_memory, Type* in_file, Mdump_Action action)  \
+    EXTERNAL void mdump_##type(Mdump_Blocks* blocks, Type* in_memory, Type* in_file, Mdump_Action action)  \
     {   \
         (void) blocks; \
         if(action == MDUMP_READ) \
@@ -549,7 +549,7 @@ Mdump_Type_Info mdump_get_builtin_type_info(Mdump_Types* types, Mdump_Type type)
             *in_file = *in_memory; \
     } \
     \
-    EXPORT Mdump_Type_Info mdump_info_##type(Mdump_Types* types) \
+    EXTERNAL Mdump_Type_Info mdump_info_##type(Mdump_Types* types) \
     {   \
         return mdump_get_builtin_type_info(types, MDUMP_ENUM_TYPE);  \
     }   \
@@ -573,12 +573,12 @@ _DEFINE_MDUMP_BUILTINT_POD(MDUMP_TYPE_F16, f16, u16)
 _DEFINE_MDUMP_BUILTINT_POD(MDUMP_TYPE_F32, f32, f32)
 _DEFINE_MDUMP_BUILTINT_POD(MDUMP_TYPE_F64, f64, f64)
 
-EXPORT Mdump_Type_Info mdump_info_blank(Mdump_Types* types)
+EXTERNAL Mdump_Type_Info mdump_info_blank(Mdump_Types* types)
 {
     return mdump_get_builtin_type_info(types, MDUMP_TYPE_BLANK);
 }
 
-EXPORT void mdump_blank(Mdump_Blocks* blocks, void* in_memory, void* in_file, Mdump_Action action)  
+EXTERNAL void mdump_blank(Mdump_Blocks* blocks, void* in_memory, void* in_file, Mdump_Action action)  
 {   
     (void) in_file;
     (void) in_memory;
@@ -586,7 +586,7 @@ EXPORT void mdump_blank(Mdump_Blocks* blocks, void* in_memory, void* in_file, Md
     (void) action;
 } 
 
-EXPORT bool mdump_string(Mdump_Blocks* blocks, String_Builder* in_memory, Mdump_String* in_file, Mdump_Action action)
+EXTERNAL bool mdump_string(Mdump_Blocks* blocks, String_Builder* in_memory, Mdump_String* in_file, Mdump_Action action)
 {
     bool ok = true;
     if(action == MDUMP_READ)
@@ -600,12 +600,12 @@ EXPORT bool mdump_string(Mdump_Blocks* blocks, String_Builder* in_memory, Mdump_
     return ok;
 }
 
-EXPORT Mdump_Type_Info mdump_info_string(Mdump_Types* types)
+EXTERNAL Mdump_Type_Info mdump_info_string(Mdump_Types* types)
 {
     return mdump_get_builtin_type_info(types, MDUMP_TYPE_STRING);
 }
 
-EXPORT bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory, Mdump_Long_String* in_file, Mdump_Action action)
+EXTERNAL bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory, Mdump_Long_String* in_file, Mdump_Action action)
 {
     bool ok = true;
     if(action == MDUMP_READ)
@@ -646,7 +646,7 @@ EXPORT bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory, M
     return ok;
 }
 
-EXPORT Mdump_Type_Info mdump_info_long_string(Mdump_Types* types)
+EXTERNAL Mdump_Type_Info mdump_info_long_string(Mdump_Types* types)
 {
     return mdump_get_builtin_type_info(types, MDUMP_TYPE_LONG_STRING);
 }
@@ -676,7 +676,7 @@ bool mdump_array(Mdump_Blocks* blocks, void* array, isize item_size, Mdump_Array
     return state;
 }
 
-EXPORT Mdump_Type_Info mdump_type_info_make(Mdump_Types* types, const char* name, u32 size, u32 align, u32 flags)
+EXTERNAL Mdump_Type_Info mdump_type_info_make(Mdump_Types* types, const char* name, u32 size, u32 align, u32 flags)
 {
     ASSERT(types->allocator != NULL);
 
@@ -690,7 +690,7 @@ EXPORT Mdump_Type_Info mdump_type_info_make(Mdump_Types* types, const char* name
     return out;
 }
 
-EXPORT void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func info_func, const char* name, u32 offset, u32 size, u32 flags, String default_value)
+EXTERNAL void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func info_func, const char* name, u32 offset, u32 size, u32 flags, String default_value)
 {
     Mdump_Type_Member out = {0};
     Allocator* alloc = parent->members.allocator;
@@ -732,7 +732,7 @@ typedef struct {
     Mdump_Array members;
 } Mdump_Type_Info_Mdumped;
 
-EXPORT Mdump_Type_Info mdump_info_type_member(Mdump_Types* types)
+EXTERNAL Mdump_Type_Info mdump_info_type_member(Mdump_Types* types)
 {
     Mdump_Type_Info info = mdump_type_info_make(types, "Mdump_Type_Member", sizeof(Mdump_Type_Member_Mdumped), DEF_ALIGN, 0);
 
@@ -745,7 +745,7 @@ EXPORT Mdump_Type_Info mdump_info_type_member(Mdump_Types* types)
     return info;
 }
 
-EXPORT bool mdump_type_member(Mdump_Blocks* blocks, Mdump_Type_Member* in_memory, Mdump_Type_Member_Mdumped* in_file, Mdump_Action action)
+EXTERNAL bool mdump_type_member(Mdump_Blocks* blocks, Mdump_Type_Member* in_memory, Mdump_Type_Member_Mdumped* in_file, Mdump_Action action)
 {
     mdump_u32(blocks, &in_memory->offset, &in_file->offset, action);
     mdump_u32(blocks, &in_memory->size, &in_file->size, action);
@@ -758,7 +758,7 @@ EXPORT bool mdump_type_member(Mdump_Blocks* blocks, Mdump_Type_Member* in_memory
     return state;
 }
 
-EXPORT Mdump_Type_Info mdump_info_type_info(Mdump_Types* types)
+EXTERNAL Mdump_Type_Info mdump_info_type_info(Mdump_Types* types)
 {
     Mdump_Type_Info info = mdump_type_info_make(types, "Mdump_Type_Info", sizeof(Mdump_Type_Info_Mdumped), DEF_ALIGN, 0);
 
@@ -771,7 +771,7 @@ EXPORT Mdump_Type_Info mdump_info_type_info(Mdump_Types* types)
     return info;
 }
 
-EXPORT bool mdump_type_info(Mdump_Blocks* blocks, Mdump_Type_Info* in_memory, Mdump_Type_Info_Mdumped* in_file, Mdump_Action action)
+EXTERNAL bool mdump_type_info(Mdump_Blocks* blocks, Mdump_Type_Info* in_memory, Mdump_Type_Info_Mdumped* in_file, Mdump_Action action)
 {
     mdump_u32(blocks, &in_memory->align, &in_file->align, action);
     mdump_u32(blocks, &in_memory->size, &in_file->size, action);

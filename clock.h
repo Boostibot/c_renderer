@@ -27,26 +27,26 @@ typedef struct Clock {
     f64 local_start;
 } Clock;
 
-EXPORT Clock clock_start(f64 time_scale);
-EXPORT Clock clock_make(f64 global_start, f64 global_duration, f64 local_start, f64 local_duration);
-EXPORT Clock clock_make_infinite(f64 global_edge_point, f64 global_time_scale, f64 local_edge_point, f64 local_time_scale);
+EXTERNAL Clock clock_start(f64 time_scale);
+EXTERNAL Clock clock_make(f64 global_start, f64 global_duration, f64 local_start, f64 local_duration);
+EXTERNAL Clock clock_make_infinite(f64 global_edge_point, f64 global_time_scale, f64 local_edge_point, f64 local_time_scale);
 
-EXPORT bool clock_is_up(Clock clock, f64 global_time);
-EXPORT f64 clock_get_local_time(Clock clock, f64 global_time);
-EXPORT f64 clock_get_global_time(Clock clock, f64 local_time);
+EXTERNAL bool clock_is_up(Clock clock, f64 global_time);
+EXTERNAL f64 clock_get_local_time(Clock clock, f64 global_time);
+EXTERNAL f64 clock_get_global_time(Clock clock, f64 local_time);
 
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_CLOCK_IMPL)) && !defined(LIB_CLOCK_HAS_IMPL)
 #define LIB_CLOCK_HAS_IMPL
 
-EXPORT Clock clock_start(f64 time_scale)
+EXTERNAL Clock clock_start(f64 time_scale)
 {
     Clock clock = {clock_s(), INFINITY_F64, time_scale};
     return clock;
 }
 
-EXPORT Clock clock_make(f64 global_start, f64 global_duration, f64 local_start, f64 local_duration)
+EXTERNAL Clock clock_make(f64 global_start, f64 global_duration, f64 local_start, f64 local_duration)
 {
     Clock clock = {0};
     clock.time_ratio = global_duration / local_duration;
@@ -57,7 +57,7 @@ EXPORT Clock clock_make(f64 global_start, f64 global_duration, f64 local_start, 
     return clock;
 }
 
-EXPORT Clock clock_make_infinite(f64 global_edge_point, f64 global_time_scale, f64 local_edge_point, f64 local_time_scale)
+EXTERNAL Clock clock_make_infinite(f64 global_edge_point, f64 global_time_scale, f64 local_edge_point, f64 local_time_scale)
 {
     Clock clock = {0};
     if(global_time_scale > 0)
@@ -71,16 +71,16 @@ EXPORT Clock clock_make_infinite(f64 global_edge_point, f64 global_time_scale, f
     return clock;
 }
 
-EXPORT bool clock_is_up(Clock clock, f64 global_time)
+EXTERNAL bool clock_is_up(Clock clock, f64 global_time)
 {
     return clock.global_end <= global_time;
 }
-EXPORT f64 clock_get_local_time(Clock clock, f64 global_time)
+EXTERNAL f64 clock_get_local_time(Clock clock, f64 global_time)
 {
     f64 local_time = (global_time - clock.global_start) / clock.time_ratio + clock.local_start;
     return local_time;
 }
-EXPORT f64 clock_get_global_time(Clock clock, f64 local_time)
+EXTERNAL f64 clock_get_global_time(Clock clock, f64 local_time)
 {
     f64 global_time = (local_time - clock.local_start) * clock.time_ratio + clock.global_start;
     return global_time;

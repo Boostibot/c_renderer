@@ -22,14 +22,14 @@ enum {
     IMAGE_LOAD_FLAG_FLIP_X = 2,
 };
 
-EXPORT Image_File_Format image_file_format_from_extension(String extension_without_dot);
+EXTERNAL Image_File_Format image_file_format_from_extension(String extension_without_dot);
 
-EXPORT bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags);
-EXPORT bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags);
+EXTERNAL bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags);
+EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags);
 
-EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format format);
-EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format format);
-EXPORT bool image_write_to_file(Subimage image, String path);
+EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format format);
+EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format format);
+EXTERNAL bool image_write_to_file(Subimage image, String path);
 
 #endif
 
@@ -49,7 +49,7 @@ EXPORT bool image_write_to_file(Subimage image, String path);
 
 #include "lib/log.h"
 
-EXPORT bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags)
+EXTERNAL bool image_read_from_memory(Image* image, String data, isize desired_channels, Pixel_Type format, i32 flags)
 {
     bool state = true;
     int width = 0;
@@ -97,7 +97,7 @@ EXPORT bool image_read_from_memory(Image* image, String data, isize desired_chan
 }
 
 #include "lib/log_list.h"
-EXPORT bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
+EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
     LOG_INFO("ASSET", "Loading image '%s'", cstring_ephemeral(path));
 
@@ -124,7 +124,7 @@ INTERNAL void _stbi_write_to_memory(void* context, void* data, int size)
     builder_append(append_into, string_make(data, size));
 }
 
-EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
+EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_File_Format file_format)
 {
     const char* error_msg_unspecfied =          "Unspecified error while formatting into memory (Zero sized image?)";
     const char* error_msg_bad_type =            "Output format does not support the representation format data type";
@@ -218,7 +218,7 @@ EXPORT bool image_write_to_memory(Subimage image, String_Builder* into, Image_Fi
     return state;
 }
 
-EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
+EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
     Arena_Frame arena = scratch_arena_acquire();
     String_Builder formatted = {&arena.allocator};
@@ -236,7 +236,7 @@ EXPORT bool image_write_to_file_formatted(Subimage image, String path, Image_Fil
     return state;
 }
 
-EXPORT bool image_write_to_file(Subimage image, String path)
+EXTERNAL bool image_write_to_file(Subimage image, String path)
 {
     isize last_dot_i = string_find_last_char(path, '.') + 1;
     CHECK_BOUNDS(last_dot_i, path.size + 1);
@@ -247,7 +247,7 @@ EXPORT bool image_write_to_file(Subimage image, String path)
     return image_write_to_file_formatted(image, path, file_format);
 } 
 
-EXPORT Image_File_Format image_file_format_from_extension(String extension_without_dot)
+EXTERNAL Image_File_Format image_file_format_from_extension(String extension_without_dot)
 {
     String ext = extension_without_dot;
     

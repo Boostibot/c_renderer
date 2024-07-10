@@ -193,20 +193,20 @@ typedef struct Format_Obj_Model {
 typedef enum Format_Obj_Mtl_Error_Statement Format_Obj_Mtl_Error_Statement;
 typedef struct Format_Obj_Mtl_Error Format_Obj_Mtl_Error;
 
-EXPORT void format_obj_texture_info_init(Format_Mtl_Map* info, Allocator* alloc);
-EXPORT void format_obj_material_info_init(Format_Mtl_Material* info, Allocator* alloc);
-EXPORT void format_obj_group_init(Format_Obj_Group* info, Allocator* alloc);
-EXPORT void format_obj_model_init(Format_Obj_Model* info, Allocator* alloc);
+EXTERNAL void format_obj_texture_info_init(Format_Mtl_Map* info, Allocator* alloc);
+EXTERNAL void format_obj_material_info_init(Format_Mtl_Material* info, Allocator* alloc);
+EXTERNAL void format_obj_group_init(Format_Obj_Group* info, Allocator* alloc);
+EXTERNAL void format_obj_model_init(Format_Obj_Model* info, Allocator* alloc);
 
-EXPORT void format_obj_texture_info_deinit(Format_Mtl_Map* info);
-EXPORT void format_obj_material_info_deinit(Format_Mtl_Material* info);
-EXPORT void format_obj_group_deinit(Format_Obj_Group* info);
-EXPORT void format_obj_model_deinit(Format_Obj_Model* info);
+EXTERNAL void format_obj_texture_info_deinit(Format_Mtl_Map* info);
+EXTERNAL void format_obj_material_info_deinit(Format_Mtl_Material* info);
+EXTERNAL void format_obj_group_deinit(Format_Obj_Group* info);
+EXTERNAL void format_obj_model_deinit(Format_Obj_Model* info);
 
-EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors);
-EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors);
+EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors);
+EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors);
 
-EXPORT const char* format_obj_mtl_error_statement_to_string(Format_Obj_Mtl_Error_Statement statement);
+EXTERNAL const char* format_obj_mtl_error_statement_to_string(Format_Obj_Mtl_Error_Statement statement);
 
 enum {
     FORMAT_MTL_ILLUM_MIN = 0,
@@ -273,7 +273,7 @@ typedef struct Format_Obj_Mtl_Error
 #if (defined(LIB_ALL_IMPL) || defined(LIB_FORMAT_OBJ_MTL_IMPL)) && !defined(LIB_FORMAT_OBJ_MTL_HAS_IMPL)
 #define LIB_FORMAT_OBJ_MTL_HAS_IMPL
 
-EXPORT void _format_obj_texture_info_init_or_deinit(Format_Mtl_Map* info, Allocator* alloc, bool is_init)
+EXTERNAL void _format_obj_texture_info_init_or_deinit(Format_Mtl_Map* info, Allocator* alloc, bool is_init)
 {
     if(is_init)
     {
@@ -288,7 +288,7 @@ EXPORT void _format_obj_texture_info_init_or_deinit(Format_Mtl_Map* info, Alloca
         memset(info, 0, sizeof *info);
     }
 }
-EXPORT void _format_obj_material_info_init_or_deinit(Format_Mtl_Material* info, Allocator* alloc, bool is_init)
+EXTERNAL void _format_obj_material_info_init_or_deinit(Format_Mtl_Material* info, Allocator* alloc, bool is_init)
 {       
     if(is_init)
         builder_init(&info->name, alloc);
@@ -325,17 +325,17 @@ EXPORT void _format_obj_material_info_init_or_deinit(Format_Mtl_Material* info, 
         memset(info, 0, sizeof *info);
 } 
 
-EXPORT void format_obj_texture_info_deinit(Format_Mtl_Map* info)
+EXTERNAL void format_obj_texture_info_deinit(Format_Mtl_Map* info)
 {
     _format_obj_texture_info_init_or_deinit(info, NULL, false);
 }
 
-EXPORT void format_obj_material_info_deinit(Format_Mtl_Material* info)
+EXTERNAL void format_obj_material_info_deinit(Format_Mtl_Material* info)
 {
     _format_obj_material_info_init_or_deinit(info, NULL, false);
 }
 
-EXPORT void format_obj_group_deinit(Format_Obj_Group* info)
+EXTERNAL void format_obj_group_deinit(Format_Obj_Group* info)
 {
     builder_array_deinit(&info->groups);
     builder_deinit(&info->object);
@@ -344,7 +344,7 @@ EXPORT void format_obj_group_deinit(Format_Obj_Group* info)
     memset(info, 0, sizeof *info);
 }
 
-EXPORT void format_obj_model_deinit(Format_Obj_Model* info)
+EXTERNAL void format_obj_model_deinit(Format_Obj_Model* info)
 {
     for(isize i = 0; i < info->groups.size; i++)
         format_obj_group_deinit(&info->groups.data[i]);
@@ -357,18 +357,18 @@ EXPORT void format_obj_model_deinit(Format_Obj_Model* info)
     builder_array_deinit(&info->material_files);
 }
 
-EXPORT void format_obj_texture_info_init(Format_Mtl_Map* info, Allocator* alloc)
+EXTERNAL void format_obj_texture_info_init(Format_Mtl_Map* info, Allocator* alloc)
 {
     _format_obj_texture_info_init_or_deinit(info, NULL, false); //first deinit
     _format_obj_texture_info_init_or_deinit(info, alloc, true); //then init again
 }
-EXPORT void format_obj_material_info_init(Format_Mtl_Material* info, Allocator* alloc)
+EXTERNAL void format_obj_material_info_init(Format_Mtl_Material* info, Allocator* alloc)
 {
     _format_obj_material_info_init_or_deinit(info, NULL, false); //first deinit
     _format_obj_material_info_init_or_deinit(info, alloc, true); //then init again
 
 }
-EXPORT void format_obj_model_init(Format_Obj_Model* info, Allocator* alloc)
+EXTERNAL void format_obj_model_init(Format_Obj_Model* info, Allocator* alloc)
 {
     array_init(&info->positions, alloc);
     array_init(&info->uvs, alloc);
@@ -378,7 +378,7 @@ EXPORT void format_obj_model_init(Format_Obj_Model* info, Allocator* alloc)
     array_init(&info->material_files, alloc);
 }
 
-EXPORT void format_obj_group_init(Format_Obj_Group* info, Allocator* alloc)
+EXTERNAL void format_obj_group_init(Format_Obj_Group* info, Allocator* alloc)
 {
     format_obj_group_deinit(info);
     array_init(&info->groups, alloc);
@@ -386,7 +386,7 @@ EXPORT void format_obj_group_init(Format_Obj_Group* info, Allocator* alloc)
     builder_init(&info->material, alloc);
 }
 
-EXPORT const char* format_obj_mtl_error_statement_to_string(Format_Obj_Mtl_Error_Statement statement)
+EXTERNAL const char* format_obj_mtl_error_statement_to_string(Format_Obj_Mtl_Error_Statement statement)
 {
     switch(statement)
     {
@@ -473,7 +473,7 @@ INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, S
     return _obj_parser_add_group(out, active_object, &def_groups, vertex_index);
 }
 
-EXPORT bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
+EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
     Allocator* alloc = out->indices.allocator;
     ASSERT(alloc);
@@ -873,7 +873,7 @@ INTERNAL bool _match_space_separated_optional_vec3(String str, isize* index, Vec
 }
 
 
-EXPORT bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
+EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source, Format_Obj_Mtl_Error* errors, isize errors_max_count, isize* had_errors)
 {
     Allocator* def_alloc = out->allocator;
     ASSERT(def_alloc);

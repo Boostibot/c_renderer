@@ -73,7 +73,7 @@ typedef struct Resource_Params {
     bool _padding[7];
 } Resource_Params;
 
-EXPORT Resource_Params resource_params_make_simple(String name, String path);
+EXTERNAL Resource_Params resource_params_make_simple(String name, String path);
 
 
 typedef void(*Resource_Destructor)(void* item);
@@ -99,34 +99,34 @@ typedef struct Resource_Manager {
     u32 type_enum;
 } Resource_Manager;
 
-EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, const char* type_name, u32 type_enum);
+EXTERNAL void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, const char* type_name, u32 type_enum);
 
-EXPORT void resource_manager_deinit(Resource_Manager* manager);
+EXTERNAL void resource_manager_deinit(Resource_Manager* manager);
 
-EXPORT bool         resource_is_valid(Resource_Ptr resource);
+EXTERNAL bool         resource_is_valid(Resource_Ptr resource);
 
-EXPORT Resource_Ptr resource_get(Resource_Manager* manager, Id id);
-EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at);
-EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at);
+EXTERNAL Resource_Ptr resource_get(Resource_Manager* manager, Id id);
+EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at);
+EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at);
 
-EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params);
+EXTERNAL Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params);
 
-EXPORT bool         resource_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied);
-EXPORT bool         resource_remove(Resource_Manager* manager, Resource_Ptr resource);
+EXTERNAL bool         resource_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied);
+EXTERNAL bool         resource_remove(Resource_Manager* manager, Resource_Ptr resource);
 
-EXPORT bool         resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied);
-EXPORT bool         resource_force_remove(Resource_Manager* manager, Resource_Ptr resource);
+EXTERNAL bool         resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied);
+EXTERNAL bool         resource_force_remove(Resource_Manager* manager, Resource_Ptr resource);
 
-EXPORT Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resource);
-EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params);
-EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params);
+EXTERNAL Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resource);
+EXTERNAL Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params);
+EXTERNAL Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params);
 
-EXPORT void resource_manager_frame_cleanup(Resource_Manager* manager);
-EXPORT void resource_manager_time_cleanup(Resource_Manager* manager);
+EXTERNAL void resource_manager_frame_cleanup(Resource_Manager* manager);
+EXTERNAL void resource_manager_time_cleanup(Resource_Manager* manager);
 
 // ========================================= IMPL =================================================
 
-EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, const char* type_name, u32 type_enum)
+EXTERNAL void resource_manager_init(Resource_Manager* manager, Allocator* alloc, isize item_size, Resource_Constructor constructor, Resource_Destructor destructor, Resource_Copy copy, const char* type_name, u32 type_enum)
 {
     resource_manager_deinit(manager);
 
@@ -147,7 +147,7 @@ EXPORT void resource_manager_init(Resource_Manager* manager, Allocator* alloc, i
     manager->copy = copy;
 }
 
-EXPORT void resource_manager_deinit(Resource_Manager* manager)
+EXTERNAL void resource_manager_deinit(Resource_Manager* manager)
 {
     STABLE_ARRAY_FOR_EACH_BEGIN_UNTYPED(manager->storage, Resource_Info*, info, isize, index)
         if(manager->destructor)
@@ -168,12 +168,12 @@ EXPORT void resource_manager_deinit(Resource_Manager* manager)
     memset(manager, 0, sizeof *manager);
 }
 
-EXPORT bool         resource_is_valid(Resource_Ptr resource)
+EXTERNAL bool         resource_is_valid(Resource_Ptr resource)
 {
     return resource.ptr && resource.ptr->id == resource.id;
 }
 
-EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_found_and_finished_at)
+EXTERNAL Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     isize found = hash_index_find(manager->id_hash, (u64) id);
@@ -193,7 +193,7 @@ EXPORT Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_
     return out;
 }
 
-EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
+EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     isize found = 0;
@@ -223,7 +223,7 @@ EXPORT Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String 
     return out;
 }
 
-EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
+EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
     isize found = 0;
@@ -253,7 +253,7 @@ EXPORT Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String 
     return out;
 }
 
-EXPORT Resource_Ptr resource_get(Resource_Manager* manager, Id id)
+EXTERNAL Resource_Ptr resource_get(Resource_Manager* manager, Id id)
 {
     return _resource_get(manager, id, NULL);
 }
@@ -273,7 +273,7 @@ void _resource_log_wrong_id(Resource_Ptr out)
     }
 }
 
-EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params)
+EXTERNAL Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params)
 {
     Resource_Info* info = NULL;
     if(params.id == 0)
@@ -337,7 +337,7 @@ EXPORT Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params p
     return out;
 }
 
-EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
+EXTERNAL bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
 {
     if(removed_data)
         ASSERT(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", (lli) removed_data_size, (lli) manager->type_size);
@@ -414,12 +414,12 @@ EXPORT bool resource_force_remove_custom(Resource_Manager* manager, Resource_Ptr
     return false;
 }
 
-EXPORT bool resource_force_remove(Resource_Manager* manager, Resource_Ptr resource)
+EXTERNAL bool resource_force_remove(Resource_Manager* manager, Resource_Ptr resource)
 {
     return resource_force_remove_custom(manager, resource, NULL, 0, NULL);
 }
 
-EXPORT bool resource_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
+EXTERNAL bool resource_remove_custom(Resource_Manager* manager, Resource_Ptr resource, void* removed_data, isize removed_data_size, bool* was_copied)
 {
     if(resource_is_valid(resource))
     {
@@ -437,12 +437,12 @@ EXPORT bool resource_remove_custom(Resource_Manager* manager, Resource_Ptr resou
     return false;
 }
 
-EXPORT bool resource_remove(Resource_Manager* manager, Resource_Ptr resource)
+EXTERNAL bool resource_remove(Resource_Manager* manager, Resource_Ptr resource)
 {
     return resource_remove_custom(manager, resource, NULL, 0, NULL);
 }
 
-EXPORT Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resource)
+EXTERNAL Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resource)
 {
     (void) manager;
     Resource_Ptr out = {0};
@@ -456,7 +456,7 @@ EXPORT Resource_Ptr resource_share(Resource_Manager* manager, Resource_Ptr resou
 
     return out;
 }
-EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params)
+EXTERNAL Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params)
 {
     Resource_Ptr out = {0};
     if(resource_is_valid(resource))
@@ -471,7 +471,7 @@ EXPORT Resource_Ptr resource_make_unique(Resource_Manager* manager, Resource_Ptr
 
     return out;
 }
-EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params)
+EXTERNAL Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr resource, Resource_Params params)
 {
     Resource_Ptr out = {0};
     if(resource_is_valid(resource))
@@ -489,7 +489,7 @@ EXPORT Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr r
 }
 
 
-EXPORT void resource_manager_frame_cleanup(Resource_Manager* manager)
+EXTERNAL void resource_manager_frame_cleanup(Resource_Manager* manager)
 {
     for(isize i = 0; i < manager->single_frame.size; i++)
     {
@@ -500,7 +500,7 @@ EXPORT void resource_manager_frame_cleanup(Resource_Manager* manager)
     array_clear(&manager->single_frame);
 }
 
-EXPORT void resource_manager_time_cleanup(Resource_Manager* manager)
+EXTERNAL void resource_manager_time_cleanup(Resource_Manager* manager)
 {
     i64 now = platform_epoch_time();
     for(isize i = 0; i < manager->timed.size; i++)

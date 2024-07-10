@@ -54,7 +54,7 @@ INTERNAL const char* _resource_loading_translate_error(u32 code, void* context)
     }
 }
 
-EXPORT void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
+EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
     hash_index_reserve(&shape_assembly->vertices_hash, model.indices.size);
     
@@ -248,7 +248,7 @@ INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, 
 #define GAMMA_SRGB 2.2f
 #define GAMMA_LINEAR 1
 
-EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_Material material)
+EXTERNAL void process_mtl_material(Material_Description* description , Format_Mtl_Material material)
 {
     
     builder_assign(&description->name, material.name.string);
@@ -333,7 +333,7 @@ EXPORT void process_mtl_material(Material_Description* description , Format_Mtl_
     process_mtl_map(&cubemaps[CUBEMAP_TYPE_REFLECTION].right, material.map_reflection_cube_right, GAMMA_SRGB, 3);
 }
 
-EXPORT bool material_load_images(Material* material, Material_Description description)
+EXTERNAL bool material_load_images(Material* material, Material_Description description)
 {
     bool out_error = {0};
     material->info = description.info;
@@ -427,7 +427,7 @@ EXPORT bool material_load_images(Material* material, Material_Description descri
 
 #define FLAT_ERRORS_COUNT 100
 
-EXPORT bool material_read_entire(Id_Array* materials, String path)
+EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 {
     Arena_Frame arena = scratch_arena_acquire();
 
@@ -525,7 +525,7 @@ EXPORT bool material_read_entire(Id_Array* materials, String path)
     return state;
 }
 
-EXPORT bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
+EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
     Arena_Frame arena = scratch_arena_acquire();
     LOG_INFO("ASSET", "Loading mesh at '%s'", cstring_ephemeral(path));

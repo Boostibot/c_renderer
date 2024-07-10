@@ -44,20 +44,20 @@ typedef struct Todo
 
 typedef Array(Todo) Todo_Array;
 
-EXPORT void todo_init(Todo* todo, Allocator* alloc);
-EXPORT void todo_deinit(Todo* todo);
+EXTERNAL void todo_init(Todo* todo, Allocator* alloc);
+EXTERNAL void todo_deinit(Todo* todo);
 
-EXPORT void  todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
-EXPORT bool todo_parse_file(Todo_Array* todos, String path, String todo_marker);
-EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
-EXPORT bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth);
+EXTERNAL void  todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
+EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo_marker);
+EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
+EXTERNAL bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth);
 
 #endif
 
 #if (defined(LIB_ALL_IMPL) || defined(LIB_TODO_IMPL)) && !defined(LIB_TODO_HAS_IMPL)
 #define LIB_TODO_HAS_IMPL
 
-EXPORT void todo_init(Todo* todo, Allocator* alloc)
+EXTERNAL void todo_init(Todo* todo, Allocator* alloc)
 {
     todo_deinit(todo);
     
@@ -67,7 +67,7 @@ EXPORT void todo_init(Todo* todo, Allocator* alloc)
     builder_init(&todo->marker, alloc); 
 }
 
-EXPORT void todo_deinit(Todo* todo)
+EXTERNAL void todo_deinit(Todo* todo)
 {
     builder_deinit(&todo->path);
     builder_deinit(&todo->comment); 
@@ -76,7 +76,7 @@ EXPORT void todo_deinit(Todo* todo)
     todo->line = 0;
 }
 
-EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_markers, String source)
+EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_markers, String source)
 {
     for(isize word_index = 0; word_index < todo_markers.size; )
     {
@@ -186,7 +186,7 @@ EXPORT void todo_parse_source(Todo_Array* todos, String path, String todo_marker
 }
 
 
-EXPORT bool todo_parse_file(Todo_Array* todos, String path, String todo)
+EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo)
 {
     Arena_Frame arena = scratch_arena_acquire();
     String_Builder source = {&arena.allocator};
@@ -198,7 +198,7 @@ EXPORT bool todo_parse_file(Todo_Array* todos, String path, String todo)
     return file_error;
 }
 
-EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
+EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
     bool state = true;
     Arena_Frame arena = scratch_arena_acquire();
@@ -238,7 +238,7 @@ EXPORT bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize
     return state;
 }
 
-EXPORT bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
+EXTERNAL bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
 {
     Todo_Array todos = {0};
     bool state = todo_parse_folder(&todos, STRING("./"), string_of(marker), depth);
