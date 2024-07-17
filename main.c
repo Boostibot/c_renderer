@@ -12,7 +12,7 @@
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
 #define JOT_COUPLED
-//#define RUN_TESTS
+#define RUN_TESTS
 //#define RUN_JUST_TESTS
 
 //#include "mdump.h"
@@ -739,8 +739,7 @@ typedef struct Render_Texture_Layer_Info {
     Name name;
     i32 used_width;
     i32 used_height;
-    bool is_used;
-    bool _padding[7];
+    b64 is_used;
 } Render_Texture_Layer_Info;
 
 typedef Array(Render_Texture_Layer_Info) Render_Texture_Layer_Info_Array;
@@ -786,7 +785,7 @@ i32 int_log2_upper_bound(i32 val)
 
 void render_texture_manager_generate_mips(Render_Texture_Manager* manager)
 {
-    for(isize i = 0; i < manager->resolutions.size; i++)
+    for(isize i = 0; i < manager->resolutions.len; i++)
     {
         Render_Texture_Resolution* res = &manager->resolutions.data[i];
         gl_texture_array_generate_mips(&res->array);
@@ -825,7 +824,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
         {
             array_init(&resolution.layers, manager->allocator);
             array_resize(&resolution.layers, layers);
-            out = manager->resolutions.size;
+            out = manager->resolutions.len;
             array_push(&manager->resolutions, resolution);
             manager->memory_used  += needed_size;
         }
@@ -839,7 +838,7 @@ void render_texture_manager_deinit(Render_Texture_Manager* manager)
 {
     //@TODO
     ASSERT(false);
-    //for(isize i = 0; i < manager->resolutions.size; i++)
+    //for(isize i = 0; i < manager->resolutions.len; i++)
     //{
     //    Render_Texture_Resolution* res = &manager->resolutions.data[i];
     //    gl_texture_array_generate_mips(&res->array);
@@ -953,7 +952,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
         // because this will not be called very often.
         isize min_diff = INT64_MAX;
         isize min_diff_index = -1;
-        for(isize i = 0; i < manager->resolutions.size; i++)
+        for(isize i = 0; i < manager->resolutions.len; i++)
         {
             Render_Texture_Resolution* resolution = &manager->resolutions.data[i];
             GL_Texture_Array* array = &resolution->array;
@@ -969,7 +968,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
             bool has_space = true;
          
             if(used == false)
-                has_space = resolution->used_layers != resolution->layers.size;
+                has_space = resolution->used_layers != resolution->layers.len;
             else
                 has_space = resolution->used_layers != 0;
 
@@ -1006,7 +1005,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
 
             out.resolution_index = (i32) min_diff_index + 1;
             out.layer = -1;
-            for(isize i = 0; i < resolution->layers.size; i++)
+            for(isize i = 0; i < resolution->layers.len; i++)
             {
                 if(resolution->layers.data[i].is_used == used)
                 {
@@ -1027,7 +1026,7 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
     return out;
 }
 
-//if((f64) manager->used_layers[resolution_index] >= layer_infos->size * 0.75)
+//if((f64) manager->used_layers[resolution_index] >= layer_infos->len * 0.75)
 //    LOG_WARN("render", "more than 75% texture slots used of size : width: %d height: %d", width, height);
 //
 //if(out.layer == -1)
@@ -1114,7 +1113,7 @@ typedef struct Render_Info {
 
 Render_Info render_info_make(String name)
 {
-    ASSERT(name.size > 0);
+    ASSERT(name.len > 0);
     Render_Info out = {0};
     out.name = name_make(name);
     out.id = id_generate();
@@ -1248,8 +1247,7 @@ typedef struct GL_Buffer {
     GLuint handle;
     i32 item_size;
     i32 item_count;
-    bool is_static_draw;
-    bool _padding[3];
+    b32 is_static_draw;
     isize byte_size;
 } GL_Buffer;
 
@@ -1304,10 +1302,10 @@ Render_Geometry_Batch_Index render_geometry_manager_find(Render_Geometry_Manager
 {
     Render_Geometry_Batch_Index out = {0};
     Name n = name_make(name);
-    for(isize k = 0; k < manager->batches.size; k++)
+    for(isize k = 0; k < manager->batches.len; k++)
     {
         Render_Geometry_Batch* batch = &manager->batches.data[k];
-        for(isize i = 0; i < batch->groups.size; i++)
+        for(isize i = 0; i < batch->groups.len; i++)
         {
             Render_Geometry_Batch_Group* group = &batch->groups.data[i];
             if(name_is_equal(&group->name, &n))
@@ -1345,7 +1343,7 @@ i32 render_geometry_manager_add_batch(Render_Geometry_Manager* manager, isize mi
         manager->used_memory += memory_requirement;
 
         array_push(&manager->batches, batch);
-        out = (i32) manager->batches.size;
+        out = (i32) manager->batches.len;
     }
     else
     {
@@ -1359,7 +1357,7 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
     
 
     i32 batch_index = 0;
-    for(isize i = 0; i < manager->batches.size; i++)
+    for(isize i = 0; i < manager->batches.len; i++)
     {
         Render_Geometry_Batch* batch = &manager->batches.data[i];
         if(batch->used_index_count + index_count <= batch->index_count && batch->used_vertex_count + vertex_count <= batch->vertex_count)
@@ -1761,7 +1759,7 @@ void render_queue_submit_phong(Render* render, const Render_Phong_Command* comma
         expanded.geometry = geometry;
         expanded.material = material;
         expanded.environment = environment;
-        expanded.transform_index = (i32) buffers->transforms.size;
+        expanded.transform_index = (i32) buffers->transforms.len;
         expanded.geometry_batch_index = geometry_batch_index;
 
         array_push(&buffers->transforms, command->transform);
@@ -1769,7 +1767,7 @@ void render_queue_submit_phong(Render* render, const Render_Phong_Command* comma
     }
 
     #else
-    if(buffers->transforms.size == 0)
+    if(buffers->transforms.len == 0)
     //if(1)
     {
         //If empty just add all
@@ -1831,13 +1829,13 @@ void render_queue_expand(Render* render)
     i32 geometry_batch_index = 0;
 
 
-    for(isize i = 0; i < buffers->masks.size; i++)
+    for(isize i = 0; i < buffers->masks.len; i++)
     {
         u8 mask = buffers->masks.data[i];
 
         if(mask & COMMAND_BUFFER_GEOMETRY_BIT)
         {
-            ASSERT(geometry_cursor < buffers->geometries.size);
+            ASSERT(geometry_cursor < buffers->geometries.len);
             Render_Geometry_Ptr geometry_ptr = buffers->geometries.data[geometry_cursor++];
             geometry = render_geometry_get(render, geometry_ptr);
             if(geometry)
@@ -1848,14 +1846,14 @@ void render_queue_expand(Render* render)
         
         if(mask & COMMAND_BUFFER_MATERIAL_BIT)
         {
-            ASSERT(material_cursor < buffers->materials.size);
+            ASSERT(material_cursor < buffers->materials.len);
             Render_Material_Ptr material_ptr = buffers->materials.data[material_cursor++];
             material = render_material_get(render, material_ptr);
         }
 
         if(mask & COMMAND_BUFFER_ENVIRONMENT_BIT)
         {
-            ASSERT(environment_cursor < buffers->environments.size);
+            ASSERT(environment_cursor < buffers->environments.len);
             Render_Environment_Ptr environment_ptr = buffers->environments.data[environment_cursor++];
             environment = render_environment_get(render, environment_ptr);
         }
@@ -1878,7 +1876,7 @@ void render_queue_expand(Render* render)
     }
 
     if(skipped_meshes_count > 0)
-        LOG_WARN("render", "render_queue_expand detected %i / %i are invalid meshes!", (int) skipped_meshes_count, (int) buffers->masks.size);
+        LOG_WARN("render", "render_queue_expand detected %i / %i are invalid meshes!", (int) skipped_meshes_count, (int) buffers->masks.len);
     PROFILE_END(render_queue_expand);
 }
 
@@ -2052,7 +2050,7 @@ void render_render(Render* render, Camera camera)
     #endif
 
     PROFILE_START(render_queue_sort);
-    qsort(buffers->expanded.data, buffers->expanded.size, sizeof *buffers->expanded.data, command_buffer_compare_func);
+    qsort(buffers->expanded.data, buffers->expanded.len, sizeof *buffers->expanded.data, command_buffer_compare_func);
     PROFILE_END(render_queue_sort);
 
     glEnable(GL_DEPTH_TEST); 
@@ -2074,7 +2072,7 @@ void render_render(Render* render, Camera camera)
     Render_Per_Instance_Array* batch_instances = &render->render_per_instance;
 
     i32 not_found_textures = 0;
-    for(isize j = 0; j < buffers->expanded.size; )
+    for(isize j = 0; j < buffers->expanded.len; )
     {
         PROFILE_START(batch_prepare);
 
@@ -2090,7 +2088,7 @@ void render_render(Render* render, Camera camera)
 
         Render_Per_Draw prev_draw = {0};
         isize k = j;
-        for(; k < buffers->expanded.size; k++)
+        for(; k < buffers->expanded.len; k++)
         {
             Render_Command_Expanded curr = buffers->expanded.data[k];   
             Mat4 curr_transform = buffers->transforms.data[curr.transform_index];
@@ -2102,10 +2100,10 @@ void render_render(Render* render, Camera camera)
                 
             //If draws or isntances would no longer fit into the gpu buffers
             // end the batch.
-            if(batch_draws->size >= render->buffer_draw_uniform.item_count
-                || batch_instances->size >= render->buffer_instance.item_count)
+            if(batch_draws->len >= render->buffer_draw_uniform.item_count
+                || batch_instances->len >= render->buffer_instance.item_count)
             {
-                ASSERT(batch_draws->size == render->buffer_draw_uniform.item_count || batch_instances->size == render->buffer_instance.item_count);
+                ASSERT(batch_draws->len == render->buffer_draw_uniform.item_count || batch_instances->len == render->buffer_instance.item_count);
                 goto end_batch;
             }
 
@@ -2199,19 +2197,19 @@ void render_render(Render* render, Camera camera)
                 push_new_draw = true;
             }
 
-            if(batch_draws->size == 0)
+            if(batch_draws->len == 0)
                 ASSERT(push_new_draw);
 
             if(push_new_draw)
             {
                 new_draw.material = curr.material;
                 new_draw.geometry = curr.geometry;
-                new_draw.instance_from = (i32) batch_instances->size;
+                new_draw.instance_from = (i32) batch_instances->len;
                 prev_draw = new_draw;
                 array_push(batch_draws, new_draw);
             }
 
-            ASSERT(batch_draws->size > 0);
+            ASSERT(batch_draws->len > 0);
 
             Render_Per_Instance instance = {0};
             instance.model = curr_transform;
@@ -2232,12 +2230,12 @@ void render_render(Render* render, Camera camera)
         //@NOTE: we dont currently use blinn_phong_per_instance at all since the ata required is the same as batch_instances.
         //array_resize_for_overwrite(&render->blinn_phong_per_instance, batch_instances);
 
-        array_resize_for_overwrite(&render->blinn_phong_per_draw, batch_draws->size);
-        array_resize_for_overwrite(&render->indirect_draws, batch_draws->size);
+        array_resize_for_overwrite(&render->blinn_phong_per_draw, batch_draws->len);
+        array_resize_for_overwrite(&render->indirect_draws, batch_draws->len);
 
-        ASSERT(render->indirect_draws.size >= batch_draws->size);
+        ASSERT(render->indirect_draws.len >= batch_draws->len);
         Gl_Draw_Elements_Indirect_Command* indirect_commands = render->indirect_draws.data;
-        for(u32 i = 0; i < (u32) batch_draws->size; i++)
+        for(u32 i = 0; i < (u32) batch_draws->len; i++)
         {
             Render_Per_Draw* draw = &batch_draws->data[i];
             Render_Geometry_Batch_Index* geometry = &draw->geometry->group;
@@ -2248,21 +2246,21 @@ void render_render(Render* render, Camera camera)
             indirect_commands[i].base_vertex = geometry->vertex_from;
 
             //@TODO: this can be solved in some better way.
-            if(i != batch_draws->size - 1)
+            if(i != batch_draws->len - 1)
             {
                 Render_Per_Draw* next_draw = &batch_draws->data[i + 1];
                 indirect_commands[i].instance_count = next_draw->instance_from - draw->instance_from;
             }
             else
             {
-                indirect_commands[i].instance_count = (GLuint) (batch_instances->size - draw->instance_from);
+                indirect_commands[i].instance_count = (GLuint) (batch_instances->len - draw->instance_from);
             }
         }
                 
         
-        ASSERT(render->blinn_phong_per_draw.size >= batch_draws->size);
+        ASSERT(render->blinn_phong_per_draw.len >= batch_draws->len);
         //Blinn_Phong_Per_Draw* blinn_per_draw = render->blinn_phong_per_draw.data;
-        for(isize i = 0; i < batch_draws->size; i++)
+        for(isize i = 0; i < batch_draws->len; i++)
         {
             Render_Per_Draw* draw = &batch_draws->data[i];
             Render_Material* material = draw->material;
@@ -2313,7 +2311,7 @@ void render_render(Render* render, Camera camera)
 
             if(resolution_index)
             {
-                CHECK_BOUNDS(resolution_index - 1, render->texture_manager.resolutions.size);
+                CHECK_BOUNDS(resolution_index - 1, render->texture_manager.resolutions.len);
                 GL_Texture_Array* resolution_array = &render->texture_manager.resolutions.data[resolution_index - 1].array;
 
                 glActiveTexture(GL_TEXTURE0 + i);
@@ -2329,7 +2327,7 @@ void render_render(Render* render, Camera camera)
         ASSERT(array_byte_size(render->blinn_phong_per_draw) <= render->buffer_draw_uniform.byte_size);
 
         ASSERT(sizeof *batch_instances->data == render->buffer_instance.item_size);
-        ASSERT(batch_instances->size <= render->buffer_instance.item_count);
+        ASSERT(batch_instances->len <= render->buffer_instance.item_count);
 
         
         PROFILE_START(batch_upload);
@@ -2342,7 +2340,7 @@ void render_render(Render* render, Camera camera)
         
         PROFILE_START(draw_call);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER , render->buffer_command.handle);
-        glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, batch_draws->size * sizeof *indirect_commands, indirect_commands);
+        glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, batch_draws->len * sizeof *indirect_commands, indirect_commands);
 
 
         Render_Geometry_Batch* geometry_batch = &render->geometry_manager.batches.data[batch.geometry_batch_index - 1];
@@ -2353,7 +2351,7 @@ void render_render(Render* render, Camera camera)
 
         PROFILE_END(batch_flush);
 
-        glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->size, 0);
+        glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->len, 0);
 
         ASSERT(k > j, "Must make progress k:%i > i:%i", (int) k, (int) j);
         j = k;
@@ -2403,7 +2401,7 @@ Render_Material_Ptr render_material_add(Render* render, String name)
 
 Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, String name)
 {
-    return render_geometry_add(render, shape.vertices.data, shape.vertices.size, (i32*) (void*) shape.triangles.data, shape.triangles.size * 3, name);
+    return render_geometry_add(render, shape.vertices.data, shape.vertices.len, (i32*) (void*) shape.triangles.data, shape.triangles.len * 3, name);
 }
 
 bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)

@@ -174,8 +174,8 @@ void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in)
 
 void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indices, isize trinagles_count)
 {
-    isize vertex_count_before = shape->vertices.size;
-    isize triangle_count_before = shape->triangles.size;
+    isize vertex_count_before = shape->vertices.len;
+    isize triangle_count_before = shape->triangles.len;
 
     array_append(&shape->vertices, vertices, vertices_count);
     array_resize(&shape->triangles, triangle_count_before + trinagles_count);
@@ -191,7 +191,7 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
         offset_index.vertex_i[1] += (u32) vertex_count_before;
         offset_index.vertex_i[2] += (u32) vertex_count_before;
 
-        CHECK_BOUNDS(triangle_count_before + i, shape->triangles.size);
+        CHECK_BOUNDS(triangle_count_before + i, shape->triangles.len);
         shape->triangles.data[triangle_count_before + i] = offset_index;
     }
 }
@@ -202,7 +202,7 @@ void shape_tranform(Shape* shape, Mat4 transform)
 
     Mat4 normal_matrix = mat4_inverse_nonuniform_scale(transform);
 
-    for(isize i = 0; i < shape->vertices.size; i++)
+    for(isize i = 0; i < shape->vertices.len; i++)
     {
         Vertex* vertex = &shape->vertices.data[i];
         vertex->pos = mat4_apply(transform, vertex->pos);
@@ -302,7 +302,7 @@ u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, V
     u64 hashed = vertex_hash64(vertex, 0);
 
     //The index of a new vertex if it was to be inserted
-    isize inserted_i = vertices->size;
+    isize inserted_i = vertices->len;
     isize found = hash_index_find_or_insert(hash, hashed, (u64) inserted_i);
     isize entry = (isize) hash->entries[found].value;
 
@@ -316,7 +316,7 @@ u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, V
         //If it is the right one and return its index.
         //We still check for exact equality of the vertex. It will almost always
         //succeed because the chances of hash colision are astronomically low.
-        CHECK_BOUNDS(entry, vertices->size);
+        CHECK_BOUNDS(entry, vertices->len);
         Vertex found_vertex = vertices->data[entry];
         bool is_equal = memcmp(&vertex, &found_vertex, sizeof found_vertex) == 0;
         if(is_equal == false)
@@ -330,7 +330,7 @@ u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, V
         }
     }
     
-    CHECK_BOUNDS(entry, vertices->size);
+    CHECK_BOUNDS(entry, vertices->len);
     PROFILE_END();
     return (u32) entry;
 
@@ -401,8 +401,8 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
         return;
         
     PROFILE_START();
-    isize vertices_before = into->vertices.size;
-    isize indices_before = into->triangles.size;
+    isize vertices_before = into->vertices.len;
+    isize indices_before = into->triangles.len;
 
     const Vec3 origin = vec3(0, 0, 0);
     const Vec3 corners[4] = {
@@ -461,8 +461,8 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
             array_push(&into->triangles, tri1);
             array_push(&into->triangles, tri2);
             
-            ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.size, tri1) == WINDING_ORDER_CLOCKWISE);
-            ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.size, tri2) == WINDING_ORDER_CLOCKWISE);
+            ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.len, tri1) == WINDING_ORDER_CLOCKWISE);
+            ASSERT(triangle_get_winding_order_at_index(into->vertices.data, into->vertices.len, tri2) == WINDING_ORDER_CLOCKWISE);
         }
         
     }

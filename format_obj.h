@@ -346,7 +346,7 @@ EXTERNAL void format_obj_group_deinit(Format_Obj_Group* info)
 
 EXTERNAL void format_obj_model_deinit(Format_Obj_Model* info)
 {
-    for(isize i = 0; i < info->groups.size; i++)
+    for(isize i = 0; i < info->groups.len; i++)
         format_obj_group_deinit(&info->groups.data[i]);
         
     array_deinit(&info->positions);
@@ -437,7 +437,7 @@ EXTERNAL const char* format_obj_mtl_error_statement_to_string(Format_Obj_Mtl_Err
 INTERNAL Format_Obj_Group* _obj_parser_add_group(Format_Obj_Model* out, String active_object, String_Builder_Array* active_groups, isize vertex_index)
 {
     //End the previous group
-    if(out->groups.size != 0)
+    if(out->groups.len != 0)
     {
         Format_Obj_Group* last = array_last(out->groups);
         last->trinagles_count = (i32) vertex_index - last->trinagles_from;
@@ -459,7 +459,7 @@ INTERNAL Format_Obj_Group* _obj_parser_add_group(Format_Obj_Model* out, String a
 INTERNAL Format_Obj_Group* _obj_parser_get_active_group(Format_Obj_Model* out, String active_object, isize vertex_index)
 {
     //if the last group is still the active one
-    if(out->groups.size != 0)
+    if(out->groups.len != 0)
     {
         Format_Obj_Group* last = array_last(out->groups);
         if(string_is_equal(last->object.string, active_object))
@@ -484,7 +484,7 @@ EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_O
     isize error_count = 0;
     
     //Try to guess the needed size based on a simple heurestic
-    isize expected_line_count = obj_source.size / 32 + 128;
+    isize expected_line_count = obj_source.len / 32 + 128;
     array_reserve(&out->indices, expected_line_count);
     array_reserve(&out->positions, expected_line_count);
     array_reserve(&out->uvs, expected_line_count);
@@ -501,7 +501,7 @@ EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_O
             String line = string_trim_whitespace(it.line);
 
             // Skip blank lines.
-            if(line.size == 0)
+            if(line.len == 0)
                 continue;
 
             Format_Obj_Mtl_Error_Statement error = FORMAT_OBJ_ERROR_NONE;
@@ -680,13 +680,13 @@ EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_O
                     {
                         Format_Obj_Vertex_Index index = indices[i];
                         if(index.pos_i1 < 0)
-                            index.pos_i1 = (u32) out->positions.size + index.pos_i1 + 1;
+                            index.pos_i1 = (u32) out->positions.len + index.pos_i1 + 1;
                         
                         if(index.uv_i1 < 0)
-                            index.uv_i1 = (u32) out->uvs.size + index.uv_i1 + 1;
+                            index.uv_i1 = (u32) out->uvs.len + index.uv_i1 + 1;
                             
                         if(index.norm_i1 < 0)
-                            index.norm_i1 = (u32) out->normals.size + index.norm_i1 + 1;
+                            index.norm_i1 = (u32) out->normals.len + index.norm_i1 + 1;
                     }
 
                     array_push(&out->indices, indices[0]); 
@@ -744,7 +744,7 @@ EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_O
                         }
                     }
 
-                    if(groups.size > 0)
+                    if(groups.len > 0)
                         active_group = _obj_parser_add_group(out, active_object, &groups, trinagle_index);
                     else
                         error = FORMAT_OBJ_ERROR_GROUP;
@@ -886,7 +886,7 @@ EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source,
         String line = string_trim_whitespace(it.line);
 
         //skip blank lines
-        if(line.size == 0)
+        if(line.len == 0)
             continue;
 
         Format_Obj_Mtl_Error_Statement error = FORMAT_MTL_ERROR_NONE;
@@ -1133,7 +1133,7 @@ EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source,
                 for(isize j = 0; j < 2; j++)
                 {
                     String str_sequence = string_of(map.sequences[j]);
-                    if(str_sequence.size != 0 && match_sequence(line, &i, str_sequence))
+                    if(str_sequence.len != 0 && match_sequence(line, &i, str_sequence))
                     {
                         map_table_matched_i = k;
                         break;
@@ -1153,7 +1153,7 @@ EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source,
                 Format_Mtl_Map temp_tex_info = {0};
                 format_obj_texture_info_init(&temp_tex_info, def_alloc);
 
-                while(matched && i < line.size)
+                while(matched && i < line.len)
                 {
                     matched = match_whitespace(line, &i);
                     isize arg_from = i;
@@ -1300,7 +1300,7 @@ EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source,
                     {
                         bool matched_arg = match_whitespace(arg, &arg_i);
                         char c = 0;
-                        if(matched_arg && arg.size - arg_i > 1)
+                        if(matched_arg && arg.len - arg_i > 1)
                             c = arg.data[arg_i];
 
                         if(matched_arg)
@@ -1334,10 +1334,10 @@ EXTERNAL bool format_mtl_read(Format_Mtl_Material_Array* out, String mtl_source,
 
 
                 isize filename_from = i;
-                isize filename_to = line.size;
+                isize filename_to = line.len;
 
                 String filename = string_range(line, filename_from, filename_to);
-                if(filename.size > 0)
+                if(filename.len > 0)
                     builder_assign(&temp_tex_info.path, filename);
                 else
                     matched = FORMAT_MTL_ERROR_MAP;

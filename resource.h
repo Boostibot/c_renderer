@@ -294,7 +294,7 @@ EXTERNAL Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params
     isize index = stable_array_insert(&manager->storage, (void**) &info);
     i64 now = platform_epoch_time();
 
-    ASSERT(params.name.size != 0);
+    ASSERT(params.name.len != 0);
 
     info->data = info + 1;
     info->id = params.id;
@@ -490,7 +490,7 @@ EXTERNAL Resource_Ptr resource_duplicate(Resource_Manager* manager, Resource_Ptr
 
 EXTERNAL void resource_manager_frame_cleanup(Resource_Manager* manager)
 {
-    for(isize i = 0; i < manager->single_frame.size; i++)
+    for(isize i = 0; i < manager->single_frame.len; i++)
     {
         Resource_Ptr resource = manager->single_frame.data[i];
         resource_remove(manager, resource);
@@ -502,7 +502,7 @@ EXTERNAL void resource_manager_frame_cleanup(Resource_Manager* manager)
 EXTERNAL void resource_manager_time_cleanup(Resource_Manager* manager)
 {
     i64 now = platform_epoch_time();
-    for(isize i = 0; i < manager->timed.size; i++)
+    for(isize i = 0; i < manager->timed.len; i++)
     {
         Resource_Ptr* curr = &manager->timed.data[i];
         bool remove = true;

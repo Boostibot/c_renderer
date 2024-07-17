@@ -61,8 +61,8 @@ void link_table_reserve(Link_Table* table, Allocator* allocator, isize to_size)
             "\n from_hash: {size: %i entries_count: %i}"
             "\n to_hash: {size: %i entries_count: %i}", 
             table->links_size, table->links_capacity,
-            table->from_hash.size, table->from_hash.entries_count,
-            table->to_hash.size, table->to_hash.entries_count,
+            table->from_hash.len, table->from_hash.entries_count,
+            table->to_hash.len, table->to_hash.entries_count,
         );
 
         isize new_capacity = to_size;
@@ -119,7 +119,7 @@ isize link_table_find(Link_Table* table, ID from, ID to)
     if(from_hash_i != -1)
     {
         Link_Table_Hash_Val from_val = {table->from_hash.entries[from_hash_i].value};
-        found = _find_to_link_forward(table, from_val.index, from_val.size, to);
+        found = _find_to_link_forward(table, from_val.index, from_val.len, to);
     }
 
     return found;
@@ -133,12 +133,12 @@ ID* link_table_find_all_from(Link_Table* table, ID from, Allocator* alloc)
     if(from_hash_i != -1)
     {
         Link_Table_Hash_Val from_val = {table->from_hash.entries[from_hash_i].value};
-        out = (ID*) allocator_allocate(alloc, from_val.size*sizeof(ID), DEF_ALIGN);
+        out = (ID*) allocator_allocate(alloc, from_val.len*sizeof(ID), DEF_ALIGN);
 
         u32 iter = 0;
         for(u32 link_i = from_val.index; link_i != -1; link_i = table->links[link_i].to_next, iter ++)
         {
-            ASSERT(iter < from_val.size);
+            ASSERT(iter < from_val.len);
             out[iter] = table->links[link_i].to;
         }
     }
@@ -154,12 +154,12 @@ ID* link_table_find_all_to(Link_Table* table, ID to, Allocator* alloc)
     if(to_hash_i != -1)
     {
         Link_Table_Hash_Val to_val = {table->to_hash.entries[to_hash_i].value};
-        out = (ID*) allocator_allocate(alloc, to_val.size*sizeof(ID), DEF_ALIGN);
+        out = (ID*) allocator_allocate(alloc, to_val.len*sizeof(ID), DEF_ALIGN);
 
         u32 iter = 0;
         for(u32 link_i = to_val.index; link_i != -1; link_i = table->links[link_i].to_next, iter ++)
         {
-            ASSERT(iter < to_val.size);
+            ASSERT(iter < to_val.len);
             out[iter] = table->links[link_i].to;
         }
     }
@@ -173,7 +173,7 @@ isize link_table_insert(Link_Table* table, ID from, ID to)
     isize link_i = table->first_free_link;
     //Link_Table_Hash_Val if_inserted = {0};
     //if_inserted.index = link_i;
-    //if_inserted.size = 0;s
+    //if_inserted.len = 0;s
     
     ASSERT(link_i != 0);
     isize from_hash_i = hash_index_find_or_insert(&table->from_hash, from, 0);
@@ -185,9 +185,9 @@ isize link_table_insert(Link_Table* table, ID from, ID to)
 
     //If at least one was just added then the link cant
     // possibly be inside.
-    if(from_val->size != 0 && to_val->size != 0)
+    if(from_val->len != 0 && to_val->len != 0)
     {
-        isize found_i = _find_to_link_forward(table, from_val->index, from_val->size, to);
+        isize found_i = _find_to_link_forward(table, from_val->index, from_val->len, to);
         if(found_i != -1)
             return found_i;
     }
@@ -207,8 +207,8 @@ isize link_table_insert(Link_Table* table, ID from, ID to)
     table->links[to_val->index].to_prev = link_i;
 
     //Update hashes
-    from_val->size += 1;
-    to_val->size += 1;
+    from_val->len += 1;
+    to_val->len += 1;
     from_val->index = link_i;
     to_val->index = link_i;
 
@@ -224,7 +224,7 @@ bool link_table_remove(Link_Table* table, ID from, ID to)
 
     Link_Table_Hash_Val* from_val = (Link_Table_Hash_Val*) (void*) &table->from_hash.entries[from_hash_i].value;
     Link_Table_Hash_Val* to_val = (Link_Table_Hash_Val*) (void*) &table->to_hash.entries[to_hash_i].value;
-    isize link_i = _find_to_link_forward(table, from_val->index, from_val->size, to);
+    isize link_i = _find_to_link_forward(table, from_val->index, from_val->len, to);
     if(link_i == -1)
         return false;
 
@@ -255,13 +255,13 @@ bool link_table_remove(Link_Table* table, ID from, ID to)
     table->first_free_link = link_i;
 
     //Update hashes
-    from_val->size -= 1;
-    to_val->size -= 1;
+    from_val->len -= 1;
+    to_val->len -= 1;
 
-    if(from_val->size <= 0)
+    if(from_val->len <= 0)
         hash_index_remove(&table->from_hash, from_hash_i);
         
-    if(to_val->size <= 0)
+    if(to_val->len <= 0)
         hash_index_remove(&table->to_hash, to_hash_i);
 
     return true;

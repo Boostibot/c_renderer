@@ -76,7 +76,7 @@ u32 virtual_freelist_push(Virtual_Freelist* freelist)
     u32 free = freelist->first_free_i1 - 1;
     u32* free_item = (u32*) virtual_freelist_at(freelist, free);
     freelist->first_free_i1 = *free_item;
-    freelist->size += 1;
+    freelist->len += 1;
     return free;
 }
     
@@ -85,7 +85,7 @@ u32 virtual_freelist_pop(Virtual_Freelist* freelist, u32 index)
     u32* freed = (u32*) virtual_freelist_at(freelist, index);
     *freed = freelist->first_free_i1;
     freelist->first_free_i1 = index + 1;
-    freelist->size -= 1;
+    freelist->len -= 1;
 }
 
 #include "lib/hash_index.h"
@@ -161,7 +161,7 @@ u32 _link_table_add_link(Link_Table* table, Handle from, Handle to)
     u64 to_hash = hash_mix64(0, to_h);
     u64 conect_hash = hash_mix64(from_h, to_h);
 
-    hash_index_reserve(&table->pair_hash_to_link, table->pair_hash_to_link.size + 3);
+    hash_index_reserve(&table->pair_hash_to_link, table->pair_hash_to_link.len + 3);
 
     isize conect_found = hash_index_find_or_insert(&table->pair_hash_to_link, conect_hash, 0);
     Hash_Index_Entry* connect_entry = &table->pair_hash_to_link.entries[conect_found];

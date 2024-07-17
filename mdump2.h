@@ -85,7 +85,7 @@ typedef struct Mdump {
 
 void* mdump_get(Mdump* mdump, Mdump_Ptr ptr, isize size)
 {
-    if(size < 0 || (isize) ptr + size > mdump->file_arena_stack.size || ptr == 0)
+    if(size < 0 || (isize) ptr + size > mdump->file_arena_stack.len || ptr == 0)
         return NULL;
 
     return mdump->file_arena_stack.data + ptr;
@@ -96,14 +96,14 @@ void* mdump_get_assert(Mdump* mdump, Mdump_Ptr ptr, isize size)
     if(ptr == 0)
         return NULL;
 
-    ASSERT(size >= 0 && (isize) ptr + size <= mdump->file_arena_stack.size);
+    ASSERT(size >= 0 && (isize) ptr + size <= mdump->file_arena_stack.len);
     return mdump->file_arena_stack.data + ptr;
 }
 
 Mdump_Ptr mdump_unget(Mdump* mdump, const void* addr, isize size)
 {
     Mdump_Ptr ptr = (u8*) addr - (u8*) mdump->file_arena_stack.data;
-    if(size < 0 || (isize) ptr + size > mdump->file_arena_stack.size || ptr == 0)
+    if(size < 0 || (isize) ptr + size > mdump->file_arena_stack.len || ptr == 0)
         return NIL;
 
     return ptr;
@@ -116,7 +116,7 @@ void mdump_init(Mdump* mdump, Arena_Frame* user_arena)
     mdump->file_arena = arena_frame_acquire(&mdump->file_arena_stack);
 }
 
-#define MDUMP_GET_ARRAY(mdump, mdump_array, Type) ((Type*) mdump_get((mdump), (mdump_array).data, (mdump_array).size * sizeof(Type)))
+#define MDUMP_GET_ARRAY(mdump, mdump_array, Type) ((Type*) mdump_get((mdump), (mdump_array).data, (mdump_array).len * sizeof(Type)))
 #define MDUMP_GET(mdump, ptr, Type)             ((Type*) mdump_get((mdump), (ptr), sizeof(Type)))
 #define MDUMP_GET_ASSERT(mdump, ptr, Type)      ((Type*) mdump_get_assert((mdump), (ptr), sizeof(Type)))
 #define MDUMP_MEMBER_PTR(ptr, Type, member)     (ptr + offsetof(Type, member))
@@ -138,7 +138,7 @@ Mdump_Array mdump_file_array_allocate(Mdump* mdump, isize item_count, isize item
 {
     Mdump_Array out = {0};
     out.data = mdump_file_allocate(mdump, item_count*item_size, 8, out_ptr_or_null);
-    out.size = item_count;
+    out.len = item_count;
     return out;
 }
 
@@ -152,23 +152,23 @@ bool mdump_string(Mdump* mdump, String* user_string, Mdump_String* file_string, 
     if(action == MDUMP_READ)
     {
         char* data = MDUMP_GET_ARRAY(mdump, *file_string, char);
-        if(data == NULL && file_string->size != 0)
+        if(data == NULL && file_string->len != 0)
         {
             memset(user_string, 0, sizeof* user_string);
             return false;
         }
         else
         {
-            *user_string = lpf_string_duplicate(mdump->user_arena, string_make(data, file_string->size));
+            *user_string = lpf_string_duplicate(mdump->user_arena, string_make(data, file_string->len));
             return true;
         }
     }
     else
     {
         void* address = NULL;
-        file_string->data = mdump_file_allocate(mdump, user_string->size + 1, 1, &address);
-        file_string->size = user_string->size;
-        memcpy(address, user_string->data, user_string->size);
+        file_string->data = mdump_file_allocate(mdump, user_string->len + 1, 1, &address);
+        file_string->len = user_string->len;
+        memcpy(address, user_string->data, user_string->len);
         return true;
     }
 }
@@ -189,8 +189,8 @@ bool mdump_array_custom(Mdump* mdump, void** items, isize* item_count, isize ite
 {
     if(action == MDUMP_READ)
     {
-        void* data = mdump_get(mdump, array->data, array->size * item_size);
-        if(data == NULL && array->size != 0)
+        void* data = mdump_get(mdump, array->data, array->len * item_size);
+        if(data == NULL && array->len != 0)
         {
             *items = NULL;
             *item_count = 0;
@@ -198,10 +198,10 @@ bool mdump_array_custom(Mdump* mdump, void** items, isize* item_count, isize ite
         }
         else
         {
-            void* address = mdump_user_allocate(mdump, array->size*item_size, align);
-            memcpy(address, data, array->size*item_size);
+            void* address = mdump_user_allocate(mdump, array->len*item_size, align);
+            memcpy(address, data, array->len*item_size);
             *items = address;
-            *item_count = array->size;
+            *item_count = array->len;
             return true;
         }
     }
@@ -209,7 +209,7 @@ bool mdump_array_custom(Mdump* mdump, void** items, isize* item_count, isize ite
     {
         void* address = NULL;
         array->data = mdump_file_allocate(mdump, *item_count*item_size, align, &address);
-        array->size = *item_count;
+        array->len = *item_count;
         memcpy(address, *items, *item_count*item_size);
         return true;
     }
@@ -345,14 +345,14 @@ Mdump_Ptr mdump_list_add(Mdump* mdump, isize item_size, void* data_or_null, Mdum
         memcpy(node->data, data_or_null, item_size);
 
     mdump_list_add_node(mdump, node_ptr, &list->first, &list->last, after_or_null_ptr);
-    list->size += 1;
+    list->len += 1;
     return node_ptr;
 }
 
 Mdump_Node* mdump_list_remove(Mdump* mdump, Mdump_Ptr ptr, Mdump_List* list)
 {
     if(mdump_list_remove_node(mdump, ptr, &list->first, &list->last) != NULL)
-        list->size -= 1;
+        list->len -= 1;
 }
 
 typedef struct Mdump_List_Iterator {
@@ -381,14 +381,14 @@ bool mdump_list(Mdump* mdump, void** items, isize* item_count, isize item_size, 
 {
     if(action == MDUMP_READ)
     {
-        void* address = mdump_user_allocate(mdump, list->size*item_size, DEF_ALIGN);
+        void* address = mdump_user_allocate(mdump, list->len*item_size, DEF_ALIGN);
         MDUMP_LIST_FOR_EACH(mdump, it, *list)
         {
             memcpy((u8*) address + it.iter*item_size, it.ptr->data, item_size);
             *item_count += 1;
         }
 
-        if(*item_count == list->size)
+        if(*item_count == list->len)
             return true;
         else
             return false;
@@ -404,7 +404,7 @@ bool mdump_list(Mdump* mdump, void** items, isize* item_count, isize item_size, 
                 memcpy(item->data, items[i], item_size);
         }
 
-        list->size += *item_count;
+        list->len += *item_count;
         return true;
     }
 }
@@ -571,7 +571,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
         \
         Mdump_Type_User out = {0}; \
         out.name = STRING(#Type); \
-        out.size = sizeof(Type); \
+        out.len = sizeof(Type); \
         out.align = _align; \
         out.members = members; \
         out.member_count = ARRAY_SIZE(members); \
@@ -599,7 +599,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
             types_init = true; \
             for(int i = 0; i < ARRAY_SIZE(members); i++) \
             { \
-                members[i].size = sizeof(Type); \
+                members[i].len = sizeof(Type); \
                 if(is_unsigned) \
                     members[i].type_query = mdump_type_uint(sizeof(Type)); \
                 else \
@@ -610,7 +610,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
         u32 flags = is_unsigned ? MDUMP_FLAG_ENUM_UNSIGNED : MDUMP_FLAG_ENUM; \
         Mdump_Type_User out = {0}; \
         out.name = STRING(#Type); \
-        out.size = sizeof(Type); \
+        out.len = sizeof(Type); \
         out.align = sizeof(Type); \
         out.members = members; \
         out.member_count = ARRAY_SIZE(members); \
@@ -633,9 +633,9 @@ bool mdump_array_prepare(Mdump* mdump, Mdump_Array* array,
 {
     if(action == MDUMP_READ)
     {
-        void* data = mdump_get(mdump, array->data, array->size * file_item_size);
+        void* data = mdump_get(mdump, array->data, array->len * file_item_size);
         *file_items = data;
-        if(data == NULL && array->size != 0)
+        if(data == NULL && array->len != 0)
         {
             *user_items = NULL;
             *user_item_count = 0;
@@ -643,11 +643,11 @@ bool mdump_array_prepare(Mdump* mdump, Mdump_Array* array,
         }
         else
         {
-            void* address = mdump_user_allocate(mdump, array->size*user_item_size, user_align);
+            void* address = mdump_user_allocate(mdump, array->len*user_item_size, user_align);
             *user_items = address;
-            *user_item_count = array->size;
+            *user_item_count = array->len;
             if(copy)
-                memcpy(address, data, array->size*user_item_size);
+                memcpy(address, data, array->len*user_item_size);
             return true;
         }
     }
@@ -655,7 +655,7 @@ bool mdump_array_prepare(Mdump* mdump, Mdump_Array* array,
     {
         void* address = NULL;
         array->data = mdump_file_allocate(mdump, *user_item_count*file_item_size, file_align, &address);
-        array->size = *user_item_count;
+        array->len = *user_item_count;
         if(copy)
             memcpy(address, *user_items, *user_item_count*file_item_size);
         return true;
@@ -668,8 +668,8 @@ bool mdump_array_prepare2(Mdump* mdump, Generic_Array user, Mdump_Array* file, i
     {
         if(user.array->allocator == NULL)
             user.array->allocator = &mdump->user_arena->allocator;
-        void* data = mdump_get(mdump, file->data, file->size * file_item_size);
-        if(data == NULL && file->size != 0)
+        void* data = mdump_get(mdump, file->data, file->len * file_item_size);
+        if(data == NULL && file->len != 0)
         {
             generic_array_resize(user, 0, true);
             return false;
@@ -678,17 +678,17 @@ bool mdump_array_prepare2(Mdump* mdump, Generic_Array user, Mdump_Array* file, i
         {
             generic_array_resize(user, 0, true);
             if(copy)
-                memcpy(user.array->data, data, file->size*user.item_size);
+                memcpy(user.array->data, data, file->len*user.item_size);
             return true;
         }
     }
     else
     {
         void* address = NULL;
-        file->data = mdump_file_allocate(mdump, user.array->size*file_item_size, file_align, &address);
-        file->size = user.array->size;
+        file->data = mdump_file_allocate(mdump, user.array->len*file_item_size, file_align, &address);
+        file->len = user.array->len;
         if(copy)
-            memcpy(address, user.array->data, user.array->size*file_item_size);
+            memcpy(address, user.array->data, user.array->len*file_item_size);
         return true;
     }
 }
@@ -700,7 +700,7 @@ bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isiz
     {
         if(user.array->allocator == NULL)
             user.array->allocator = &mdump->user_arena->allocator;
-        generic_array_reserve(user, file->size);
+        generic_array_reserve(user, file->len);
         if(copy)
         {
             MDUMP_LIST_FOR_EACH(mdump, it, *file)
@@ -708,7 +708,7 @@ bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isiz
                 generic_array_append(user, it.ptr->data, 1);
             }
 
-            return user.array->size == file->size;
+            return user.array->len == file->len;
         }
 
         return true;
@@ -717,14 +717,14 @@ bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isiz
     {
         isize node_size = isizeof(Mdump_Node) + file_item_size;
         u64 first_node = mdump_file_allocate(mdump, file_item_size*node_size, file_align, NULL);
-        for(isize i = 0; i < user.array->size; i++)
+        for(isize i = 0; i < user.array->len; i++)
         {
             Mdump_Node* item = mdump_list_add_node(mdump, first_node + i*node_size, &file->first, &file->last, file->last);
             if(copy)
                 memcpy(item->data, (u8*) user.array->data + i*user.item_size, user.item_size);
         }
 
-        file->size += user.array->size;
+        file->len += user.array->len;
         return true;
     }
 }
@@ -748,7 +748,7 @@ bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isiz
         bool _padding[7]; \
     } it = {0}; \
     it.okay = mdump_array_prepare((mdump), (file_array_ptr), \
-        (void**) &it.user, &it.size, sizeof(Type_User), __alignof(Type_User), \
+        (void**) &it.user, &it.len, sizeof(Type_User), __alignof(Type_User), \
         (void**) &it.file, sizeof(Type_File), __alignof(Type_File), false, (action)) \
         
 DEFINE_MDUMP_ENUM(Mdump_Type_ID, mdump_type_mdump_type_id, 
@@ -805,7 +805,7 @@ bool mdump_mdump_type_member(Mdump* mdump, Mdump_Member_User* user, Mdump_Member
     mdump_mdump_type_id(mdump, &user->type_id, &file->id, action);
     mdump_u32(mdump, &user->offset, &file->offset, action);
     mdump_u32(mdump, &user->flags, &file->flags, action);
-    mdump_u32(mdump, &user->size, &file->size, action);
+    mdump_u32(mdump, &user->len, &file->len, action);
     mdump_u64(mdump, &user->enum_value, &file->enum_value, action);
 
     return state;
@@ -815,7 +815,7 @@ bool mdump_mdump_type(Mdump* mdump, Mdump_Type_User* type, Mdump_Type_File* type
 {
     mdump_zero(type, sizeof* type, type_file, sizeof *type_file, action);
     bool state = mdump_string(mdump, &type->name, &type_file->name, action);
-    mdump_u32(mdump, &type->size, &type_file->size, action);
+    mdump_u32(mdump, &type->len, &type_file->len, action);
     mdump_u32(mdump, &type->align, &type_file->align, action);
     mdump_u32(mdump, &type->flags, &type_file->flags, action);
     mdump_mdump_type_id(mdump, &type->id, &type_file->id, action);
@@ -838,10 +838,10 @@ typedef struct Mdump_Type_Info {
 
 String string_dup(Arena_Frame* arena, String str)
 {
-    char* duped = (char*) arena_push_nonzero(arena, str.size + 1, 1);
-    memcpy(duped, str.data, str.size);
-    duped[str.size] = '\0';
-    return string_make(duped, str.size);
+    char* duped = (char*) arena_push_nonzero(arena, str.len + 1, 1);
+    memcpy(duped, str.data, str.len);
+    duped[str.len] = '\0';
+    return string_make(duped, str.len);
 }
 
 String cstring_dup(Arena_Frame* arena, const char* str)
@@ -851,7 +851,7 @@ String cstring_dup(Arena_Frame* arena, const char* str)
 
 isize _mdump_type_by_id(Mdump_Type_User_Array* types, Mdump_Type_ID id, Mdump_Type_User_Query or_by_query_or_null)
 {
-    for(isize i = 0; i < types->size; i++)
+    for(isize i = 0; i < types->len; i++)
     {
         Mdump_Type_User* type = {0};
         if(type->id == id || (type->query == or_by_query_or_null && or_by_query_or_null != NULL))
@@ -877,7 +877,7 @@ void mdump_types_add(Mdump_Type_Info* info, Mdump_Type_User user_type)
         array_push(&path_types, user_type);
         array_push(&path_iters, 0);
 
-        for(isize depth = 0; depth < path_iters.size; depth ++)
+        for(isize depth = 0; depth < path_iters.len; depth ++)
         {
             isize* i = &path_iters.data[depth];
             Mdump_Type_User* type = &path_types.data[depth];
@@ -937,7 +937,7 @@ void mdump_types_add(Mdump_Type_Info* info, Mdump_Type_User user_type)
         array_deinit(&path_iters);
 
         //Add all of the gathered types
-        for(isize type_i = 0; type_i < add_stack.size; type_i ++)
+        for(isize type_i = 0; type_i < add_stack.len; type_i ++)
         {
             Mdump_Type_User type = add_stack.data[type_i];
             Mdump_Type_User copy = type;
@@ -1004,7 +1004,7 @@ void mdump_write(String_Builder* into, Mdump* mdump, Mdump_Ptr root_ptr, String 
     Mdump_Header_File header = {0};
     header.magic = MDUMP_MAGIC;
     header.creation_time = platform_epoch_time();
-    memcpy(header.schema_name, schema_name.data, MIN(schema_name.size, sizeof(header.schema_name) - 1));
+    memcpy(header.schema_name, schema_name.data, MIN(schema_name.len, sizeof(header.schema_name) - 1));
     header.version = 1;
     header.root_ptr = root_ptr;
 
