@@ -78,7 +78,7 @@ EXTERNAL void todo_deinit(Todo* todo)
 
 EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_markers, String source)
 {
-    for(isize word_index = 0; word_index < todo_markers.size; )
+    for(isize word_index = 0; word_index < todo_markers.len; )
     {
         match_whitespace(todo_markers, &word_index);
         isize from = word_index;
@@ -86,7 +86,7 @@ EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_mark
         isize to = word_index;
 
         String todo_marker = string_range(todo_markers, from, to);
-        ASSERT(todo_marker.size > 0);
+        ASSERT(todo_marker.len > 0);
 
         for(Line_Iterator it = {0}; line_iterator_get_line(&it, source); )
         {
@@ -95,7 +95,7 @@ EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_mark
             if(todo_i == -1)
                 continue;
 
-            isize past_todo_i = todo_i + todo_marker.size;
+            isize past_todo_i = todo_i + todo_marker.len;
             isize comment_start = string_find_first(line, STRING("//"), 0);
             isize string_start = string_find_last_char_from(line, '"', todo_i);
         
@@ -146,10 +146,10 @@ EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_mark
 
                         String connecting_line = string_tail(subit.line, index);
                         String connecting_content = string_trim_whitespace(connecting_line);
-                        if(connecting_content.size == 0)
+                        if(connecting_content.len == 0)
                             break;
 
-                        if(todo.comment.size > 0)
+                        if(todo.comment.len > 0)
                             builder_push(&todo.comment, ' ');
 
                         builder_append(&todo.comment, connecting_content);
@@ -168,7 +168,7 @@ EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_mark
                 String first_content_line = string_safe_tail(line, past_todo_colon_i);
                 isize string_end = string_find_first_char(first_content_line, '"', 0);
                 if(string_end == -1)
-                    string_end = line.size;
+                    string_end = line.len;
 
                 String string = string_head(first_content_line, string_end);
                 String content = string_trim_whitespace(string);
@@ -234,7 +234,7 @@ EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
     if(state)
     {
         String common_path_prefix = {0};
-        for(isize i = 0; i < todos.size; i++)
+        for(isize i = 0; i < todos.len; i++)
         {
             String curent_path = todos.data[i].path.string;
             if(common_path_prefix.data == NULL)
@@ -242,7 +242,7 @@ EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
             else
             {
                 isize matches_to = 0;
-                isize min_size = MIN(common_path_prefix.size, curent_path.size);
+                isize min_size = MIN(common_path_prefix.len, curent_path.len);
                 for(; matches_to < min_size; matches_to++)
                 {
                     if(common_path_prefix.data[matches_to] != curent_path.data[matches_to])
@@ -253,22 +253,22 @@ EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
             }
         }
     
-        LOG(log, "Logging TODOs (%lli):", (lli) todos.size);
-        for(isize i = 0; i < todos.size; i++)
+        LOG(log, "Logging TODOs (%lli):", (lli) todos.len);
+        for(isize i = 0; i < todos.len; i++)
         {
             Todo todo = todos.data[i];
             String path = todo.path.string;
         
-            if(path.size > common_path_prefix.size)
-                path = string_safe_tail(path, common_path_prefix.size);
+            if(path.len > common_path_prefix.len)
+                path = string_safe_tail(path, common_path_prefix.len);
 
-            if(todo.signature.size > 0)
+            if(todo.signature.len > 0)
                 LOG(log_indented(log), "%-20s %4lli %s(%s) %s\n", path.data, (lli) todo.line, todo.marker.data, todo.signature.data, todo.comment.data);
             else
                 LOG(log_indented(log), "%-20s %4lli %s %s\n", path.data, (lli) todo.line, todo.marker.data, todo.comment.data);
         }
     
-        for(isize i = 0; i < todos.size; i++)
+        for(isize i = 0; i < todos.len; i++)
             todo_deinit(&todos.data[i]);
 
         array_deinit(&todos);

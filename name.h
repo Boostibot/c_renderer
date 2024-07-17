@@ -13,7 +13,7 @@ typedef struct Name {
 Name name_from_hashed(Hash_String hstring)
 {
     Name name = {0};
-    isize min_size = MIN(RESOURCE_NAME_SIZE, hstring.size);
+    isize min_size = MIN(RESOURCE_NAME_SIZE, hstring.len);
     memset(name.data, 0, sizeof name.data);
     memmove(name.data, hstring.data, min_size);
     name.hash = hstring.hash;

@@ -330,7 +330,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         shape_remove(item->shape);
         material_remove(item->material);
 
-        for(isize i = 0; i < item->materials.size; i++)
+        for(isize i = 0; i < item->materials.len; i++)
             material_remove(item->materials.data[i]);
         
         array_deinit(&item->groups);
@@ -347,10 +347,10 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
     
     void _triangle_mesh_copy(Triangle_Mesh* out, const Triangle_Mesh* in)
     {
-        array_resize(&out->groups, in->groups.size);
-        array_resize(&out->materials, in->materials.size);
+        array_resize(&out->groups, in->groups.len);
+        array_resize(&out->materials, in->materials.len);
         
-        for(isize i = 0; i < in->materials.size; i++)
+        for(isize i = 0; i < in->materials.len; i++)
             out->materials.data[i] = material_make_shared(in->materials.data[i]);
 
         out->shape = shape_make_shared(in->shape);

@@ -9,9 +9,9 @@ typedef union {
     u64 value;
 } Mdump_Magic_64;
 
-#define MDUMP_MAGIC         BRACE_INIT(Mdump_Magic_64){"mdump"}.value
-#define MDUMP_MAGIC_BLOCK   BRACE_INIT(Mdump_Magic_64){"mdumpblk"}.value
-#define MDUMP_MAGIC_META    BRACE_INIT(Mdump_Magic_64){"mdumpmta"}.value
+#define MDUMP_MAGIC         BINIT(Mdump_Magic_64){"mdump"}.value
+#define MDUMP_MAGIC_BLOCK   BINIT(Mdump_Magic_64){"mdumpblk"}.value
+#define MDUMP_MAGIC_META    BINIT(Mdump_Magic_64){"mdumpmta"}.value
 
 #define MDUMP_BLOCK_ALIGN    8
 #define MDUMP_ARRAY_ALIGN    4
@@ -98,9 +98,7 @@ typedef struct Mdump_Type_Info {
     u32 size;
     u32 align;
     u32 flags;
-
-    bool _padding[11];
-    bool is_referenced_only;
+    b32 is_referenced_only;
     Mdump_Type_Member_Array members;
 } Mdump_Type_Info;
 
@@ -145,13 +143,13 @@ void _mdump_check_overwrites(Mdump_Blocks* blocks)
     if(blocks->current_block_i1 == 0)
         return;
     
-    ASSERT(blocks->blocks.size > 0);
+    ASSERT(blocks->blocks.len > 0);
     Mdump_Block* curr_block = &blocks->blocks.data[blocks->current_block_i1 - 1];
     ASSERT(curr_block->used_to >= sizeof(Mdump_Magic));
     ASSERT(*(Mdump_Magic*) curr_block->data == blocks->magic_number);
 
     #ifdef DO_ASSERTS_SLOW
-        for(isize i = curr_block->used_to; i < curr_block->size; i++)
+        for(isize i = curr_block->used_to; i < curr_block->len; i++)
         {
             ASSERT_SLOW(curr_block->data[i] == MDUMP_UNUSED_MEMORY_PATTERN, 
                 "Unused memory was found to be corrupeted. Check all functions for overrides");
@@ -175,19 +173,19 @@ Mdump_Ptr _mdump_allocate_recursive(Mdump_Blocks* blocks, isize size, isize alig
             blocks->magic_number = MDUMP_MAGIC;
 
         Mdump_Block new_block = {0};
-        new_block.size = MAX(blocks->block_default_size, size + (isize) sizeof(Mdump_Magic));
-        new_block.data = (u8*) allocator_allocate(blocks->block_allocator, new_block.size, MDUMP_BLOCK_ALIGN);
+        new_block.len = MAX(blocks->block_default_size, size + (isize) sizeof(Mdump_Magic));
+        new_block.data = (u8*) allocator_allocate(blocks->block_allocator, new_block.len, MDUMP_BLOCK_ALIGN);
         new_block.used_to = sizeof(Mdump_Magic);
         
         //Fill with marker data (0b01010101)
         #ifdef DO_ASSERTS_SLOW
-        memset(new_block.data, MDUMP_UNUSED_MEMORY_PATTERN, new_block.size);
+        memset(new_block.data, MDUMP_UNUSED_MEMORY_PATTERN, new_block.len);
         #endif DO_ASSERTS_SLOW
 
         *(Mdump_Magic*) new_block.data = blocks->magic_number;
 
         array_push(&blocks->blocks, new_block);
-        blocks->current_block_i1 = blocks->blocks.size;
+        blocks->current_block_i1 = blocks->blocks.len;
     }
 
     Mdump_Block* curr_block = &blocks->blocks.data[blocks->current_block_i1 - 1];
@@ -195,7 +193,7 @@ Mdump_Ptr _mdump_allocate_recursive(Mdump_Blocks* blocks, isize size, isize alig
 
     u8* new_data = (u8*) align_forward(curr_block->data + curr_block->used_to, align);
     isize offset = new_data - curr_block->data;
-    if(offset + size > curr_block->size)
+    if(offset + size > curr_block->len)
     {
         ASSERT(is_retry == false);
         blocks->current_block_i1 = 0;
@@ -222,10 +220,10 @@ void* mdump_get(Mdump_Blocks* blocks, Mdump_Ptr ptr, isize size, bool* ok_or_nul
     do {
         if(ptr.offset >= sizeof(Mdump_Magic))
         {
-            if(ptr.block < blocks->blocks.size)
+            if(ptr.block < blocks->blocks.len)
             {
                 Mdump_Block* block = &blocks->blocks.data[ptr.block];
-                if(ptr.offset + size <= block->size)
+                if(ptr.offset + size <= block->len)
                 {
                     out = block->data + ptr.offset;
                     break;
@@ -243,9 +241,9 @@ void* mdump_get(Mdump_Blocks* blocks, Mdump_Ptr ptr, isize size, bool* ok_or_nul
 
 void* mdump_get_array(Mdump_Blocks* blocks, Mdump_Array array, isize item_size, isize *item_count)
 {
-    void* out = mdump_get(blocks, array.ptr, array.size*item_size, NULL);
+    void* out = mdump_get(blocks, array.ptr, array.len*item_size, NULL);
     if(out != NULL)
-        *item_count = array.size;
+        *item_count = array.len;
     else
         *item_count = 0;
 
@@ -255,7 +253,7 @@ void* mdump_get_array(Mdump_Blocks* blocks, Mdump_Array array, isize item_size, 
 void* mdump_get_array_sure(Mdump_Blocks* blocks, Mdump_Array array, isize item_size)
 {
     bool ok = false;
-    void* out = mdump_get(blocks, array.ptr, array.size*item_size, &ok);
+    void* out = mdump_get(blocks, array.ptr, array.len*item_size, &ok);
     ASSERT(ok);
     return out;
 }
@@ -270,7 +268,7 @@ Mdump_String mdump_string_allocate(Mdump_Blocks* blocks, isize size)
     ASSERT(size < UINT32_MAX);
     Mdump_String out = {0};
     out.ptr = mdump_allocate(blocks, size + 1, 1, NULL);
-    out.size = (u32) size;
+    out.len = (u32) size;
     return out;
 }
 
@@ -279,27 +277,27 @@ Mdump_Array mdump_array_allocate(Mdump_Blocks* blocks, isize size, isize item_si
     ASSERT(size*item_size < UINT32_MAX);
     Mdump_Array out = {0};
     out.ptr = mdump_allocate(blocks, size*item_size, align, NULL);
-    out.size = (u32) size;
+    out.len = (u32) size;
     return out;
 }
 
 Mdump_String mdump_string_from_string(Mdump_Blocks* blocks, String string)
 {
-    ASSERT(string.size < UINT32_MAX);
+    ASSERT(string.len < UINT32_MAX);
     void* alloced_data = NULL; 
     Mdump_String out = {0};
-    out.ptr = mdump_allocate(blocks, string.size + 1, 1, &alloced_data);
-    out.size = (u32) string.size;
-    memcpy(alloced_data, string.data, string.size);
+    out.ptr = mdump_allocate(blocks, string.len + 1, 1, &alloced_data);
+    out.len = (u32) string.len;
+    memcpy(alloced_data, string.data, string.len);
     return out;
 }
 
 String mdump_string_to_string(Mdump_Blocks* blocks, Mdump_String mstring, bool* ok_or_null)
 {
     String out = {0};
-    out.data = (const char*) mdump_get_array(blocks, mstring, 1, &out.size);
+    out.data = (const char*) mdump_get_array(blocks, mstring, 1, &out.len);
     if(ok_or_null)
-        *ok_or_null = out.size == mstring.size;
+        *ok_or_null = out.len == mstring.len;
 
     return out;
 }
@@ -359,18 +357,18 @@ void mdump_types_init(Mdump_Types* types, Allocator* alloc)
         Mdump_Type_Info* info = &types->types.data[builtin_info.type];
 
         info->type_name = builder_from_cstring(types->allocator, builtin_info.name);
-        info->size = builtin_info.size;
+        info->len = builtin_info.len;
         info->align = builtin_info.align;
         info->flags = builtin_info.flags;
         if(info->align == 0)
-            info->align = info->size;
+            info->align = info->len;
     }
 }
 
 Mdump_Type mdump_get_type_by_name(Mdump_Types* types, String type_name)
 {
     ASSERT(types->allocator != NULL);
-    for(isize i = 0; i < types->types.size; i++)
+    for(isize i = 0; i < types->types.len; i++)
     {
         Mdump_Type_Info* type = &types->types.data[i];
         if(string_is_equal(type->type_name.string, type_name))
@@ -384,7 +382,7 @@ Mdump_Type_Info* mdump_get_type_info(Mdump_Types* types, Mdump_Type type)
 {
     ASSERT(types->allocator != NULL);
     
-    if(type <= 0 || type >= types->types.size)
+    if(type <= 0 || type >= types->types.len)
         type = MDUMP_TYPE_NONE;
 
     return &types->types.data[type];
@@ -404,7 +402,7 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
     else
     {
         isize i = 0;
-        for(; i < info.members.size; i++)
+        for(; i < info.members.len; i++)
         {
             Mdump_Type_Member* member = &info.members.data[i];
 
@@ -414,7 +412,7 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
 
             Mdump_Type registered_type = mdump_register_type(types, member_info);
 
-            u32 member_size = member_info.size;
+            u32 member_size = member_info.len;
             u32 member_align = member_info.align;
             if(member->flags & MDUMP_FLAG_ARRAY)
             {
@@ -434,14 +432,14 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
                 break;
             }
 
-            if(member->offset + member->size > info.size)
+            if(member->offset + member->len > info.len)
             {
                 LOG_ERROR("mdump", "mdump_register_type error: struct member outside struct memory\n"
                     "type: %s member: %s", info.type_name.data, member->name.data);
                 break;
             }
 
-            if(member_size != member->size)
+            if(member_size != member->len)
             {
                 LOG_ERROR("mdump", "mdump_register_type error: struct member size does not match its registered size\n"
                     "type: %s member: %s", info.type_name.data, member->name.data);
@@ -458,10 +456,10 @@ Mdump_Type mdump_register_type(Mdump_Types* types, Mdump_Type_Info info)
             member->type = registered_type;
         }
     
-        if(i == info.members.size)
+        if(i == info.members.len)
         {
             array_push(&types->types, info);
-            out_type = (Mdump_Type)(types->types.size - 1);
+            out_type = (Mdump_Type)(types->types.len - 1);
         }
     }
     
@@ -481,14 +479,14 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
         return MDUMP_TYPE_NONE;
     }
 
-    if(found_info->size != info.size) 
+    if(found_info->len != info.len) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type size does not match one found\n"
             "type: %.*s", STRING_PRINT(info.type_name));
         return MDUMP_TYPE_NONE;
     }
     
-    if(found_info->members.size != info.members.size) 
+    if(found_info->members.len != info.members.len) 
     {
         LOG_ERROR("mdump", "mdump_validate_type_against error: type memebers do not match ones found\n"
             "type: %.*s", STRING_PRINT(info.type_name));
@@ -502,14 +500,14 @@ Mdump_Type mdump_validate_type_against(Mdump_Types* types, Mdump_Type_Info info,
         return MDUMP_TYPE_NONE;
     }
             
-    for(isize i = 0; i < info.members.size; i++)
+    for(isize i = 0; i < info.members.len; i++)
     {
         Mdump_Type_Member* member = &info.members.data[i];
         Mdump_Type_Member* found_member = &found_info->members.data[i];
         
         Mdump_Type_Info member_info = member->info_func(types);
             
-        if(found_member->offset != member->offset || found_member->flags != member->flags ||  member->size != member_info.size || builder_is_equal(found_member->name, member->name) == false)
+        if(found_member->offset != member->offset || found_member->flags != member->flags ||  member->len != member_info.len || builder_is_equal(found_member->name, member->name) == false)
         {
             LOG_ERROR("mdump", "mdump_validate_type_against error: type memebers do not match ones found\n"
                 "type: %.*s", STRING_PRINT(info.type_name));
@@ -533,7 +531,7 @@ Mdump_Type_Info mdump_get_builtin_type_info(Mdump_Types* types, Mdump_Type type)
     Mdump_Type_Info* info = mdump_get_type_info(types, type);
     Mdump_Type_Info out = {0};
     out.type_name = builder_from_string(types->allocator, info->type_name.string);
-    out.size = info->size;
+    out.len = info->len;
     out.align = info->align;
     out.flags = info->flags;
     return out;
@@ -612,13 +610,13 @@ EXTERNAL bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory,
     {
         isize chunk_count = 0;
         Mdump_String* chunks = MDUMP_GET_ARRAY(blocks, *in_file, &chunk_count, Mdump_String);
-        if(chunk_count != in_file->size)
+        if(chunk_count != in_file->len)
             ok = false;
 
         isize total_size = 0;
 
         for(isize i = 0; i < chunk_count; i++)
-            total_size += chunks[i].size;
+            total_size += chunks[i].len;
 
         builder_clear(in_memory);
         builder_reserve(in_memory, total_size);
@@ -630,7 +628,7 @@ EXTERNAL bool mdump_long_string(Mdump_Blocks* blocks, String_Builder* in_memory,
     }
     else
     {
-        isize chunk_count = DIV_CEIL(in_memory->size, INT32_MAX);
+        isize chunk_count = DIV_CEIL(in_memory->len, INT32_MAX);
 
         *in_file = mdump_array_allocate(blocks, chunk_count, sizeof(Mdump_String), MDUMP_ARRAY_ALIGN);
         Mdump_String* chunks = MDUMP_GET_ARRAY_SURE(blocks, *in_file, Mdump_String);
@@ -659,16 +657,16 @@ bool mdump_array(Mdump_Blocks* blocks, void* array, isize item_size, Mdump_Array
     if(action == MDUMP_READ)
     {
         u8_Array* base = (u8_Array*) array;
-        ASSERT(base->size <= UINT32_MAX);
-        in_file->ptr = mdump_allocate(blocks, base->size * item_size, DEF_ALIGN, &addr);
-        in_file->size = (u32) base->size;
+        ASSERT(base->len <= UINT32_MAX);
+        in_file->ptr = mdump_allocate(blocks, base->len * item_size, DEF_ALIGN, &addr);
+        in_file->len = (u32) base->len;
     }
     else
     {
        isize item_count = 0;
        addr = mdump_get_array(blocks, *in_file, item_size, &item_count);
        _array_resize((Generic_Array*) array, item_size, item_count, true);
-       state = item_count == in_file->size;
+       state = item_count == in_file->len;
     }
 
     if(out_address_or_null)
@@ -685,7 +683,7 @@ EXTERNAL Mdump_Type_Info mdump_type_info_make(Mdump_Types* types, const char* na
 
     out.type_name = builder_from_cstring(types->allocator, name);
     out.align = align;
-    out.size = size;
+    out.len = size;
     out.flags = flags;
     return out;
 }
@@ -698,18 +696,18 @@ EXTERNAL void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func i
 
     out.name = builder_from_cstring(alloc, name);
     out.offset = offset;
-    out.size = size;
+    out.len = size;
     out.flags = flags;
     out.info_func = info_func;
 
-    if(default_value.size != 0)
+    if(default_value.len != 0)
         out.default_value = builder_from_string(alloc, default_value);
 
     array_push(&parent->members, out);
 }
 
 #define mdump_type_member_push_optional(Member_Of_Type, info_ptr, member, mdump_func, flags, def_value) \
-    _mdump_type_member_push((info_ptr), (mdump_func), #member, offsetof(Member_Of_Type, member), sizeof ((Member_Of_Type*)NULL)->member, (flags) | MDUMP_FLAG_OPTIONAL, BRACE_INIT(String){(const char*) def_value, sizeof *def_value})
+    _mdump_type_member_push((info_ptr), (mdump_func), #member, offsetof(Member_Of_Type, member), sizeof ((Member_Of_Type*)NULL)->member, (flags) | MDUMP_FLAG_OPTIONAL, BINIT(String){(const char*) def_value, sizeof *def_value})
 
 #define mdump_type_member_push(Member_Of_Type, info_ptr, member, mdump_func, flags) \
     _mdump_type_member_push((info_ptr), (mdump_func), #member, offsetof(Member_Of_Type, member), sizeof ((Member_Of_Type*)NULL)->member, (flags), STRING(""))
@@ -748,7 +746,7 @@ EXTERNAL Mdump_Type_Info mdump_info_type_member(Mdump_Types* types)
 EXTERNAL bool mdump_type_member(Mdump_Blocks* blocks, Mdump_Type_Member* in_memory, Mdump_Type_Member_Mdumped* in_file, Mdump_Action action)
 {
     mdump_u32(blocks, &in_memory->offset, &in_file->offset, action);
-    mdump_u32(blocks, &in_memory->size, &in_file->size, action);
+    mdump_u32(blocks, &in_memory->len, &in_file->len, action);
     mdump_u32(blocks, &in_memory->flags, &in_file->flags, action);
     
     bool state = true
@@ -774,14 +772,14 @@ EXTERNAL Mdump_Type_Info mdump_info_type_info(Mdump_Types* types)
 EXTERNAL bool mdump_type_info(Mdump_Blocks* blocks, Mdump_Type_Info* in_memory, Mdump_Type_Info_Mdumped* in_file, Mdump_Action action)
 {
     mdump_u32(blocks, &in_memory->align, &in_file->align, action);
-    mdump_u32(blocks, &in_memory->size, &in_file->size, action);
+    mdump_u32(blocks, &in_memory->len, &in_file->len, action);
     mdump_u32(blocks, &in_memory->flags, &in_file->flags, action);
     
     bool state = mdump_string(blocks, &in_memory->type_name, &in_file->type_name, action);
 
     Mdump_Type_Member_Mdumped* dumped_members = NULL;
     state = state && mdump_array(blocks, &in_memory->members, sizeof *in_memory->members.data, &in_file->members, action, (void**) &dumped_members, 0);
-    for(isize i = 0; i < in_memory->members.size && state; i++)
+    for(isize i = 0; i < in_memory->members.len && state; i++)
         state = mdump_type_member(blocks, &in_memory->members.data[i], dumped_members, action);
 
     return state;
@@ -790,16 +788,16 @@ EXTERNAL bool mdump_type_info(Mdump_Blocks* blocks, Mdump_Type_Info* in_memory, 
 void mdump_print_type_hierarchy(Mdump_Types* types)
 {
     LOG_INFO("mdump", "mdump types:");
-    for(isize j = 0; j < types->types.size; j++)
+    for(isize j = 0; j < types->types.len; j++)
     {
         Mdump_Type_Info type = types->types.data[j];
-        if(type.type_name.size == 0)
+        if(type.type_name.len == 0)
             continue;
 
-        if(type.members.size > 0)
+        if(type.members.len > 0)
         {
-            LOG_INFO(">mdump", "%s (size: %lli align: %lli) {", type.type_name.data, (lli) type.size, (lli) type.align);
-            for(isize i = 0; i < type.members.size; i++)
+            LOG_INFO(">mdump", "%s (size: %lli align: %lli) {", type.type_name.data, (lli) type.len, (lli) type.align);
+            for(isize i = 0; i < type.members.len; i++)
             {
                 Mdump_Type_Member member = type.members.data[i];
                 Mdump_Type_Info* member_info = mdump_get_type_info(types, member.type);
@@ -814,7 +812,7 @@ void mdump_print_type_hierarchy(Mdump_Types* types)
         }
         else
         {
-            LOG_INFO(">mdump", "%s (size: %lli align: %lli)", type.type_name.data, (lli) type.size, (lli) type.align);
+            LOG_INFO(">mdump", "%s (size: %lli align: %lli)", type.type_name.data, (lli) type.len, (lli) type.align);
         }
     }
 }
@@ -839,8 +837,8 @@ void test_mdump()
     TEST(mdump_type_info(&blocks, &read, written, MDUMP_READ));
 
     TEST(read.align == info.align);
-    TEST(read.size == info.size);
+    TEST(read.len == info.len);
     TEST(read.flags == info.flags);
-    TEST(read.members.size == info.members.size);
+    TEST(read.members.len == info.members.len);
     TEST(builder_is_equal(read.type_name, info.type_name));
 }

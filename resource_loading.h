@@ -56,38 +56,38 @@ INTERNAL const char* _resource_loading_translate_error(u32 code, void* context)
 
 EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
-    hash_index_reserve(&shape_assembly->vertices_hash, model.indices.size);
+    hash_index_reserve(&shape_assembly->vertices_hash, model.indices.len);
     
     //Copy over materials
-    for(isize i = 0; i < model.material_files.size; i++)
+    for(isize i = 0; i < model.material_files.len; i++)
     {
         String material_file = model.material_files.data[i].string;
         array_push(&description->material_files, builder_from_string(NULL, material_file));
     }
 
     //Try to guess the final needed size
-    array_reserve(&shape_assembly->triangles, shape_assembly->triangles.size + model.indices.size/3); //divided by three since are triangles
-    array_reserve(&shape_assembly->vertices, shape_assembly->vertices.size + model.indices.size/2); //divide by two since some vertices are shared
+    array_reserve(&shape_assembly->triangles, shape_assembly->triangles.len + model.indices.len/3); //divided by three since are triangles
+    array_reserve(&shape_assembly->vertices, shape_assembly->vertices.len + model.indices.len/2); //divide by two since some vertices are shared
 
     Allocator* def_alloc = shape_assembly->triangles.allocator;
 
     //Deduplicate groups
-    for(isize parent_group_i = 0; parent_group_i < model.groups.size; parent_group_i++)
+    for(isize parent_group_i = 0; parent_group_i < model.groups.len; parent_group_i++)
     {
         Format_Obj_Group* parent_group = &model.groups.data[parent_group_i];
-        i32 triangles_before = (i32) shape_assembly->triangles.size;
+        i32 triangles_before = (i32) shape_assembly->triangles.len;
         
         //Skip empty groups
         if(parent_group->trinagles_count <= 0)
             continue;
 
         //Skip groups that have no group
-        if(parent_group->groups.size <= 0)
+        if(parent_group->groups.len <= 0)
             continue;
 
         //Skip groups that we already merged through earlier groups
         bool already_merged = false;
-        for(isize i = 0; i < description->groups.size; i++)
+        for(isize i = 0; i < description->groups.len; i++)
             if(builder_is_equal(description->groups.data[i].name, parent_group->groups.data[0]))
             {
                 already_merged = true;
@@ -99,7 +99,7 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
 
         //Iterate over all not yet seen obj groups (start from parent_group_i) and add the vertices if it 
         //is the same group. This merges all groups with the same name and same object into one engine group
-        for(isize child_group_i = parent_group_i; child_group_i < model.groups.size; child_group_i++)
+        for(isize child_group_i = parent_group_i; child_group_i < model.groups.len; child_group_i++)
         {
             Format_Obj_Group* child_group = &model.groups.data[child_group_i];
 
@@ -112,7 +112,7 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
                 continue;
 
             //Shouldnt be possible with the current parser but just in case
-            if(child_group->groups.size == 0 || parent_group->groups.size == 0)
+            if(child_group->groups.len == 0 || parent_group->groups.len == 0)
             
             //... and those that are not the same main group.
             //(We ignore all other groups than the first for now)
@@ -139,7 +139,7 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
 
                 Vertex composed_vertex = {0};
                 Format_Obj_Vertex_Index index = model.indices.data[i];
-                if(index.norm_i1 < 0 || index.norm_i1 > model.normals.size)
+                if(index.norm_i1 < 0 || index.norm_i1 > model.normals.len)
                 {
                     error = INVALID_NORM_INDEX;
                     error_index = index.norm_i1;
@@ -147,7 +147,7 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
                 else
                     composed_vertex.norm = model.normals.data[index.norm_i1 - 1];
 
-                if(index.pos_i1 < 0 || index.pos_i1 > model.positions.size)
+                if(index.pos_i1 < 0 || index.pos_i1 > model.positions.len)
                 {
                     error = INVALID_POS_INDEX;
                     error_index = index.pos_i1;
@@ -155,7 +155,7 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
                 else
                     composed_vertex.pos = model.positions.data[index.pos_i1 - 1];
 
-                if(index.uv_i1 < 0 || index.uv_i1 > model.uvs.size)
+                if(index.uv_i1 < 0 || index.uv_i1 > model.uvs.len)
                 {
                     error = INVALID_UV_INDEX;
                     error_index = index.uv_i1;
@@ -195,7 +195,7 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
         Triangle_Mesh_Group_Description group_desc = {0};
         triangle_mesh_group_description_init(&group_desc, def_alloc);
         
-        i32 triangles_after = (i32) shape_assembly->triangles.size;
+        i32 triangles_after = (i32) shape_assembly->triangles.len;
 
         //No child or next
         group_desc.next_i1 = 0;
@@ -209,12 +209,12 @@ EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle
         group_desc.triangles_to = triangles_after;
 
         builder_assign(&group_desc.material_name, parent_group->material.string);
-        if(parent_group->groups.size > 0)
+        if(parent_group->groups.len > 0)
             builder_assign(&group_desc.name, parent_group->groups.data[0].string);
 
         //link the previous group to this one
-        if(description->groups.size > 0)
-            array_last(description->groups)->next_i1 = (i32) description->groups.size + 1;
+        if(description->groups.len > 0)
+            array_last(description->groups)->next_i1 = (i32) description->groups.len + 1;
 
         array_push(&description->groups, group_desc);
     }
@@ -226,7 +226,7 @@ INTERNAL void process_mtl_map(Map_Description* description, Format_Mtl_Map map, 
     description->info.contrast = map.modify_contrast;
     description->info.gamma = expected_gamma;
     description->info.channels_count = channels;
-    description->info.is_enabled = map.path.size > 0;
+    description->info.is_enabled = map.path.len > 0;
 
     Map_Repeat repeat = map.is_clamped ? MAP_REPEAT_CLAMP_TO_EDGE : MAP_REPEAT_REPEAT;
     description->info.repeat_u = repeat;
@@ -376,7 +376,7 @@ EXTERNAL bool material_load_images(Material* material, Material_Description desc
         Map_Or_Cubemap_Handles map_or_cubemap = maps_or_cubemaps[i];
 
         //if this image is not enabled or does not have a path dont even try
-        if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.size <= 0)
+        if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.len <= 0)
             continue;
         
         Path item_path = path_parse(map_or_cubemap.description->path.string);
@@ -481,10 +481,10 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 
     if(is_outdated == false)
     {
-        for(isize i = 0; i < found_materials.size; i++)
+        for(isize i = 0; i < found_materials.len; i++)
             array_push(materials, material_make_shared(found_material));
         
-        was_found = found_materials.size > 0;
+        was_found = found_materials.len > 0;
     }
 
     if((was_found == false || is_outdated))
@@ -499,7 +499,7 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
             for(isize i = 0; i < had_mtl_errors; i++)
                 LOG_ERROR("ASSET", "bool parsing material file %s: " OBJ_MTL_ERROR_FMT, full_path.data, OBJ_MTL_ERROR_PRINT(mtl_errors[i]));
         
-            for(isize i = 0; i < mtl_materials.size; i++)
+            for(isize i = 0; i < mtl_materials.len; i++)
             {
                 process_mtl_material(&material_desription, mtl_materials.data[i]);
                 builder_assign(&material_desription.path, full_path.string);
@@ -584,7 +584,7 @@ EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
             process_obj_triangle_mesh(out_assembly, &description, model);
 
             Path dir_path = path_strip_to_containing_directory(path_parse(full_path.string));
-            for(isize i = 0; i < description.material_files.size; i++)
+            for(isize i = 0; i < description.material_files.len; i++)
             {
                 String file = description.material_files.data[i].string;
                 Path mtl_path = path_absolute_ephemeral(dir_path, path_parse(file));
@@ -592,12 +592,12 @@ EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
                     LOG_ERROR("ASSET", "Failed to load material file '%.*s' while loading '%.*s'", STRING_PRINT(mtl_path.string), STRING_PRINT(full_path));
             }
 
-            for(isize i = 0; i < description.groups.size; i++)
+            for(isize i = 0; i < description.groups.len; i++)
             {
                 Triangle_Mesh_Group_Description* group_desc = &description.groups.data[i];
         
                 bool unable_to_find_group = true;
-                for(isize j = 0; j < triangle_mesh->materials.size; j++)
+                for(isize j = 0; j < triangle_mesh->materials.len; j++)
                 {
                     Id material_handle = triangle_mesh->materials.data[j];
 

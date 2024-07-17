@@ -62,15 +62,15 @@ EXTERNAL bool image_read_from_memory(Image* image, String data, isize desired_ch
     switch(format)
     {
         case PIXEL_TYPE_U8:
-            allocated = stbi_load_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+            allocated = stbi_load_from_memory((const u8*) data.data, (int) data.len, &width, &height, &channels, (int) desired_channels);
             break;
 
         case PIXEL_TYPE_U16:
-            allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+            allocated = stbi_load_16_from_memory((const u8*) data.data, (int) data.len, &width, &height, &channels, (int) desired_channels);
             break;
 
         case PIXEL_TYPE_F32:
-            allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.size, &width, &height, &channels, (int) desired_channels);
+            allocated = stbi_loadf_from_memory((const u8*) data.data, (int) data.len, &width, &height, &channels, (int) desired_channels);
             break;
 
         case PIXEL_TYPE_U24:
@@ -228,7 +228,7 @@ EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_F
 EXTERNAL bool image_write_to_file(Subimage image, String path)
 {
     isize last_dot_i = string_find_last_char(path, '.') + 1;
-    CHECK_BOUNDS(last_dot_i, path.size + 1);
+    CHECK_BOUNDS(last_dot_i, path.len + 1);
     
     String extension = string_tail(path, last_dot_i);
     Image_File_Format file_format = image_file_format_from_extension(extension);
