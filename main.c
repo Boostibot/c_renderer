@@ -2267,9 +2267,9 @@ void render_render(Render* render, Camera camera)
             Render_Per_Draw* draw = &batch_draws->data[i];
             Render_Material* material = draw->material;
             Blinn_Phong_Per_Draw* blinn = &render->blinn_phong_per_draw.data[i];
-            blinn->diffuse_color = vec4_from_vec3(material->diffuse_color);
-            blinn->specular_color = vec4_from_vec3(material->specular_color);
-            blinn->ambient_color = vec4_from_vec3(material->ambient_color);
+            blinn->diffuse_color = (Vec4){material->diffuse_color};
+            blinn->specular_color = (Vec4){material->specular_color};
+            blinn->ambient_color = (Vec4){material->ambient_color};
             blinn->specular_exponent = material->specular_exponent;
             blinn->metallic = material->metallic;
             //@TODO: strcuture
@@ -2286,7 +2286,7 @@ void render_render(Render* render, Camera camera)
             blinn_environment.base_illumination = vec4_of(0.5f);
             blinn_environment.projection = projection; 
             blinn_environment.view = view; 
-            blinn_environment.view_pos = vec4_from_vec3(camera.pos);
+            blinn_environment.view_pos = (Vec4){camera.pos};
 
             blinn_environment.lights_count = 2;
             blinn_environment.lights[0].color_and_radius = vec4(10, 8, 7, 0);
@@ -2594,7 +2594,7 @@ void run_func(void* context)
 
             uv_sphere = shapes_make_uv_sphere(40, 1);
             cube_sphere = shapes_make_cube_sphere(20, 1);
-            screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
+            screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3(0));
             unit_cube = shapes_make_unit_cube();
             unit_quad = shapes_make_unit_quad();
             PROFILE_END(art_counter_shapes);

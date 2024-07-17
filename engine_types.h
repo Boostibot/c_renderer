@@ -37,15 +37,16 @@ typedef struct AABB {
 } AABB;
 
 typedef struct Transform {
+    Quat rotate;
     Vec3 translate;
     Vec3 scale;
-    Quat rotate;
+    float _pad[2];
 } Transform;
 
 typedef struct Uniform_Transform {
+    Quat rotate;
     Vec3 translate;
     f32 scale;
-    Quat rotate;
 } Uniform_Transform;
 
 typedef Array(Vertex) Vertex_Array;

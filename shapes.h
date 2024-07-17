@@ -483,12 +483,12 @@ Shape shapes_make_cube_sphere(isize iters, f32 radius)
     array_reserve(&out.triangles, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
 
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 1, 0), vec3(1, 0, 0), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(1, 0, 0), vec3(0, 0, 1), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, 1), vec3(1, 0, 0), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, -1, 0), vec3(-1, 0, 0), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(-1, 0, 0), vec3_of(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 1, 0), vec3(1, 0, 0), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(1, 0, 0), vec3(0, 0, 1), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, 1), vec3(1, 0, 0), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, -1, 0), vec3(-1, 0, 0), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(-1, 0, 0), vec3(0));
     
     PROFILE_END();
     return out;
@@ -501,12 +501,12 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
     array_reserve(&out.triangles, (iters) * (iters) * 2 * 6);
     array_reserve(&out.vertices, (iters + 1) * (iters + 1) * 6);
 
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 1, 0), vec3(1, 0, 0), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(1, 0, 0), vec3(0, 0, 1), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, 1), vec3(0, 1, 0), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, -1, 0), vec3(-1, 0, 0), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3_of(0));
-    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(0, -1, 0), vec3_of(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 1, 0), vec3(1, 0, 0), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(1, 0, 0), vec3(0, 0, 1), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, 1), vec3(0, 1, 0), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, -1, 0), vec3(-1, 0, 0), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3(0));
+    shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(0, -1, 0), vec3(0));
     
     PROFILE_END();
     return out;
