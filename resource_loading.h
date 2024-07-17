@@ -489,7 +489,7 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 
     if((was_found == false || is_outdated))
     {
-        state = state && file_read_entire(full_path.string, &file_content);
+        state = state && file_read_entire(full_path.string, &file_content, log_error("ASSET"));
         if(state)
         {
             Format_Obj_Mtl_Error mtl_errors[FLAT_ERRORS_COUNT] = {0};
@@ -551,7 +551,7 @@ EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
     if(out_handle == NULL)
     {
         String_Builder file_content = {0};
-        state = state && file_read_entire(full_path.string, &file_content);
+        state = state && file_read_entire(full_path.string, &file_content, log_error("ASSET"));
         if(state == false)
             LOG_ERROR("ASSET", "Failed to load triangle_mesh file '%s'", full_path.data);
         else

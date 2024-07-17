@@ -96,7 +96,6 @@ EXTERNAL bool image_read_from_memory(Image* image, String data, isize desired_ch
     return state;
 }
 
-#include "lib/log_list.h"
 EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
     LOG_INFO("ASSET", "Loading image '%s'", cstring_ephemeral(path));
@@ -104,15 +103,9 @@ EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_chan
     bool state = true;
     Arena_Frame arena = scratch_arena_acquire();
     {
-        Log_List list = {0};
-        log_list_init_capture(&list, &arena.allocator);
-            String_Builder file_content = {&arena.allocator};
-            state = state && file_read_entire(path, &file_content);
-            state = state && image_read_from_memory(image, file_content.string, desired_channels, format, flags);
-        log_capture_end(&list);
-        
-        if(state == false)
-            LOG_ERROR_CHILD("ASSET", "load error", list.first, "Failed to load an image: '%s'" , cstring_ephemeral(path));
+        String_Builder file_content = {&arena.allocator};
+        state = state && file_read_entire(path, &file_content, log_error(">ASSET"));
+        state = state && image_read_from_memory(image, file_content.string, desired_channels, format, flags);
     }
     arena_frame_release(&arena);
     return state;
@@ -223,14 +216,10 @@ EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_F
     Arena_Frame arena = scratch_arena_acquire();
     String_Builder formatted = {&arena.allocator};
 
-    Log_List list = {0};
-    log_list_init_capture(&list, &arena.allocator);
-        bool state = image_write_to_memory(image, &formatted, file_format);
-        state = state && file_write_entire(path, formatted.string);
-    log_capture_end(&list);
+    LOG_INFO("ASSET", "Writing and image '%s'", cstring_ephemeral(path));
 
-    if(state == false)
-        LOG_ERROR_CHILD("ASSET", "write error", list.first, "Couldnt write an image to path '%s'", cstring_ephemeral(path));
+    bool state = image_write_to_memory(image, &formatted, file_format);
+    state = state && file_write_entire(path, formatted.string, log_error(">ASSET"));
 
     arena_frame_release(&arena);
     return state;
