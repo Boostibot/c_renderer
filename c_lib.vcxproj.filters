@@ -191,9 +191,6 @@
     <ClInclude Include="lib\_test_all.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\profile_utils.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="lib\_test_debug_allocator.h">
       <Filter>lib</Filter>
     </ClInclude>
@@ -217,9 +214,6 @@
     </ClInclude>
     <ClInclude Include="mdump2.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\log_list.h">
-      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\path.h">
       <Filter>lib</Filter>
@@ -247,6 +241,9 @@
     </ClInclude>
     <ClInclude Include="lib\profile_defs.h">
       <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -227,7 +227,6 @@
     <ClInclude Include="lib\arena.h" />
     <ClInclude Include="lib\hash_index.h" />
     <ClInclude Include="lib\list.h" />
-    <ClInclude Include="lib\log_list.h" />
     <ClInclude Include="lib\lpf.h" />
     <ClInclude Include="lib\profile.h" />
     <ClInclude Include="lib\profile_defs.h" />

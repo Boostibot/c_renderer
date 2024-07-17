@@ -818,7 +818,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
         LOG_ERROR(">render", "Zero sized!");
     else
     {
-        log_group();
+        log_indent();
         if(gl_texture_array_init(&resolution.array, NULL) == false)
             LOG_ERROR("render", "Creation failed!");
         else
@@ -829,7 +829,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
             array_push(&manager->resolutions, resolution);
             manager->memory_used  += needed_size;
         }
-        log_ungroup();
+        log_outdent();
     }
 
     return out;
@@ -896,7 +896,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     
     f64 scaling_factor = (f64) desired_total_size / (f64) ideal_total_size;
     
-    log_group();
+    log_indent();
     isize combined_size = 0;
     for(i32 j = 0; j < ARRAY_SIZE(channel_counts); j++)
     {
@@ -923,7 +923,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
             }
         }
     }
-    log_ungroup();
+    log_outdent();
 
     LOG_WARN("render", "using %s combined RAM on textures", format_bytes(combined_size, 0).data);
 }
@@ -1371,9 +1371,9 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
     
     if(batch_index == 0)
     {
-        log_group();
+        log_indent();
         batch_index = render_geometry_manager_add_batch(manager, vertex_count, index_count);
-        log_ungroup();
+        log_outdent();
     }
 
     Render_Geometry_Batch_Index out = {0};
@@ -2409,7 +2409,7 @@ Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, Strin
 bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
 {
     LOG_INFO("render", "Adding texture at path '%s' current working dir '%s'", cstring_ephemeral(path), platform_directory_get_current_working());
-    log_group();
+    log_indent();
     PROFILE_START(image_read_counter);
 
     bool state = true;
@@ -2423,7 +2423,7 @@ bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out,
     arena_frame_release(&arena);
     
     PROFILE_END(image_read_counter);
-    log_ungroup();
+    log_outdent();
     return state;
 }
 
@@ -2640,7 +2640,7 @@ void run_func(void* context)
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
         {
-            profile_log_all("app", LOG_INFO, true);
+            profile_log_all(log_info("app"), true);
         }
         
         if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
@@ -2766,10 +2766,10 @@ void run_func(void* context)
 
     resources_deinit(&resources);
     
-    profile_log_all("APP", LOG_INFO, true);
+    profile_log_all(log_info("APP"), true);
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
-    log_allocator_stats(">RESOURCES", LOG_INFO, &resources_alloc.allocator);
+    log_allocator_stats(log_info(">RESOURCES"), &resources_alloc.allocator);
 
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);
@@ -2784,7 +2784,7 @@ void error_func(void* context, Platform_Sandbox_Error error)
     
     LOG_ERROR("APP", "%s exception occurred", msg);
     LOG_TRACE("APP", "printing trace:");
-    log_captured_callstack(">APP", LOG_ERROR, error.call_stack, error.call_stack_size);
+    log_captured_callstack(log_error(">APP"), error.call_stack, error.call_stack_size);
 }
 
 //#include "mdump2.h"

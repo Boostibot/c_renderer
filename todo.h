@@ -47,10 +47,10 @@ typedef Array(Todo) Todo_Array;
 EXTERNAL void todo_init(Todo* todo, Allocator* alloc);
 EXTERNAL void todo_deinit(Todo* todo);
 
-EXTERNAL void  todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
+EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
 EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo_marker);
 EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
-EXTERNAL bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth);
+EXTERNAL bool log_todos(Log log, const char* marker, isize depth);
 
 #endif
 
@@ -191,7 +191,7 @@ EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo)
     Arena_Frame arena = scratch_arena_acquire();
     String_Builder source = {&arena.allocator};
 
-    bool file_error = file_read_entire(path, &source);
+    bool file_error = file_read_entire(path, &source, log_error("todo"));
     todo_parse_source(todos, path, source.string, todo);
     
     arena_frame_release(&arena);
@@ -203,15 +203,11 @@ EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isi
     bool state = true;
     Arena_Frame arena = scratch_arena_acquire();
     {
-        String_Builder source = {&arena.allocator};
-
         Platform_Directory_Entry* entries = NULL;
         isize entries_count = 0;
-
         if(platform_directory_list_contents_alloc(path, &entries, &entries_count, depth) != 0)
         {
-            state = false;
-            LOG_ERROR_CHILD("todo", "todo_parse_folder error", NULL, "todo_parse_folder() couldnt open folder '%s' with todo '%s'", 
+            LOG_ERROR("todo", "todo_parse_folder() couldnt open folder '%s' with todo '%s'", 
                 cstring_ephemeral(path), cstring_ephemeral(todo));
         }
 
@@ -221,14 +217,7 @@ EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isi
             {
                 Platform_Directory_Entry entry = entries[i];
                 if(entry.info.type == PLATFORM_FILE_TYPE_FILE)
-                {
-                    String file_path = string_of(entry.path);
-                    bool read_state = file_read_entire(file_path, &source);
-
-                    if(read_state)
-                        todo_parse_source(todos, file_path, todo, source.string);
-                    state = state && read_state;
-                }
+                    state = state && todo_parse_file(todos, string_of(entry.path), todo);
             }
         }
 
@@ -238,7 +227,7 @@ EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isi
     return state;
 }
 
-EXTERNAL bool log_todos(const char* log_module, Log_Type log_type, const char* marker, isize depth)
+EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
 {
     Todo_Array todos = {0};
     bool state = todo_parse_folder(&todos, STRING("./"), string_of(marker), depth);
@@ -264,8 +253,7 @@ EXTERNAL bool log_todos(const char* log_module, Log_Type log_type, const char* m
             }
         }
     
-        LOG(log_module, log_type, "Logging TODOs (%lli):", (lli) todos.size);
-        log_group();
+        LOG(log, "Logging TODOs (%lli):", (lli) todos.size);
         for(isize i = 0; i < todos.size; i++)
         {
             Todo todo = todos.data[i];
@@ -275,11 +263,10 @@ EXTERNAL bool log_todos(const char* log_module, Log_Type log_type, const char* m
                 path = string_safe_tail(path, common_path_prefix.size);
 
             if(todo.signature.size > 0)
-                LOG(log_module, log_type, "%-20s %4lli %s(%s) %s\n", path.data, (lli) todo.line, todo.marker.data, todo.signature.data, todo.comment.data);
+                LOG(log_indented(log), "%-20s %4lli %s(%s) %s\n", path.data, (lli) todo.line, todo.marker.data, todo.signature.data, todo.comment.data);
             else
-                LOG(log_module, log_type, "%-20s %4lli %s %s\n", path.data, (lli) todo.line, todo.marker.data, todo.comment.data);
+                LOG(log_indented(log), "%-20s %4lli %s %s\n", path.data, (lli) todo.line, todo.marker.data, todo.comment.data);
         }
-        log_ungroup();
     
         for(isize i = 0; i < todos.size; i++)
             todo_deinit(&todos.data[i]);

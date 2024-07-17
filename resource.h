@@ -263,11 +263,11 @@ void _resource_log_wrong_id(Resource_Ptr out)
     if(out.ptr != NULL)
     {
         if(out.ptr)
-            log_callstack("RESOURCE", LOG_ERROR, 1, "Wrong id %lli used. \n"
+            log_callstack(log_error("RESOURCE"), -1, "Wrong id %lli used. \n"
                     "curr name: %.*s path:%.*s\n",
                     (lli) out.id, STRING_PRINT(out.ptr->name), STRING_PRINT(out.ptr->path));
         else
-            log_callstack("RESOURCE", LOG_ERROR, 1, "Wrong id %lli used", (lli) out.id);
+            log_callstack(log_error("RESOURCE"), -1, "Wrong id %lli used", (lli) out.id);
 
         ASSERT(false);
     }
