@@ -48,9 +48,9 @@ typedef union {
     u64 value;
 } Mdump_Magic_64;
 
-#define MDUMP_MAGIC         BRACE_INIT(Mdump_Magic_64){"mdumphdr"}.value
-#define MDUMP_MAGIC_BLOCK   BRACE_INIT(Mdump_Magic_64){"mdumpblk"}.value
-#define MDUMP_MAGIC_META    BRACE_INIT(Mdump_Magic_64){"mdumpmta"}.value
+#define MDUMP_MAGIC         BINIT(Mdump_Magic_64){"mdumphdr"}.value
+#define MDUMP_MAGIC_BLOCK   BINIT(Mdump_Magic_64){"mdumpblk"}.value
+#define MDUMP_MAGIC_META    BINIT(Mdump_Magic_64){"mdumpmta"}.value
 
 typedef struct Mdump_Header_File {
     u64 magic;
@@ -483,7 +483,7 @@ typedef enum Mdump_Type_ID {
 
 #define _DEFINE_MDUMP_BUILTIN_TYPE(name, type, ID) \
     Mdump_Type_User mdump_type_##name() { \
-        return BRACE_INIT(Mdump_Type_User){STRING(#name), mdump_type_##name, ID, sizeof(type), __alignof(char)}; \
+        return BINIT(Mdump_Type_User){STRING(#name), mdump_type_##name, ID, sizeof(type), __alignof(char)}; \
     } \
 
 #define _DECLARE_MDUMP_BUILTINT_TYPE(name, type) \
@@ -496,7 +496,7 @@ typedef enum Mdump_Type_ID {
     _DECLARE_MDUMP_BUILTINT_TYPE(name, type) \
 
 //Bool is define so we have to do this manually for it in case of C
-Mdump_Type_User mdump_type_bool() { return BRACE_INIT(Mdump_Type_User){STRING("bool"), mdump_type_bool, MDUMP_TYPE_BOOL, sizeof(bool), __alignof(bool)}; }
+Mdump_Type_User mdump_type_bool() { return BINIT(Mdump_Type_User){STRING("bool"), mdump_type_bool, MDUMP_TYPE_BOOL, sizeof(bool), __alignof(bool)}; }
 void mdump_bool(Mdump* mdump, bool* user, bool* file, Mdump_Action action) { mdump_raw(mdump, user, file, sizeof *user, action); }
 
 //_DEFINE_AND_DECLARE_MDUMP_BUILTIN(bool, bool, MDUMP_TYPE_BOOL)

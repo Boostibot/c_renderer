@@ -42,8 +42,7 @@ typedef struct Map_Info {
     f32 brigthness;     //default 0
     f32 contrast;       //default 0
 
-    bool is_enabled; //whether or not to use this texture. Maybe [0, 1] float?
-    bool _padding[3];
+    b32 is_enabled; //whether or not to use this texture. Maybe [0, 1] float?
 } Map_Info;
 
 // ========================= Descriptions =========================

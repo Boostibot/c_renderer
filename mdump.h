@@ -9,9 +9,9 @@ typedef union {
     u64 value;
 } Mdump_Magic_64;
 
-#define MDUMP_MAGIC         BRACE_INIT(Mdump_Magic_64){"mdump"}.value
-#define MDUMP_MAGIC_BLOCK   BRACE_INIT(Mdump_Magic_64){"mdumpblk"}.value
-#define MDUMP_MAGIC_META    BRACE_INIT(Mdump_Magic_64){"mdumpmta"}.value
+#define MDUMP_MAGIC         BINIT(Mdump_Magic_64){"mdump"}.value
+#define MDUMP_MAGIC_BLOCK   BINIT(Mdump_Magic_64){"mdumpblk"}.value
+#define MDUMP_MAGIC_META    BINIT(Mdump_Magic_64){"mdumpmta"}.value
 
 #define MDUMP_BLOCK_ALIGN    8
 #define MDUMP_ARRAY_ALIGN    4
@@ -98,9 +98,7 @@ typedef struct Mdump_Type_Info {
     u32 size;
     u32 align;
     u32 flags;
-
-    bool _padding[11];
-    bool is_referenced_only;
+    b32 is_referenced_only;
     Mdump_Type_Member_Array members;
 } Mdump_Type_Info;
 
@@ -709,7 +707,7 @@ EXTERNAL void _mdump_type_member_push(Mdump_Type_Info* parent, Mdump_Info_Func i
 }
 
 #define mdump_type_member_push_optional(Member_Of_Type, info_ptr, member, mdump_func, flags, def_value) \
-    _mdump_type_member_push((info_ptr), (mdump_func), #member, offsetof(Member_Of_Type, member), sizeof ((Member_Of_Type*)NULL)->member, (flags) | MDUMP_FLAG_OPTIONAL, BRACE_INIT(String){(const char*) def_value, sizeof *def_value})
+    _mdump_type_member_push((info_ptr), (mdump_func), #member, offsetof(Member_Of_Type, member), sizeof ((Member_Of_Type*)NULL)->member, (flags) | MDUMP_FLAG_OPTIONAL, BINIT(String){(const char*) def_value, sizeof *def_value})
 
 #define mdump_type_member_push(Member_Of_Type, info_ptr, member, mdump_func, flags) \
     _mdump_type_member_push((info_ptr), (mdump_func), #member, offsetof(Member_Of_Type, member), sizeof ((Member_Of_Type*)NULL)->member, (flags), STRING(""))

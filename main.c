@@ -2506,11 +2506,11 @@ void run_func(void* context)
     TEST(render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl")));
     
     Render_Memory_Budget render_mem_budget = {0};
-    render_mem_budget.geometry = GIBI_BYTE / 2;
-    render_mem_budget.texture = GIBI_BYTE / 2;
-    render_mem_budget.command_buffer = MEBI_BYTE * 256;
-    render_mem_budget.instance_buffer = MEBI_BYTE * 100;
-    render_mem_budget.draw_buffer = MEBI_BYTE * 100;
+    render_mem_budget.geometry = GB / 2;
+    render_mem_budget.texture = GB / 2;
+    render_mem_budget.command_buffer = MB * 256;
+    render_mem_budget.instance_buffer = MB * 100;
+    render_mem_budget.draw_buffer = MB * 100;
     render_init(&render, &renderer_alloc.allocator, &shader_instanced_batched, render_mem_budget);
 
     f64 fps_display_frequency = 4;

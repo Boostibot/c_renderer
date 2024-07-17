@@ -69,8 +69,7 @@ typedef struct Resource_Params {
     i64 death_etime;
     i64 file_modified_etime;
 
-    bool was_loaded;
-    bool _padding[7];
+    b64 was_loaded;
 } Resource_Params;
 
 EXTERNAL Resource_Params resource_params_make_simple(String name, String path);
