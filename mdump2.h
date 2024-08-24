@@ -1026,14 +1026,14 @@ void test_mdump2()
     mdump_init(&dump, &arena);
 
     Mdump_Type_Info info = {0};
-    info.types.allocator = &arena.allocator;
+    info.types.allocator = arena.alloc;
     mdump_types_add_builtins(&info);
 
     Mdump_List* list = {0};
     Mdump_Ptr root = mdump_file_allocate(&dump, sizeof(*list), DEF_ALIGN, &list); 
     mdump_mdump_types(&dump, &info, list, MDUMP_WRITE);
 
-    String_Builder builder = {&arena.allocator};
+    String_Builder builder = {arena.alloc};
     mdump_write(&builder, &dump, root, STRING("dump1.mdump"), STRING("test schema"));
 
 

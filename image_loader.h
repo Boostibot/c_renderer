@@ -98,12 +98,12 @@ EXTERNAL bool image_read_from_memory(Image* image, String data, isize desired_ch
 
 EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_channels, Pixel_Type format, i32 flags)
 {
-    LOG_INFO("ASSET", "Loading image '%s'", cstring_ephemeral(path));
+    LOG_INFO("ASSET", "Loading image '%.*s'", STRING_PRINT(path));
 
     bool state = true;
     Arena_Frame arena = scratch_arena_acquire();
     {
-        String_Builder file_content = {&arena.allocator};
+        String_Builder file_content = {arena.alloc};
         state = state && file_read_entire(path, &file_content, log_error(">ASSET"));
         state = state && image_read_from_memory(image, file_content.string, desired_channels, format, flags);
     }
@@ -134,7 +134,7 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
         //not contigous in memory => make contiguous copy
         if(subimage_is_contiguous(image) == false)
         {
-            contiguous = image_from_subimage(image, &arena.allocator);
+            contiguous = image_from_subimage(image, arena.alloc);
             image = subimage_of(contiguous);
         }
 
@@ -214,9 +214,9 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
 EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
     Arena_Frame arena = scratch_arena_acquire();
-    String_Builder formatted = {&arena.allocator};
+    String_Builder formatted = {arena.alloc};
 
-    LOG_INFO("ASSET", "Writing and image '%s'", cstring_ephemeral(path));
+    LOG_INFO("ASSET", "Writing and image '%.*s'", STRING_PRINT(path));
 
     bool state = image_write_to_memory(image, &formatted, file_format);
     state = state && file_write_entire(path, formatted.string, log_error(">ASSET"));

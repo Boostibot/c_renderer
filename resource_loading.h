@@ -336,92 +336,93 @@ EXTERNAL void process_mtl_material(Material_Description* description , Format_Mt
 EXTERNAL bool material_load_images(Material* material, Material_Description description)
 {
     bool out_error = {0};
-    material->info = description.info;
-
-    typedef struct Map_Or_Cubemap_Handles {
-        Id handle;
-        Map_Description* description;
-        bool is_cubemap;
-        bool _padding1[3];
-        i32 map_or_cubemap_i; 
-        i32 face_i;
-        u32 _padding2;
-    } Map_Or_Cubemap_Handles;
-
-    Map_Or_Cubemap_Handles maps_or_cubemaps[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {0};
-
-    //Add all images to be loaded
-    for(i32 i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+    SCRATCH_ARENA(arena)
     {
-        maps_or_cubemaps[i].description = &description.maps[i];
-        maps_or_cubemaps[i].map_or_cubemap_i = i;
-    }
+        material->info = description.info;
+
+        typedef struct Map_Or_Cubemap_Handles {
+            Id handle;
+            Map_Description* description;
+            bool is_cubemap;
+            bool _padding1[3];
+            i32 map_or_cubemap_i; 
+            i32 face_i;
+            u32 _padding2;
+        } Map_Or_Cubemap_Handles;
+
+        Map_Or_Cubemap_Handles maps_or_cubemaps[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {0};
+
+        //Add all images to be loaded
+        for(i32 i = 0; i < MAP_TYPE_ENUM_COUNT; i++)
+        {
+            maps_or_cubemaps[i].description = &description.maps[i];
+            maps_or_cubemaps[i].map_or_cubemap_i = i;
+        }
     
-    //Add all cubemaps to be loaded
-    for(i32 i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
-    {
-        for(i32 j = 0; j < 6; j++)
+        //Add all cubemaps to be loaded
+        for(i32 i = 0; i < CUBEMAP_TYPE_ENUM_COUNT; i++)
         {
-            i32 index = MAP_TYPE_ENUM_COUNT + i*6 + j;
-            maps_or_cubemaps[index].description = &description.cubemaps[i].faces[j];
-            maps_or_cubemaps[index].map_or_cubemap_i = i;
-            maps_or_cubemaps[index].face_i = j;
-            maps_or_cubemaps[index].is_cubemap = true;
+            for(i32 j = 0; j < 6; j++)
+            {
+                i32 index = MAP_TYPE_ENUM_COUNT + i*6 + j;
+                maps_or_cubemaps[index].description = &description.cubemaps[i].faces[j];
+                maps_or_cubemaps[index].map_or_cubemap_i = i;
+                maps_or_cubemaps[index].face_i = j;
+                maps_or_cubemaps[index].is_cubemap = true;
+            }
         }
-    }
 
-    //Load everything
-    for(isize i = 0; i < ARRAY_SIZE(maps_or_cubemaps); i++)
-    {
-        Map_Or_Cubemap_Handles map_or_cubemap = maps_or_cubemaps[i];
+        //Load everything
+        for(isize i = 0; i < ARRAY_SIZE(maps_or_cubemaps); i++)
+        {
+            Map_Or_Cubemap_Handles map_or_cubemap = maps_or_cubemaps[i];
 
-        //if this image is not enabled or does not have a path dont even try
-        if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.len <= 0)
-            continue;
+            //if this image is not enabled or does not have a path dont even try
+            if(map_or_cubemap.description->info.is_enabled == false || map_or_cubemap.description->path.len <= 0)
+                continue;
         
-        Path item_path = path_parse(map_or_cubemap.description->path.string);
-        Path dir_path = path_strip_to_containing_directory(path_parse(description.path.string));
+            Path item_path = path_parse(map_or_cubemap.description->path.string);
+            Path dir_path = path_strip_to_containing_directory(path_parse(description.path.string));
 
-        //@TODO: make into string builder and dont relly on ephemerals since we are fairly high up!
-        String full_item_path = path_relative_ephemeral(item_path, dir_path).string;
-        bool load_state = true;
+            String full_item_path = path_make_relative(arena.alloc, item_path, dir_path).string;
+            bool load_state = true;
         
-        Id found_image = image_find_by_path(hash_string_make(full_item_path), NULL);
-        Id map_image = NULL;
+            Id found_image = image_find_by_path(hash_string_make(full_item_path), NULL);
+            Id map_image = NULL;
 
-        Resource_Params params = {0};
-        params.path = full_item_path;
-        params.name = path_get_filename_without_extension(path_parse(params.path));
-        params.was_loaded = true;
+            Resource_Params params = {0};
+            params.path = full_item_path;
+            params.name = path_get_filename_without_extension(path_parse(params.path));
+            params.was_loaded = true;
 
-        if(found_image != NULL)
-        {
-            LOG_INFO("ASSET", "load image found image \"%s\" in repository", full_item_path.data);
-            map_image = image_make_shared(found_image);
-        }
-        else
-        {   
-            map_image = image_insert(params);
-            Image* loaded_image = image_get(map_image); 
-
-            load_state = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_TYPE_U8, 0);
-            if(load_state == false)
-                image_remove(map_image);
-        }
-
-        if(map_image)
-        {
-            Map* map = NULL;
-            if(map_or_cubemap.is_cubemap)
-                map = &material->cubemaps[map_or_cubemap.map_or_cubemap_i].maps.faces[map_or_cubemap.face_i];
+            if(found_image != NULL)
+            {
+                LOG_INFO("ASSET", "load image found image \"%s\" in repository", full_item_path.data);
+                map_image = image_make_shared(found_image);
+            }
             else
-                map = &material->maps[map_or_cubemap.map_or_cubemap_i];
+            {   
+                map_image = image_insert(params);
+                Image* loaded_image = image_get(map_image); 
 
-            map->image = map_image;
-            map->info = map_or_cubemap.description->info;
+                load_state = image_read_from_file(loaded_image, full_item_path, 0, PIXEL_TYPE_U8, 0);
+                if(load_state == false)
+                    image_remove(map_image);
+            }
+
+            if(map_image)
+            {
+                Map* map = NULL;
+                if(map_or_cubemap.is_cubemap)
+                    map = &material->cubemaps[map_or_cubemap.map_or_cubemap_i].maps.faces[map_or_cubemap.face_i];
+                else
+                    map = &material->maps[map_or_cubemap.map_or_cubemap_i];
+
+                map->image = map_image;
+                map->info = map_or_cubemap.description->info;
+            }
         }
     }
-
     return out_error;
 }
 
@@ -431,7 +432,7 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 {
     Arena_Frame arena = scratch_arena_acquire();
 
-    LOG_INFO("ASSET", "Loading materials at '%s'", cstring_ephemeral(path));
+    LOG_INFO("ASSET", "Loading materials at '%.*s'", STRING_PRINT(path));
 
     String_Builder file_content = {0};
     Format_Mtl_Material_Array mtl_materials = {0};
@@ -528,7 +529,7 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
     Arena_Frame arena = scratch_arena_acquire();
-    LOG_INFO("ASSET", "Loading mesh at '%s'", cstring_ephemeral(path));
+    LOG_INFO("ASSET", "Loading mesh at '%.*s'", STRING_PRINT(path));
 
     Id out_handle = {0};
     String_Builder full_path = path_make_absolute(NULL, path_get_current_working_directory(), path_parse(path)).builder;
@@ -587,7 +588,7 @@ EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
             for(isize i = 0; i < description.material_files.len; i++)
             {
                 String file = description.material_files.data[i].string;
-                Path mtl_path = path_absolute_ephemeral(dir_path, path_parse(file));
+                Path mtl_path = path_make_absolute(arena.alloc, dir_path, path_parse(file)).path;
                 if(material_read_entire(&triangle_mesh->materials, mtl_path.string) == false)
                     LOG_ERROR("ASSET", "Failed to load material file '%.*s' while loading '%.*s'", STRING_PRINT(mtl_path.string), STRING_PRINT(full_path));
             }

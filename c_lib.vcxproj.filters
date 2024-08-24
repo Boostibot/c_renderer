@@ -191,10 +191,7 @@
     <ClInclude Include="lib\_test_all.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="lib\_test_debug_allocator.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\arena.h">
+    <ClInclude Include="lib\arena_old.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\_test_arena.h">
@@ -240,6 +237,27 @@
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\profile_defs.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\json.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile2.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arena.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="lib\profile.h">

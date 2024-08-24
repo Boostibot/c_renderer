@@ -589,7 +589,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         Arena_Frame arena = scratch_arena_acquire();
         
         Map_Info default_values = {0};
-        map_info_init(&default_values, &arena.allocator);
+        map_info_init(&default_values, arena.alloc);
 
         serialize_vec3(serialize_locate(entry, "offset", action),       &info->offset, default_values.offset, action);
         serialize_vec3(serialize_locate(entry, "scale", action),        &info->scale, default_values.scale, action);

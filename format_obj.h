@@ -17,6 +17,7 @@
 #include "lib/array.h"
 #include "lib/string.h"
 #include "lib/parse.h"
+#include "lib/arena.h"
 
 #ifndef VEC_ARRAY_DEFINED
     #define VEC_ARRAY_DEFINED
@@ -492,9 +493,9 @@ EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_O
 
     String active_object = {0};
     Format_Obj_Group* active_group = NULL;
-    Arena_Frame arena = scratch_arena_acquire();
+    SCRATCH_ARENA(arena)
     {
-        array_init_with_capacity(&out->groups, &arena.allocator, 64);
+        array_init_with_capacity(&out->groups, arena.alloc, 64);
         i32 trinagle_index = 0;
         for(Line_Iterator it = {0}; line_iterator_get_line(&it, obj_source); )
         {
@@ -832,7 +833,6 @@ EXTERNAL bool format_obj_read(Format_Obj_Model* out, String obj_source, Format_O
 
         *had_errors = error_count;
     }
-    arena_frame_release(&arena);
 
     return had_error;
 }

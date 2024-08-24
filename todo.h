@@ -189,7 +189,7 @@ EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_mark
 EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo)
 {
     Arena_Frame arena = scratch_arena_acquire();
-    String_Builder source = {&arena.allocator};
+    String_Builder source = {arena.alloc};
 
     bool file_error = file_read_entire(path, &source, log_error("todo"));
     todo_parse_source(todos, path, source.string, todo);
@@ -207,8 +207,8 @@ EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isi
         isize entries_count = 0;
         if(platform_directory_list_contents_alloc(path, &entries, &entries_count, depth) != 0)
         {
-            LOG_ERROR("todo", "todo_parse_folder() couldnt open folder '%s' with todo '%s'", 
-                cstring_ephemeral(path), cstring_ephemeral(todo));
+            LOG_ERROR("todo", "todo_parse_folder() couldnt open folder '%.*s' with todo '%.*s'", 
+                STRING_PRINT(path), STRING_PRINT(todo));
         }
 
         if(state)

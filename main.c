@@ -13,8 +13,8 @@
 #define JOT_ALL_TEST
 #define JOT_COUPLED
 #define RUN_TESTS
-//#define RUN_JUST_TESTS
-
+#define RUN_JUST_TESTS
+#define DO_PROFILE 0
 //#include "mdump.h"
 
 #include "lib/string.h"
@@ -282,6 +282,7 @@ void error_func(void* context, Platform_Sandbox_Error error);
 int main()
 {
     platform_init();
+    arena_stack_init(scratch_arena(), "scratch arena", 0, 0, 0);
 
     Malloc_Allocator static_allocator = {0};
     malloc_allocator_init(&static_allocator, "static allocator");
@@ -693,7 +694,7 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
 
         Arena_Frame arena = scratch_arena_acquire();
         Image temp_storage = {0};
-        image_init_sized(&temp_storage, &arena.allocator, array->width, array->height, image.pixel_size, image.type, NULL);
+        image_init_sized(&temp_storage, arena.alloc, array->width, array->height, image.pixel_size, image.type, NULL);
 
         ASSERT(image.height > 0 && image.width > 0);
         image_copy(&temp_storage, subimage_of(image), 0, 0);
@@ -1397,13 +1398,13 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
         out.vertex_from = group.vertex_from;
         out.vertex_count = group.vertex_count;
         out.batch_index = batch_index;
-        LOG_INFO("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) added to batch #%i", cstring_ephemeral(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
+        LOG_INFO("render", "render_geometry_manager_add() '%.*s' %i:%i (vertex:index) added to batch #%i", STRING_PRINT(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
 
         array_push(&batch->groups, group);
     }
     else
     {
-        LOG_ERROR("render", "render_geometry_manager_add() '%s' %i:%i (vertex:index) failed", cstring_ephemeral(name), (int) vertex_count, (int) index_count);
+        LOG_ERROR("render", "render_geometry_manager_add() '%.*s' %i:%i (vertex:index) failed", STRING_PRINT(name), (int) vertex_count, (int) index_count);
     }
 
     return out;
@@ -2406,14 +2407,14 @@ Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, Strin
 
 bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
 {
-    LOG_INFO("render", "Adding texture at path '%s' current working dir '%s'", cstring_ephemeral(path), platform_directory_get_current_working());
+    LOG_INFO("render", "Adding texture at path '%.*s' current working dir '%s'", STRING_PRINT(path), platform_directory_get_current_working());
     log_indent();
     PROFILE_START(image_read_counter);
 
     bool state = true;
     Arena_Frame arena = scratch_arena_acquire();
     {
-        Image temp_storage = {&arena.allocator};
+        Image temp_storage = {arena.alloc};
         state = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
         if(state)
             *out = render_texture_add(render, temp_storage, name);
@@ -2470,7 +2471,7 @@ void run_func(void* context)
     Resources resources = {0};
     Render render = {0};
 
-    resources_init(&resources, &resources_alloc.allocator);
+    resources_init(&resources, resources_alloc.alloc);
     resources_set(&resources);
 
     Shape uv_sphere = {0};
@@ -2509,7 +2510,7 @@ void run_func(void* context)
     render_mem_budget.command_buffer = MB * 256;
     render_mem_budget.instance_buffer = MB * 100;
     render_mem_budget.draw_buffer = MB * 100;
-    render_init(&render, &renderer_alloc.allocator, &shader_instanced_batched, render_mem_budget);
+    render_init(&render, renderer_alloc.alloc, &shader_instanced_batched, render_mem_budget);
 
     f64 fps_display_frequency = 4;
     f64 fps_display_last_update = 0;
@@ -2745,7 +2746,8 @@ void run_func(void* context)
         if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
         {
             fps_display_last_update = end_frame_time;
-            glfwSetWindowTitle(window, format_ephemeral("Render %5d fps", (int) (1.0f/frame_time)).data);
+            SCRATCH_ARENA(arena)
+                glfwSetWindowTitle(window, format(arena.alloc, "Render %5d fps", (int) (1.0f/frame_time)).data);
         }
     }
     
@@ -2767,7 +2769,7 @@ void run_func(void* context)
     profile_log_all(log_info("APP"), true);
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
-    log_allocator_stats(log_info(">RESOURCES"), &resources_alloc.allocator);
+    log_allocator_stats(log_info(">RESOURCES"), resources_alloc.alloc);
 
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);
@@ -2788,20 +2790,8 @@ void error_func(void* context, Platform_Sandbox_Error error)
 //#include "mdump2.h"
 #include "lib/_test_all.h"
 
-
-ATTRIBUTE_INLINE_NEVER 
-void profile_smartness_tester()
-{
-    for(int i = 0; i < 1000; i++)
-    {
-        PROFILE_COUNTER();
-    }
-}
-
 void run_test_func(void* context)
 {
-    profile_smartness_tester();
-    //test_profile();
     (void) context;
-    test_all(3.0);
+    test_all(6.0);
 }
