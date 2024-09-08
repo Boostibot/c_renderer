@@ -2,7 +2,7 @@
 
 #include "lib/math.h"
 #include "lib/array.h"
-#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "lib/hash.h"
 
 #ifndef VEC_ARRAY_DEFINED

@@ -2,7 +2,7 @@
 
 #include "math.h"
 #include "lib/array.h"
-#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "lib/hash.h"
 #include "engine_types.h"
 #include "lib/profile.h"
@@ -26,15 +26,15 @@ typedef struct Shape {
     Vertex_Array vertices;
     Triangle_Index_Array triangles;
     Winding_Order winding_order;
-    u32 _padding;
+    u32 _;
 } Shape;
 
 typedef struct Shape_Assembly {
     Vertex_Array vertices;
     Triangle_Index_Array triangles;
-    Hash_Index vertices_hash;
+    Hash vertices_hash;
     Winding_Order winding_order;
-    u32 _padding;
+    u32 _;
 } Shape_Assembly;
 
 
@@ -54,7 +54,7 @@ void shape_assembly_deinit(Shape_Assembly* shape);
 void shape_assembly_init_from_shape(Shape_Assembly* assembly, Shape* shape);
 void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in);
 void shape_assembly_add_vertex(Shape_Assembly* assembly, Vertex vertex);
-u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex);
+u32 shape_assembly_add_vertex_custom(Hash* hash, Vertex_Array* vertices, Vertex vertex);
 
 Vec3 calculate_tangent(Vec3 edge1, Vec3 edge2, Vec2 deltaUV1, Vec2 deltaUV2);
 Winding_Order calculate_winding_order(Vec3 p1, Vec3 p2, Vec3 p3, Vec3 norm1, Vec3 norm2, Vec3 norm3);
@@ -156,20 +156,20 @@ void shape_assembly_init(Shape_Assembly* shape, Allocator* allocator)
 {
     array_init(&shape->vertices, allocator);
     array_init(&shape->triangles, allocator);
-    hash_index_init(&shape->vertices_hash, allocator);
+    hash_init(&shape->vertices_hash, allocator);
 }
 
 void shape_assembly_deinit(Shape_Assembly* shape)
 {
     array_deinit(&shape->vertices);
     array_deinit(&shape->triangles);
-    hash_index_deinit(&shape->vertices_hash);
+    hash_deinit(&shape->vertices_hash);
 }
 void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in)
 {
     array_copy(&out->triangles, in->triangles);
     array_copy(&out->vertices, in->vertices);
-    hash_index_copy(&out->vertices_hash, in->vertices_hash);
+    hash_copy(&out->vertices_hash, in->vertices_hash);
 }
 
 void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indices, isize trinagles_count)
@@ -296,15 +296,15 @@ Winding_Order triangle_get_winding_order_at_index(const Vertex* vertices, isize 
     return triangle_get_winding_order(v1, v2, v3);
 }
 
-u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, Vertex vertex)
+u32 shape_assembly_add_vertex_custom(Hash* hash, Vertex_Array* vertices, Vertex vertex)
 {
     PROFILE_START();
     u64 hashed = vertex_hash64(vertex, 0);
 
     //The index of a new vertex if it was to be inserted
     isize inserted_i = vertices->len;
-    isize found = hash_index_find_or_insert(hash, hashed, (u64) inserted_i);
-    isize entry = (isize) hash->entries[found].value;
+    Hash_Found found = hash_find_or_insert(hash, hashed, (u64) inserted_i);
+    isize entry = (isize) found.value;
 
     //If we just inserted add it to the array.
     if(entry == inserted_i)
@@ -323,7 +323,7 @@ u32 shape_assembly_add_vertex_custom(Hash_Index* hash, Vertex_Array* vertices, V
         {
             //if hash collision add the hash again.
             PROFILE_START(hash_collisions);
-            hash_index_insert(hash, hashed, inserted_i);
+            hash_insert(hash, hashed, inserted_i);
             array_push(vertices, vertex);
             entry = inserted_i;
             PROFILE_END(hash_collisions);
@@ -363,7 +363,7 @@ Triangle_Index triangle_set_winding_order(Winding_Order desired_order, const Ver
     Winding_Order current_order = triangle_get_winding_order_at_index(vertices, vertex_count, triangle);
     Triangle_Index out_triangle = triangle;
     if(current_order != desired_order)
-        SWAP(&out_triangle.vertex_i[0], &out_triangle.vertex_i[1], u32); 
+        SWAP(&out_triangle.vertex_i[0], &out_triangle.vertex_i[1]); 
     
     return out_triangle;
 }
@@ -380,7 +380,7 @@ void shape_set_winding_order(Winding_Order order, const Vertex* vertices, isize 
 //Uses smoothing_factor to determine how much influence the adjecent vertices have on the resulting normal. 
 //the smooth_from_angle refers to the angle between the faces from inside the geometry in a convex shape. 
 //Or put other way between corners of a box smooth_from_angle is 90 degrees nto 270. (this means if from angle is 0 all edges will be smoothed out)
-//void shape_assembly_adjust_normals(Hash_Index* hash, Vertex_Array* vertices, Triangle_Index* traingles, isize triangle_count, f32 smooth_from_angle, f32 smoothing_factor, f32 sharpen_to_angle, f32 sharpen_factor)
+//void shape_assembly_adjust_normals(Hash* hash, Vertex_Array* vertices, Triangle_Index* traingles, isize triangle_count, f32 smooth_from_angle, f32 smoothing_factor, f32 sharpen_to_angle, f32 sharpen_factor)
 //{
 //    
 //}

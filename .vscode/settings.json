@@ -20,7 +20,7 @@
         "format": "c",
         "profile.h": "c",
         "string.h": "c",
-        "hash_index.h": "c",
+        "hash.h": "c",
         "profile_defs.h": "c",
         "platform.h": "c",
         "defines.h": "c"

@@ -57,7 +57,7 @@ typedef struct Mdump_Header_File {
     u64 data_offset;
 
     i32 version;
-    u32 _padding1;
+    u32 _1;
     i64 creation_time;
     char schema_name[32];
     //Mdump_String schema_name;
@@ -66,7 +66,7 @@ typedef struct Mdump_Header_File {
     u64 types_ptr;
     u64 root_ptr;
     Mdump_Type_ID root_type;
-    u32 _padding2;
+    u32 _2;
 
     u64 next_header_offset;
     u64 checksum;
@@ -360,7 +360,7 @@ typedef struct Mdump_List_Iterator {
     Mdump_Node* ptr;
     i32 iter;
     bool is_last_iter;
-    bool _padding[3];
+    bool _[3];
 } Mdump_List_Iterator;
 
 //Iterates the section [first, last] starting from first and going to next_or_prev. Note that list can be sublist.
@@ -745,7 +745,7 @@ bool mdump_list_prepare(Mdump* mdump, Generic_Array user, Mdump_List* file, isiz
         Type_File* file; \
         isize size; \
         bool okay; \
-        bool _padding[7]; \
+        bool _[7]; \
     } it = {0}; \
     it.okay = mdump_array_prepare((mdump), (file_array_ptr), \
         (void**) &it.user, &it.len, sizeof(Type_User), __alignof(Type_User), \
@@ -866,7 +866,7 @@ void mdump_types_add(Mdump_Type_Info* info, Mdump_Type_User user_type)
     //Only add the type if not already present!
     if(_mdump_type_by_id(&info->types, user_type.id, user_type.query) == -1)
     {
-        Arena_Frame scratch = scratch_arena_acquire();
+        Arena_Frame scratch = scratch_arena_frame_acquire();
 
         //Gather all dependent types & check for cycles or uknowns
         Mdump_Type_User_Array add_stack = {&scratch.allocator};
@@ -1020,7 +1020,7 @@ void mdump_read(Mdump* mdump, String string)
 
 void test_mdump2()
 {
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
 
     Mdump dump = {0};
     mdump_init(&dump, &arena);

@@ -24,11 +24,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="lib\platform_windows.c">
-      <Filter>lib</Filter>
-    </ClCompile>
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\platform_windows.c">
+      <Filter>Resource Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -68,99 +68,6 @@
     <ClInclude Include="control.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\_test.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_array.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_image.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_log.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_math.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_random.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_stable_array.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator_debug.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\allocator_malloc.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\array.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\assert.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\defines.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\file.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\guid.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\hash.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\hash_string.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\image.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\log.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\log_file.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\math.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\parse.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\perf.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\platform.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\random.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\serialize.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\stable_array.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\string.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\time.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\vformat.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="mdump.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -173,9 +80,6 @@
     <ClInclude Include="gl_utils\gl_shader_util.h">
       <Filter>gl_utils</Filter>
     </ClInclude>
-    <ClInclude Include="gl_utils\gl_texture_util.h">
-      <Filter>gl_utils</Filter>
-    </ClInclude>
     <ClInclude Include="gl_utils\gl_pixel_format.h">
       <Filter>gl_utils</Filter>
     </ClInclude>
@@ -185,83 +89,194 @@
     <ClInclude Include="name.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\_test_string.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_all.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\arena_old.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_arena.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\hash_index.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_hash_index.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\lpf.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\_test_lpf.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="mdump2.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\path.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\list.h">
-      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="link_table.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resource_2.h">
+    <ClInclude Include="lib\profile.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="link_table2.h">
+    <ClInclude Include="lib\profile.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_all.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_arena.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_array.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_hash.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_image.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_log.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_lpf.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_math.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_random.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_stable_array.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_string.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\_test_string_map.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator_debug.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\allocator_malloc.h">
+      <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\allocator_tlsf.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\slz4.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile_defs.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\json.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile2.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>Header Files</Filter>
+      <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\arena.h">
-      <Filter>lib</Filter>
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\arena_stack.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\array.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\assert.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\defines.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\file.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\guid.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\hash.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\hash_func.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\hash_string.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\image.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\json.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\list.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\log.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\log_file.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\lpf.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\math.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\parse.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\path.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\perf.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\platform.h">
+      <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\profile.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile_defs.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile2.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\random.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\serialize.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\slz4.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\stable_array.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\string.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\string_map.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\time.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\vformat.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\sort.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="neoasset.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="thread_pool.h">
+      <Filter>Resource Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -308,6 +323,12 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\depth_color.glsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\test.glsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\test_included.glsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

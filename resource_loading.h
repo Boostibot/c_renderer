@@ -56,7 +56,7 @@ INTERNAL const char* _resource_loading_translate_error(u32 code, void* context)
 
 EXTERNAL void process_obj_triangle_mesh(Shape_Assembly* shape_assembly, Triangle_Mesh_Description* description, Format_Obj_Model model)
 {
-    hash_index_reserve(&shape_assembly->vertices_hash, model.indices.len);
+    hash_reserve(&shape_assembly->vertices_hash, model.indices.len);
     
     //Copy over materials
     for(isize i = 0; i < model.material_files.len; i++)
@@ -344,10 +344,10 @@ EXTERNAL bool material_load_images(Material* material, Material_Description desc
             Id handle;
             Map_Description* description;
             bool is_cubemap;
-            bool _padding1[3];
+            bool _1[3];
             i32 map_or_cubemap_i; 
             i32 face_i;
-            u32 _padding2;
+            u32 _2;
         } Map_Or_Cubemap_Handles;
 
         Map_Or_Cubemap_Handles maps_or_cubemaps[MAP_TYPE_ENUM_COUNT + CUBEMAP_TYPE_ENUM_COUNT*6] = {0};
@@ -430,7 +430,7 @@ EXTERNAL bool material_load_images(Material* material, Material_Description desc
 
 EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 {
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
 
     LOG_INFO("ASSET", "Loading materials at '%.*s'", STRING_PRINT(path));
 
@@ -458,7 +458,7 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
     Id_Array found_materials = {0};
     array_init_with_capacity(&found_materials, NULL, 16);
 
-    isize last = -1;
+    Hash_Found last = {-1};
     Id found_material = {0};
     while(true)
     {
@@ -528,7 +528,7 @@ EXTERNAL bool material_read_entire(Id_Array* materials, String path)
 
 EXTERNAL bool triangle_mesh_read_entire(Id* triangle_mesh_handle, String path)
 {
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     LOG_INFO("ASSET", "Loading mesh at '%.*s'", STRING_PRINT(path));
 
     Id out_handle = {0};

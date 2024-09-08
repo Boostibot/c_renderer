@@ -148,7 +148,7 @@ typedef struct Format_Mtl_Material {
     bool was_set_map_pbr_non_standard_ambient_occlusion;  
     bool was_set_map_pbr_rma;    
     
-    bool _padding[2];
+    bool _[2];
 } Format_Mtl_Material;
 
 typedef struct Format_Obj_Group {
@@ -264,7 +264,7 @@ typedef struct Format_Obj_Mtl_Error
     i32 line;
     Format_Obj_Mtl_Error_Statement statement;
     bool unimplemented; //whether the error is due to it being unimplemented
-    bool _padding[7];
+    bool _[7];
 } Format_Obj_Mtl_Error;
 
 #endif

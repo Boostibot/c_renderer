@@ -101,7 +101,7 @@ EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_chan
     LOG_INFO("ASSET", "Loading image '%.*s'", STRING_PRINT(path));
 
     bool state = true;
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     {
         String_Builder file_content = {arena.alloc};
         state = state && file_read_entire(path, &file_content, log_error(">ASSET"));
@@ -128,7 +128,7 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
     bool state = false;
 
     builder_clear(into);
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     {
         Image contiguous = {0};
         //not contigous in memory => make contiguous copy
@@ -213,7 +213,7 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
 
 EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     String_Builder formatted = {arena.alloc};
 
     LOG_INFO("ASSET", "Writing and image '%.*s'", STRING_PRINT(path));

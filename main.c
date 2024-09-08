@@ -9,18 +9,19 @@
 #pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
 #pragma warning(disable:4996) //Dissable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
 
+#define EXTERNAL static
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
 #define JOT_COUPLED
 #define RUN_TESTS
-#define RUN_JUST_TESTS
-#define DO_PROFILE 0
+//#define RUN_JUST_TESTS
+//#define DO_PROFILE 0
 //#include "mdump.h"
 
 #include "lib/string.h"
 #include "lib/platform.h"
 #include "lib/allocator.h"
-#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "lib/log_file.h"
 #include "lib/file.h"
 #include "lib/allocator_debug.h"
@@ -72,13 +73,13 @@ typedef struct App_State
 
     Vec3 active_object_pos;
     Vec3 player_pos;
-    f32 _padding1;
+    f32 _1;
 
     f64 delta_time;
     f64 last_frame_timepoint;
 
     f32 zoom_target_fov;
-    f32 _padding2;
+    f32 _2;
     f64 zoom_target_time;
     f32 zoom_change_per_sec;
 
@@ -101,7 +102,7 @@ typedef struct App_State
     Controls controls_prev;
     Control_Mapping control_mappings[CONTROL_MAPPING_SETS];
     bool key_states[GLFW_KEY_LAST + 1];
-    bool _padding3[3];
+    bool _3[3];
 } App_State;
 
 
@@ -282,7 +283,7 @@ void error_func(void* context, Platform_Sandbox_Error error);
 int main()
 {
     platform_init();
-    arena_stack_init(scratch_arena(), "scratch arena", 0, 0, 0);
+    arena_stack_init(scratch_arena_stack(), "scratch arena", 0, 0, 0);
 
     Malloc_Allocator static_allocator = {0};
     malloc_allocator_init(&static_allocator, "static allocator");
@@ -692,7 +693,7 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
     {
         LOG_WARN("render", "image of size %d x %d doesnt fit exactly. Resorting back to extending it.", image.width, image.height);
 
-        Arena_Frame arena = scratch_arena_acquire();
+        Arena_Frame arena = scratch_arena_frame_acquire();
         Image temp_storage = {0};
         image_init_sized(&temp_storage, arena.alloc, array->width, array->height, image.pixel_size, image.type, NULL);
 
@@ -708,8 +709,8 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
             u8* curr_row = temp_storage.pixels + stride*y;
             u8* last_pixel = curr_row + pixel_size*(image.width - 1);
 
-            //memset_pattern(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, color, pixel_size);
-            memset_pattern(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, last_pixel, pixel_size);
+            //memtile(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, color, pixel_size);
+            memtile(curr_row + pixel_size*image.width, (array->width - image.width)*pixel_size, last_pixel, pixel_size);
         }
 
         //Extend downwards
@@ -720,7 +721,7 @@ bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image
             memmove(curr_row, last_row, stride);
         }
         
-        //memset_pattern(temp_storage->pixels, image_all_pixels_size(*temp_storage), color, sizeof(color));
+        //memtile(temp_storage->pixels, image_all_pixels_size(*temp_storage), color, sizeof(color));
         gl_texture_array_set(array, layer, 0, 0, temp_storage, regenerate_mips);
 
         arena_frame_release(&arena);
@@ -813,7 +814,7 @@ isize render_texture_manager_add_resolution(Render_Texture_Manager* manager, i32
     isize out = -1;
     isize needed_size = (isize) width * height * layers * channel_count * pixel_type_size(type);
     if(manager->memory_used + needed_size > manager->memory_budget)
-        LOG_ERROR(">render", "Out of texture memory! Using %s / %s (%lli%%)", format_bytes(manager->memory_used, 0).data, format_bytes(manager->memory_budget, 0).data, (lli) manager->memory_used * 100 / manager->memory_budget);
+        LOG_ERROR(">render", "Out of texture memory! Using %s / %s (%lli%%)", format_bytes(manager->memory_used).data, format_bytes(manager->memory_budget).data, (lli) manager->memory_used * 100 / manager->memory_budget);
     else if(layers == 0 || width == 0 || height == 0)
         LOG_ERROR(">render", "Zero sized!");
     else
@@ -863,7 +864,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
 {
     isize remaining_budget = manager->memory_budget - manager->memory_used;
     LOG_INFO("render", "Adding default resolutions for %lf of remainign memory budget (%s) Using %s / %s", 
-        fraction_of_remaining_memory_budget, format_bytes(remaining_budget, 0).data, format_bytes(manager->memory_used, 0).data, format_bytes(manager->memory_budget, 0).data);
+        fraction_of_remaining_memory_budget, format_bytes(remaining_budget).data, format_bytes(manager->memory_used).data, format_bytes(manager->memory_budget).data);
 
     Pixel_Type pixel_type = PIXEL_TYPE_U8;
     i32 channel_counts[4] = {1, 2, 3, 0};
@@ -925,7 +926,7 @@ void render_texture_manager_add_default_resolutions(Render_Texture_Manager* mana
     }
     log_outdent();
 
-    LOG_WARN("render", "using %s combined RAM on textures", format_bytes(combined_size, 0).data);
+    LOG_WARN("render", "using %s combined RAM on textures", format_bytes(combined_size).data);
 }
 
 typedef enum Found_Type{
@@ -1085,7 +1086,7 @@ typedef struct Vertex_Attribute {
     i32 index;
     i32 instance_divisor; //if 0 assume not instanced
     Pixel_Type type;
-    u32 _padding;
+    u32 _;
 } Vertex_Attribute;
 
 //i32 vertex_size;
@@ -1333,7 +1334,7 @@ i32 render_geometry_manager_add_batch(Render_Geometry_Manager* manager, isize mi
     isize memory_requirement = min_vertex_count * sizeof(Vertex) + min_index_count * sizeof(i32);
 
     if(manager->used_memory >= manager->memory_limit * 3/4)
-        LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", format_bytes(manager->used_memory, 0).data, format_bytes(manager->memory_limit, 0).data);
+        LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", format_bytes(manager->used_memory).data, format_bytes(manager->memory_limit).data);
     
     i32 out = 0;
     if(memory_requirement + manager->used_memory <= manager->memory_limit)
@@ -1430,7 +1431,7 @@ Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager*
 typedef struct Render_Geometry {
     Render_Info info;
     Render_Geometry_Batch_Index group;
-    u32 _padding;
+    u32 _;
 } Render_Geometry;
 
 typedef struct Render_Texture {
@@ -1443,7 +1444,7 @@ typedef struct Render_Material {
     Render_Info info;
     Render_Texture_Ptr textures[MAX_TEXTURES_PER_MATERIAL];
     u8 used_textures;
-    u8 _padding[3];
+    u8 _[3];
 
     Vec3 diffuse_color;
     Vec3 specular_color;
@@ -1512,8 +1513,6 @@ typedef struct Render_Queue {
     Render_Phong_Command_Array mono_queue;
 } Render_Queue;
 
-typedef Render_Shader GL_Shader;
-
 
 enum {MAX_TEXTURE_SLOTS = 32};
 
@@ -1547,7 +1546,7 @@ enum {MAX_TEXTURE_SLOTS = 32};
 //Each draw must track where it bound its textures to
 typedef struct Render_Per_Draw {
     i32 instance_from;
-    u32 _padding;
+    u32 _;
     Render_Material* material;
     Render_Geometry* geometry;
 
@@ -1585,7 +1584,7 @@ typedef struct Blinn_Phong_Per_Draw {
     ATTRIBUTE_ALIGNED(4) int map_specular; 
     ATTRIBUTE_ALIGNED(4) int map_normal; 
     ATTRIBUTE_ALIGNED(4) int map_ambient; 
-    ATTRIBUTE_ALIGNED(4) int _padding[2]; 
+    ATTRIBUTE_ALIGNED(4) int _[2]; 
 } Blinn_Phong_Per_Draw;
 
 typedef struct Blinn_Phong_Light {
@@ -1931,8 +1930,8 @@ void render_init(Render* render, Allocator* alloc, GL_Shader* blinn_phong, Rende
     render->shader_blinn_phong = *blinn_phong;
 
     
-    render->uniform_block_draw = shader_storage_block_make(render->shader_blinn_phong.shader, "Params", 0, render->buffer_draw_uniform.handle);
-    render->uniform_block_environment = uniform_block_make(render->shader_blinn_phong.shader, "Environment", 1, render->buffer_environment_uniform.handle);
+    render->uniform_block_draw = shader_storage_block_make(render->shader_blinn_phong.handle, "Params", 0, render->buffer_draw_uniform.handle);
+    render->uniform_block_environment = uniform_block_make(render->shader_blinn_phong.handle, "Environment", 1, render->buffer_environment_uniform.handle);
 }
 
 Render_Info_Ptr _render_resource_find(Stable_Array stable, String name, Id id)
@@ -2066,7 +2065,7 @@ void render_render(Render* render, Camera camera)
         i32 geometry_batch_index;
         //@TODO
         Render_Environment* environment;
-        Render_Shader* shader;
+        GL_Shader* shader;
     } Render_Per_Batch;
 
     Render_Per_Draw_Array* batch_draws = &render->render_per_draw;
@@ -2302,7 +2301,7 @@ void render_render(Render* render, Camera camera)
         
         PROFILE_START(texture_set);
         render_shader_use(&render->shader_blinn_phong);
-        GLuint map_array_loc = render_shader_get_uniform_location(&render->shader_blinn_phong, "u_map_resolutions");
+        GLuint map_array_loc = glGetUniformLocation(render->shader_blinn_phong.handle, "u_map_resolutions");
 
         i32 tex_slots[MAX_TEXTURE_SLOTS] = {0};
         for(GLint i = 0; i < MAX_TEXTURE_SLOTS; i++)
@@ -2412,7 +2411,7 @@ bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out,
     PROFILE_START(image_read_counter);
 
     bool state = true;
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     {
         Image temp_storage = {arena.alloc};
         state = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
@@ -2490,19 +2489,21 @@ void run_func(void* context)
     Render_Texture_Ptr image_debug = {0};
     Render_Texture_Ptr image_rusted_iron_metallic = {0};
 
-    Render_Shader shader_depth_color = {0};
-    Render_Shader shader_solid_color = {0};
-    Render_Shader shader_screen = {0};
-    Render_Shader shader_debug = {0};
-    Render_Shader shader_blinn_phong = {0};
-    Render_Shader shader_skybox = {0};
-    Render_Shader shader_instanced = {0};
-    Render_Shader shader_instanced_batched = {0};
+    GL_Shader shader_depth_color = {0};
+    GL_Shader shader_solid_color = {0};
+    GL_Shader shader_screen = {0};
+    GL_Shader shader_debug = {0};
+    GL_Shader shader_blinn_phong = {0};
+    GL_Shader shader_skybox = {0};
+    GL_Shader shader_instanced = {0};
+    GL_Shader shader_instanced_batched = {0};
 
     Render_Material_Ptr material_shiny_debug = {0};
     Render_Material_Ptr material_mat_floor = {0};
 
-    TEST(render_shader_init_from_disk(&shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl")));
+    Shader_File_Cache shader_cache = {resources_alloc.alloc};
+
+    TEST(render_shader_init_from_disk(&shader_cache, &shader_instanced_batched, STRING("shaders/instanced_batched_texture.glsl")));
     
     Render_Memory_Budget render_mem_budget = {0};
     render_mem_budget.geometry = GB / 2;
@@ -2557,13 +2558,13 @@ void run_func(void* context)
             PROFILE_START(shader_load_counter);
             
             bool shader_state = true;
-            shader_state = shader_state && render_shader_init_from_disk(&shader_solid_color,       STRING("shaders/solid_color.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_depth_color,       STRING("shaders/depth_color.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_screen,            STRING("shaders/screen.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_skybox,            STRING("shaders/skybox.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_debug,             STRING("shaders/uv_debug.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_instanced,         STRING("shaders/instanced_texture.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_solid_color,       STRING("shaders/solid_color.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_depth_color,       STRING("shaders/depth_color.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_screen,            STRING("shaders/screen.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_skybox,            STRING("shaders/skybox.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_debug,             STRING("shaders/uv_debug.glsl"));
+            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_instanced,         STRING("shaders/instanced_texture.glsl"));
 
             ASSERT(shader_state);
 
@@ -2750,19 +2751,14 @@ void run_func(void* context)
                 glfwSetWindowTitle(window, format(arena.alloc, "Render %5d fps", (int) (1.0f/frame_time)).data);
         }
     }
+
+    LOG_WARN("APP", "Scratch: rises:%lli falls:%lli", scratch_arena_stack()->rise_count, scratch_arena_stack()->fall_count);
     
     shape_deinit(&uv_sphere);
     shape_deinit(&cube_sphere);
     shape_deinit(&screen_quad);
     shape_deinit(&unit_cube);
     shape_deinit(&unit_quad);
-
-    render_shader_deinit(&shader_solid_color);
-    render_shader_deinit(&shader_depth_color);
-    render_shader_deinit(&shader_screen);
-    render_shader_deinit(&shader_blinn_phong);
-    render_shader_deinit(&shader_skybox);
-    render_shader_deinit(&shader_debug);
 
     resources_deinit(&resources);
     
@@ -2789,9 +2785,56 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 //#include "mdump2.h"
 #include "lib/_test_all.h"
+#include "neoasset.h"
+
+typedef struct {
+    const NAsset asset;
+    String_Builder builder;
+} STR_Asset;
+
+void nasset_init(void* asset_untyped)
+{
+    STR_Asset* asset = (STR_Asset*) asset_untyped;
+    asset->builder = builder_from_cstring(asset_string_allocator(), "FIRST_BUILDER");
+    LOG_INFO("TEST", "hello from '%s'", asset->builder.data);
+}
+void nasset_deinit(void* asset_untyped)
+{
+    STR_Asset* asset = (STR_Asset*) asset_untyped;
+    LOG_INFO("TEST", "hello from '%s'", asset->builder.data);
+
+    builder_deinit(&asset->builder);
+}
+
+enum {NASSET_STR = 1};
+void test_neo_asset()
+{
+    asset_system_init(allocator_get_default(), allocator_get_default());
+
+    NAsset_Type_Description type = {0};
+    type.size = sizeof(STR_Asset);
+    type.init = nasset_init;
+    type.deinit = nasset_deinit;
+    type.name = STRING("String_Builder");
+    type.abbreviation = STRING("STR");
+
+    asset_type_add(NASSET_STR, type);
+    NAsset* asset = asset_create(NASSET_STR);
+
+    Hash_String name = HSTRING("Name");
+    Hash_String path = HSTRING("path/to/file");
+    asset_set_name(asset->handle, name);
+    asset_set_path(asset->handle, path);
+
+    asset_delete(asset->handle, false);
+
+    TEST(asset_get_by_path(path) == NULL);
+    TEST(asset_get_by_name(name) == NULL);
+}
 
 void run_test_func(void* context)
 {
+    test_neo_asset();
     (void) context;
     test_all(6.0);
 }

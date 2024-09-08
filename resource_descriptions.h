@@ -55,7 +55,7 @@ typedef struct Map_Info {
 typedef struct Map_Description {
     String_Builder path;
     Map_Info info;
-    u32 _padding;
+    u32 _;
 } Map_Description;
 
 typedef union Cubemap_Description {
@@ -144,7 +144,7 @@ typedef struct Triangle_Mesh_Group_Description {
 
     i32 triangles_from;
     i32 triangles_to;
-    u32 _padding;
+    u32 _;
 } Triangle_Mesh_Group_Description;
 
 typedef Array(Material_Description) Material_Description_Array;

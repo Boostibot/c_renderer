@@ -49,7 +49,7 @@ typedef struct Shader {
 typedef struct Map {
     Id image;
     Map_Info info;
-    u32 _padding;
+    u32 _;
 } Map;
 
 typedef struct Cubemap  {    
@@ -91,7 +91,7 @@ typedef struct Triangle_Mesh_Group {
 
     i32 triangles_from;
     i32 triangles_to;
-    u32 _padding;
+    u32 _;
 } Triangle_Mesh_Group;
 
 typedef Array(Material) Material_Array;
@@ -123,8 +123,8 @@ void resources_check_reloads();
     EXTERNAL Type_Name*   name##_get(Id ptr); \
     EXTERNAL Type_Name*   name##_get_sure(Id id); \
     EXTERNAL Type_Name*   name##_get_with_info(Id ptr, Resource_Info** info); \
-    EXTERNAL Id           name##_find_by_name(Hash_String name, isize* prev_found_and_finished_at); \
-    EXTERNAL Id           name##_find_by_path(Hash_String path, isize* prev_found_and_finished_at); \
+    EXTERNAL Id           name##_find_by_name(Hash_String name, Hash_Found* prev_found_and_finished_at); \
+    EXTERNAL Id           name##_find_by_path(Hash_String path, Hash_Found* prev_found_and_finished_at); \
                                                                 \
     EXTERNAL Id           name##_insert(Resource_Params params); \
     EXTERNAL bool         name##_remove(Id resource); \
@@ -189,12 +189,6 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
             TEST(gotten != NULL, "Didnt find the resource with id %lli", (lli) id); \
             return gotten; \
         } \
-        EXTERNAL Id type_name##_find_by_name(Hash_String name, isize* prev) { \
-            return resource_get_by_name(resources_get_type(TYPE_ENUM), name, prev).id; \
-        } \
-        EXTERNAL Id type_name##_find_by_path(Hash_String path, isize* prev) { \
-            return resource_get_by_path(resources_get_type(TYPE_ENUM), path, prev).id; \
-        } \
         EXTERNAL Id type_name##_insert(Resource_Params params) { \
             return resource_insert(resources_get_type(TYPE_ENUM), params).id; \
         } \
@@ -217,6 +211,12 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         EXTERNAL Id type_name##_duplicate(Id resource, Resource_Params params) { \
             Resource_Ptr found = resource_get(resources_get_type(TYPE_ENUM), resource); \
             return resource_duplicate(resources_get_type(TYPE_ENUM), found, params).id; \
+        } \
+        EXTERNAL Id type_name##_find_by_name(Hash_String name, Hash_Found* prev) { \
+            return resource_get_by_name(resources_get_type(TYPE_ENUM), name, prev).id; \
+        } \
+        EXTERNAL Id type_name##_find_by_path(Hash_String path, Hash_Found* prev) { \
+            return resource_get_by_path(resources_get_type(TYPE_ENUM), path, prev).id; \
         } \
         
     RESOURCE_FUNCTION_DEF(Shape_Assembly,  RESOURCE_TYPE_SHAPE,            shape)
@@ -586,7 +586,7 @@ RESOURCE_FUNCTION_DECL(Shader,          RESOURCE_TYPE_SHADER,           shader)
         
         bool state = true;
         
-        Arena_Frame arena = scratch_arena_acquire();
+        Arena_Frame arena = scratch_arena_frame_acquire();
         
         Map_Info default_values = {0};
         map_info_init(&default_values, arena.alloc);

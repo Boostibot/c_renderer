@@ -1,7 +1,7 @@
 #pragma once
 
 #include "lib/stable_array.h"
-#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "lib/guid.h"
 #include "string.h"
 #include "lib/hash_string.h"
@@ -39,7 +39,7 @@ typedef struct Resource_Info {
     i32 reference_count;
     u32 storage_index;
     u32 type_enum; //some enum value used for debugging
-    u32 _padding;
+    u32 _;
 
     i64 creation_etime;
     i64 death_etime;
@@ -82,9 +82,9 @@ typedef void(*Resource_Copy)(void* to, void* from);
 typedef struct Resource_Manager {
     Stable_Array storage;
 
-    Hash_Index id_hash;
-    Hash_Index name_hash;
-    Hash_Index path_hash;
+    Hash id_hash;
+    Hash name_hash;
+    Hash path_hash;
 
     Resource_Ptr_Array timed;
     Resource_Ptr_Array single_frame;
@@ -104,9 +104,11 @@ EXTERNAL void resource_manager_deinit(Resource_Manager* manager);
 
 EXTERNAL bool         resource_is_valid(Resource_Ptr resource);
 
+
 EXTERNAL Resource_Ptr resource_get(Resource_Manager* manager, Id id);
-EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at);
-EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at);
+
+EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, Hash_Found* prev_found);
+EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, Hash_Found* prev_found);
 
 EXTERNAL Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params params);
 
@@ -130,9 +132,9 @@ EXTERNAL void resource_manager_init(Resource_Manager* manager, Allocator* alloc,
     resource_manager_deinit(manager);
 
     stable_array_init(&manager->storage, alloc, item_size + sizeof(Resource_Info));
-    hash_index_init(&manager->id_hash, alloc);
-    hash_index_init(&manager->name_hash, alloc);
-    hash_index_init(&manager->path_hash, alloc);
+    hash_init(&manager->id_hash, alloc);
+    hash_init(&manager->name_hash, alloc);
+    hash_init(&manager->path_hash, alloc);
 
     array_init(&manager->timed, alloc);
     array_init(&manager->single_frame, alloc);
@@ -157,9 +159,9 @@ EXTERNAL void resource_manager_deinit(Resource_Manager* manager)
     STABLE_ARRAY_FOR_EACH_END
 
     stable_array_deinit(&manager->storage);
-    hash_index_deinit(&manager->id_hash);
-    hash_index_deinit(&manager->name_hash);
-    hash_index_deinit(&manager->path_hash);
+    hash_deinit(&manager->id_hash);
+    hash_deinit(&manager->name_hash);
+    hash_deinit(&manager->path_hash);
 
     array_deinit(&manager->timed);
     array_deinit(&manager->single_frame);
@@ -175,37 +177,32 @@ EXTERNAL bool         resource_is_valid(Resource_Ptr resource)
 EXTERNAL Resource_Ptr _resource_get(Resource_Manager* manager, Id id, isize* prev_found_and_finished_at)
 {
     Resource_Ptr out = {0};
-    isize found = hash_index_find(manager->id_hash, (u64) id);
-    if(found == -1)
+    Hash_Found found = hash_find(manager->id_hash, (u64) id);
+    if(found.index == -1)
         return out;
 
-    Hash_Index_Entry entry = manager->id_hash.entries[found];
-    ASSERT(entry.hash == (u64) id, "hash ptr has no hash collisions on 64 bit number!");
-
-    Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
     out.id = id;
-    out.ptr = ptr;
+    out.ptr = (Resource_Info*) found.value_ptr;
 
-    ASSERT(ptr->id == id, "the hash needs to be kept up to date");
+    ASSERT(out.ptr->id == id, "the hash needs to be kept up to date");
     if(prev_found_and_finished_at)
-        *prev_found_and_finished_at = found;
+        *prev_found_and_finished_at = found.index;
     return out;
 }
 
-EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, isize* prev_found_and_finished_at)
+
+EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_String name, Hash_Found* prev_found)
 {
     Resource_Ptr out = {0};
-    isize found = 0;
-    if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_index_find_next(manager->name_hash, name.hash, *prev_found_and_finished_at);
+    Hash_Found found = {0};
+    if(prev_found && prev_found->index != -1)
+        found = hash_find_next(manager->name_hash, *prev_found);
     else
-        found = hash_index_find(manager->name_hash, name.hash);
+        found = hash_find(manager->name_hash, name.hash);
 
-    while(found != -1)
+    while(found.index != -1)
     {
-        Hash_Index_Entry entry = manager->name_hash.entries[found];
-        Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
-
+        Resource_Info* ptr = (Resource_Info*) found.value_ptr;
         if(string_is_equal(ptr->name.string, name.string))
         {
             out.id = ptr->id;
@@ -213,29 +210,27 @@ EXTERNAL Resource_Ptr resource_get_by_name(Resource_Manager* manager, Hash_Strin
             break;
         }
 
-        found = hash_index_find_next(manager->name_hash, name.hash, found);
+        found = hash_find_next(manager->name_hash, found);
     }
 
-    if(prev_found_and_finished_at)
-        *prev_found_and_finished_at = found;
+    if(prev_found)
+        *prev_found = found;
 
     return out;
 }
 
-EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, isize* prev_found_and_finished_at)
+EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_String path, Hash_Found* prev_found)
 {
     Resource_Ptr out = {0};
-    isize found = 0;
-    if(prev_found_and_finished_at && *prev_found_and_finished_at != -1)
-        found = hash_index_find_next(manager->path_hash, path.hash, *prev_found_and_finished_at);
+    Hash_Found found = {0};
+    if(prev_found && prev_found->index != -1)
+        found = hash_find_next(manager->path_hash, *prev_found);
     else
-        found = hash_index_find(manager->path_hash, path.hash);
+        found = hash_find(manager->path_hash, path.hash);
 
-    while(found != -1)
+    while(found.index != -1)
     {
-        Hash_Index_Entry entry = manager->path_hash.entries[found];
-        Resource_Info* ptr = (Resource_Info*) hash_index_restore_ptr(entry.value);
-
+        Resource_Info* ptr = (Resource_Info*) found.value_ptr;
         if(string_is_equal(ptr->path.string, path.string))
         {
             out.id = ptr->id;
@@ -243,11 +238,11 @@ EXTERNAL Resource_Ptr resource_get_by_path(Resource_Manager* manager, Hash_Strin
             break;
         }
 
-        found = hash_index_find_next(manager->path_hash, path.hash, found);
+        found = hash_find_next(manager->path_hash, found);
     }
 
-    if(prev_found_and_finished_at)
-        *prev_found_and_finished_at = found;
+    if(prev_found)
+        *prev_found = found;
 
     return out;
 }
@@ -317,9 +312,9 @@ EXTERNAL Resource_Ptr resource_insert(Resource_Manager* manager, Resource_Params
     Hash_String name_hashed = hash_string_make(params.name);
     Hash_String path_hashed = hash_string_make(params.path);
 
-    hash_index_insert(&manager->id_hash, (u64) params.id, (u64) info);
-    hash_index_insert(&manager->name_hash, name_hashed.hash, (u64) info);
-    hash_index_insert(&manager->path_hash, path_hashed.hash, (u64) info);
+    hash_insert(&manager->id_hash, (u64) params.id, (u64) info);
+    hash_insert(&manager->name_hash, name_hashed.hash, (u64) info);
+    hash_insert(&manager->path_hash, path_hashed.hash, (u64) info);
     
     out.id = params.id;
     out.ptr = info;
@@ -340,10 +335,7 @@ EXTERNAL bool resource_force_remove_custom(Resource_Manager* manager, Resource_P
 {
     if(removed_data)
         ASSERT(removed_data_size == manager->type_size, "Incorrect size %lli submitted. Expected %lli", (lli) removed_data_size, (lli) manager->type_size);
-
-    //@TODO: This adding and especially removing from hashes is kinda a big deal. Can we make it more compact? 
-    //       Can we have like a bloom filter or something? -> NO THAT ONLY MAKES THINGS WORSE!
-
+    
     if(resource_is_valid(resource))
     {
         Id id = resource.id;
@@ -361,8 +353,8 @@ EXTERNAL bool resource_force_remove_custom(Resource_Manager* manager, Resource_P
         Hash_String path = hash_string_make(info->path.string);
 
         isize id_found = -1;
-        isize name_found = -1;
-        isize path_found = -1;
+        Hash_Found name_found = {-1};
+        Hash_Found path_found = {-1};
 
         Resource_Ptr by_id = _resource_get(manager, id, &id_found);
         Resource_Ptr by_name = {0};
@@ -393,13 +385,13 @@ EXTERNAL bool resource_force_remove_custom(Resource_Manager* manager, Resource_P
         ASSERT(by_path.ptr == info);
 
         if(id_found != -1)
-            hash_index_remove(&manager->id_hash, id_found);
+            hash_remove_found(&manager->id_hash, id_found);
             
-        if(name_found != -1)
-            hash_index_remove(&manager->name_hash, name_found);
+        if(name_found.index != -1)
+            hash_remove_found(&manager->name_hash, name_found.index);
             
-        if(path_found != -1)
-            hash_index_remove(&manager->path_hash, path_found);
+        if(path_found.index != -1)
+            hash_remove_found(&manager->path_hash, path_found.index);
 
         builder_deinit(&info->path);
         builder_deinit(&info->name);
@@ -517,7 +509,7 @@ EXTERNAL void resource_manager_time_cleanup(Resource_Manager* manager)
         if(remove)
         {
             Resource_Ptr* last = array_last(manager->timed);
-            SWAP(curr, last, Resource_Ptr);
+            SWAP(curr, last);
             array_pop(&manager->timed);
             i--; //repeat this index because the item here is the last item
         }

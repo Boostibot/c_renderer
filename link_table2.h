@@ -88,7 +88,7 @@ u32 virtual_freelist_pop(Virtual_Freelist* freelist, u32 index)
     freelist->len -= 1;
 }
 
-#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "lib/hash.h"
 #include "lib/log.h"
 
@@ -106,7 +106,7 @@ typedef struct Link_Table{
     u32 link_capacity;
     u32 item_count;
 
-    Hash_Index pair_hash_to_link;
+    Hash pair_hash_to_link;
     Link* links;
     u32 first_free_i1;
     Arena arena;
@@ -114,17 +114,17 @@ typedef struct Link_Table{
 
 u64 hash_link(Handle from, Handle to)
 {
-    return hash_mix64(hash64((u64) from), hash64((u64) to));
+    return hash64_mix(hash64_bijective((u64) from), hash64_bijective((u64) to));
 }
 
 u64 hash_from_link(Handle from)
 {
-    return hash_mix64(hash64((u64) from), 0);
+    return hash64_mix(hash64_bijective((u64) from), 0);
 }
 
 u64 hash_to_link(Handle to)
 {
-    return hash_mix64(0, hash64((u64) to));
+    return hash64_mix(0, hash64_bijective((u64) to));
 }
 
 
@@ -154,17 +154,17 @@ u32 _link_table_add_freelist_link(Link_Table* table)
 
 u32 _link_table_add_link(Link_Table* table, Handle from, Handle to)
 {
-    u64 from_h = hash64((u64) from);
-    u64 to_h = hash64((u64) from);
+    u64 from_h = hash64_bijective((u64) from);
+    u64 to_h = hash64_bijective((u64) from);
 
-    u64 from_hash = hash_mix64(from_h, 0);
-    u64 to_hash = hash_mix64(0, to_h);
-    u64 conect_hash = hash_mix64(from_h, to_h);
+    u64 from_hash = hash64_mix(from_h, 0);
+    u64 to_hash = hash64_mix(0, to_h);
+    u64 conect_hash = hash64_mix(from_h, to_h);
 
-    hash_index_reserve(&table->pair_hash_to_link, table->pair_hash_to_link.len + 3);
+    hash_reserve(&table->pair_hash_to_link, table->pair_hash_to_link.len + 3);
 
-    isize conect_found = hash_index_find_or_insert(&table->pair_hash_to_link, conect_hash, 0);
-    Hash_Index_Entry* connect_entry = &table->pair_hash_to_link.entries[conect_found];
+    isize conect_found = hash_find_or_insert(&table->pair_hash_to_link, conect_hash, 0);
+    Hash_Entry* connect_entry = &table->pair_hash_to_link.entries[conect_found];
     if(connect_entry->value != 0)
     {
         Link* connect_link = &table->links[connect_entry->value];
@@ -175,11 +175,11 @@ u32 _link_table_add_link(Link_Table* table, Handle from, Handle to)
         }
     }
 
-    isize from_found = hash_index_find_or_insert(&table->pair_hash_to_link, from_hash, 0);
-    isize to_found = hash_index_find_or_insert(&table->pair_hash_to_link, to_hash, 0);
+    isize from_found = hash_find_or_insert(&table->pair_hash_to_link, from_hash, 0);
+    isize to_found = hash_find_or_insert(&table->pair_hash_to_link, to_hash, 0);
 
-    Hash_Index_Entry* from_entry = &table->pair_hash_to_link.entries[from_found];
-    Hash_Index_Entry* to_entry = &table->pair_hash_to_link.entries[to_found];
+    Hash_Entry* from_entry = &table->pair_hash_to_link.entries[from_found];
+    Hash_Entry* to_entry = &table->pair_hash_to_link.entries[to_found];
     
     //If dont exist will point to nill node so its fine
     Link* connect_link = &table->links[connect_entry->value];

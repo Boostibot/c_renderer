@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib/hash_index.h"
+#include "lib/hash.h"
 #include "lib/allocator.h"
 
 typedef uint64_t ID;
@@ -29,8 +29,8 @@ typedef struct Link_Table {
     Allocator* allocator;
     Link* links;
 
-    Hash_Index from_hash;
-    Hash_Index to_hash;
+    Hash from_hash;
+    Hash to_hash;
 
     uint32_t first_free_link;
     uint32_t links_size;
@@ -44,8 +44,8 @@ void link_table_reserve(Link_Table* table, Allocator* allocator, isize to_size)
     if(table->allocator == NULL)
     {
         table->allocator = allocator_or_default(allocator);
-        hash_index_init(&table->from_hash, table->allocator);
-        hash_index_init(&table->to_hash, table->allocator);
+        hash_init(&table->from_hash, table->allocator);
+        hash_init(&table->to_hash, table->allocator);
 
         //Prevent jumping all over memory
         table->from_hash.do_in_place_rehash = true;
@@ -115,7 +115,7 @@ isize _find_to_link_forward(Link_Table* table, u32 start_index, u32 max_size, ID
 isize link_table_find(Link_Table* table, ID from, ID to)
 {
     isize found = -1;
-    isize from_hash_i = hash_index_find(table->from_hash, from);
+    isize from_hash_i = hash_find(table->from_hash, from);
     if(from_hash_i != -1)
     {
         Link_Table_Hash_Val from_val = {table->from_hash.entries[from_hash_i].value};
@@ -129,7 +129,7 @@ ID* link_table_find_all_from(Link_Table* table, ID from, Allocator* alloc)
 {
     ID* out = NULL;
     ASSERT(alloc != NULL);
-    isize from_hash_i = hash_index_find(table->from_hash, from);
+    isize from_hash_i = hash_find(table->from_hash, from);
     if(from_hash_i != -1)
     {
         Link_Table_Hash_Val from_val = {table->from_hash.entries[from_hash_i].value};
@@ -150,7 +150,7 @@ ID* link_table_find_all_to(Link_Table* table, ID to, Allocator* alloc)
 {
     ID* out = NULL;
     ASSERT(alloc != NULL);
-    isize to_hash_i = hash_index_find(table->to_hash, to);
+    isize to_hash_i = hash_find(table->to_hash, to);
     if(to_hash_i != -1)
     {
         Link_Table_Hash_Val to_val = {table->to_hash.entries[to_hash_i].value};
@@ -176,8 +176,8 @@ isize link_table_insert(Link_Table* table, ID from, ID to)
     //if_inserted.len = 0;s
     
     ASSERT(link_i != 0);
-    isize from_hash_i = hash_index_find_or_insert(&table->from_hash, from, 0);
-    isize to_hash_i = hash_index_find_or_insert(&table->to_hash, to, 0);
+    isize from_hash_i = hash_find_or_insert(&table->from_hash, from, 0);
+    isize to_hash_i = hash_find_or_insert(&table->to_hash, to, 0);
     ASSERT(from_hash_i != -1 && to_hash_i != -1);
     
     Link_Table_Hash_Val* from_val = (Link_Table_Hash_Val*) (void*) &table->from_hash.entries[from_hash_i].value;
@@ -217,8 +217,8 @@ isize link_table_insert(Link_Table* table, ID from, ID to)
 
 bool link_table_remove(Link_Table* table, ID from, ID to)
 {
-    isize from_hash_i = hash_index_find(table->from_hash, from);
-    isize to_hash_i = hash_index_find(table->to_hash, to);
+    isize from_hash_i = hash_find(table->from_hash, from);
+    isize to_hash_i = hash_find(table->to_hash, to);
     if(from_hash_i < 0 || to_hash_i < 0)
         return false;
 
@@ -259,10 +259,10 @@ bool link_table_remove(Link_Table* table, ID from, ID to)
     to_val->len -= 1;
 
     if(from_val->len <= 0)
-        hash_index_remove(&table->from_hash, from_hash_i);
+        hash_remove(&table->from_hash, from_hash_i);
         
     if(to_val->len <= 0)
-        hash_index_remove(&table->to_hash, to_hash_i);
+        hash_remove(&table->to_hash, to_hash_i);
 
     return true;
 }

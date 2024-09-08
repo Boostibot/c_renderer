@@ -20,7 +20,7 @@ typedef struct Camera
     //specifies if should use ortographic projection.
     //If is true uses top/bot/left/right. The area of the rectangle must not be 0!
     bool is_ortographic;  
-    bool _padding[2];
+    bool _[2];
 
     f32 top;
     f32 bot;

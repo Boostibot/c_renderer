@@ -188,7 +188,7 @@ EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_mark
 
 EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo)
 {
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     String_Builder source = {arena.alloc};
 
     bool file_error = file_read_entire(path, &source, log_error("todo"));
@@ -201,7 +201,7 @@ EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo)
 EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isize depth)
 {
     bool state = true;
-    Arena_Frame arena = scratch_arena_acquire();
+    Arena_Frame arena = scratch_arena_frame_acquire();
     {
         Platform_Directory_Entry* entries = NULL;
         isize entries_count = 0;
