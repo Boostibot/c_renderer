@@ -574,7 +574,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
         out.len = sizeof(Type); \
         out.align = _align; \
         out.members = members; \
-        out.member_count = ARRAY_SIZE(members); \
+        out.member_count = ARRAY_LEN(members); \
         return out; \
     } \
 
@@ -597,7 +597,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
         if(types_init == false) \
         { \
             types_init = true; \
-            for(int i = 0; i < ARRAY_SIZE(members); i++) \
+            for(int i = 0; i < ARRAY_LEN(members); i++) \
             { \
                 members[i].len = sizeof(Type); \
                 if(is_unsigned) \
@@ -613,7 +613,7 @@ Mdump_Type_User_Query mdump_type_float(isize size)
         out.len = sizeof(Type); \
         out.align = sizeof(Type); \
         out.members = members; \
-        out.member_count = ARRAY_SIZE(members); \
+        out.member_count = ARRAY_LEN(members); \
         out.flags = flags; \
         return out; \
     } \

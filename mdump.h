@@ -351,7 +351,7 @@ void mdump_types_init(Mdump_Types* types, Allocator* alloc)
     };
     
     array_resize(&types->types, MDUMP_TYPE_MAX_RESERVED);
-    for(isize i = 0; i < ARRAY_SIZE(infos); i++)
+    for(isize i = 0; i < ARRAY_LEN(infos); i++)
     {
         Builtin_Type_Info builtin_info = infos[i];
         Mdump_Type_Info* info = &types->types.data[builtin_info.type];

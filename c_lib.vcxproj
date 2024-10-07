@@ -221,6 +221,8 @@
     <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="asset_types.h" />
+    <ClInclude Include="atomic.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
@@ -232,6 +234,7 @@
     <ClInclude Include="gl_utils\gl_pixel_format.h" />
     <ClInclude Include="gl_utils\gl_shader_util.h" />
     <ClInclude Include="image_loader.h" />
+    <ClInclude Include="job.h" />
     <ClInclude Include="lib\allocator.h" />
     <ClInclude Include="lib\allocator_debug.h" />
     <ClInclude Include="lib\allocator_malloc.h" />
@@ -252,21 +255,21 @@
     <ClInclude Include="lib\log.h" />
     <ClInclude Include="lib\log_file.h" />
     <ClInclude Include="lib\lpf.h" />
+    <ClInclude Include="lib\map.h" />
+    <ClInclude Include="lib\string_map.h" />
     <ClInclude Include="lib\math.h" />
     <ClInclude Include="lib\parse.h" />
     <ClInclude Include="lib\path.h" />
     <ClInclude Include="lib\perf.h" />
     <ClInclude Include="lib\platform.h" />
     <ClInclude Include="lib\profile.h" />
-    <ClInclude Include="lib\profile2.h" />
-    <ClInclude Include="lib\profile_defs.h" />
     <ClInclude Include="lib\random.h" />
     <ClInclude Include="lib\serialize.h" />
     <ClInclude Include="lib\slz4.h" />
     <ClInclude Include="lib\sort.h" />
     <ClInclude Include="lib\stable_array.h" />
     <ClInclude Include="lib\string.h" />
-    <ClInclude Include="lib\string_map.h" />
+    <ClInclude Include="lib\_string_map.h" />
     <ClInclude Include="lib\time.h" />
     <ClInclude Include="lib\vformat.h" />
     <ClInclude Include="lib\_test.h" />
@@ -282,20 +285,19 @@
     <ClInclude Include="lib\_test_stable_array.h" />
     <ClInclude Include="lib\_test_string.h" />
     <ClInclude Include="lib\_test_string_map.h" />
-    <ClInclude Include="link_table.h" />
     <ClInclude Include="mdump.h" />
     <ClInclude Include="mdump2.h" />
     <ClInclude Include="name.h" />
-    <ClInclude Include="neoasset.h" />
-    <ClInclude Include="resource.h" />
+    <ClInclude Include="asset.h" />
     <ClInclude Include="resources.h" />
-    <ClInclude Include="resource_descriptions.h" />
-    <ClInclude Include="resource_loading.h" />
+    <ClInclude Include="asset_descriptions.h" />
+    <ClInclude Include="asset_loading.h" />
     <ClInclude Include="shapes.h" />
     <ClInclude Include="thread_pool.h" />
     <ClInclude Include="todo.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="cpp.hint" />
     <None Include="shaders\blinn_phong.glsl" />
     <None Include="shaders\brdf_lut.glsl" />
     <None Include="shaders\depth_color.glsl" />

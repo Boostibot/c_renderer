@@ -174,6 +174,7 @@ void shape_assembly_copy(Shape_Assembly* out, const Shape_Assembly* in)
 
 void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, const Triangle_Index* indices, isize trinagles_count)
 {
+    PROFILE_START();
     isize vertex_count_before = shape->vertices.len;
     isize triangle_count_before = shape->triangles.len;
 
@@ -194,6 +195,7 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
         CHECK_BOUNDS(triangle_count_before + i, shape->triangles.len);
         shape->triangles.data[triangle_count_before + i] = offset_index;
     }
+    PROFILE_STOP();
 }
 
 void shape_tranform(Shape* shape, Mat4 transform)
@@ -209,7 +211,7 @@ void shape_tranform(Shape* shape, Mat4 transform)
         vertex->norm = mat4_mul_vec3(normal_matrix, vertex->norm);
     }
 
-    PROFILE_END();
+    PROFILE_STOP();
 }
 
 u64 vertex_hash64(Vertex vertex, u64 seed)
@@ -221,8 +223,8 @@ u64 vertex_hash64(Vertex vertex, u64 seed)
 Shape shapes_make_unit_quad()
 {
     Shape out = {0};
-    isize vertex_count = ARRAY_SIZE(XZ_QUAD_VERTICES);
-    isize index_count = ARRAY_SIZE(XZ_QUAD_INDECES);
+    isize vertex_count = ARRAY_LEN(XZ_QUAD_VERTICES);
+    isize index_count = ARRAY_LEN(XZ_QUAD_INDECES);
     array_append(&out.vertices, XZ_QUAD_VERTICES, vertex_count);
     array_append(&out.triangles, XZ_QUAD_INDECES, index_count);
 
@@ -234,8 +236,8 @@ Shape shapes_make_unit_cube()
 {
     
     Shape out = {0};
-    isize vertex_count = ARRAY_SIZE(CUBE_VERTICES);
-    isize index_count = ARRAY_SIZE(CUBE_INDECES);
+    isize vertex_count = ARRAY_LEN(CUBE_VERTICES);
+    isize index_count = ARRAY_LEN(CUBE_INDECES);
     array_append(&out.vertices, CUBE_VERTICES, vertex_count);
     array_append(&out.triangles, CUBE_INDECES, index_count);
 
@@ -326,12 +328,12 @@ u32 shape_assembly_add_vertex_custom(Hash* hash, Vertex_Array* vertices, Vertex 
             hash_insert(hash, hashed, inserted_i);
             array_push(vertices, vertex);
             entry = inserted_i;
-            PROFILE_END(hash_collisions);
+            PROFILE_STOP(hash_collisions);
         }
     }
     
     CHECK_BOUNDS(entry, vertices->len);
-    PROFILE_END();
+    PROFILE_STOP();
     return (u32) entry;
 
 }
@@ -466,7 +468,7 @@ void shapes_add_cube_sphere_side(Shape* into, isize iters, f32 radius, Vec3 side
         }
         
     }
-    PROFILE_END();
+    PROFILE_STOP();
 }
 
 Shape shapes_make_cube_sphere_side(isize iters, f32 radius, Vec3 side_normal, Vec3 side_front, Vec3 offset)
@@ -490,7 +492,7 @@ Shape shapes_make_cube_sphere(isize iters, f32 radius)
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(-1, 0, 0), vec3(0));
     
-    PROFILE_END();
+    PROFILE_STOP();
     return out;
 }
 
@@ -508,7 +510,7 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(-1, 0, 0), vec3(0, 0, -1), vec3(0));
     shapes_add_cube_sphere_side(&out, iters, radius, vec3(0, 0, -1), vec3(0, -1, 0), vec3(0));
     
-    PROFILE_END();
+    PROFILE_STOP();
     return out;
 }
 
@@ -600,6 +602,6 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
 
     out_shape.triangles = triangles;
     out_shape.vertices = vertices;
-    PROFILE_END();
+    PROFILE_STOP();
     return out_shape;
 }

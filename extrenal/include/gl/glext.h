@@ -328,7 +328,7 @@ GLAPI void APIENTRY glMultTransposeMatrixd (const GLdouble *m);
 #define GL_FOG_COORDINATE_ARRAY           0x8457
 #define GL_COLOR_SUM                      0x8458
 #define GL_CURRENT_SECONDARY_COLOR        0x8459
-#define GL_SECONDARY_COLOR_ARRAY_SIZE     0x845A
+#define GL_SECONDARY_COLOR_ARRAY_LEN     0x845A
 #define GL_SECONDARY_COLOR_ARRAY_TYPE     0x845B
 #define GL_SECONDARY_COLOR_ARRAY_STRIDE   0x845C
 #define GL_SECONDARY_COLOR_ARRAY_POINTER  0x845D
@@ -546,7 +546,7 @@ GLAPI void APIENTRY glGetBufferPointerv (GLenum target, GLenum pname, void **par
 typedef char GLchar;
 #define GL_BLEND_EQUATION_RGB             0x8009
 #define GL_VERTEX_ATTRIB_ARRAY_ENABLED    0x8622
-#define GL_VERTEX_ATTRIB_ARRAY_SIZE       0x8623
+#define GL_VERTEX_ATTRIB_ARRAY_LEN       0x8623
 #define GL_VERTEX_ATTRIB_ARRAY_STRIDE     0x8624
 #define GL_VERTEX_ATTRIB_ARRAY_TYPE       0x8625
 #define GL_CURRENT_VERTEX_ATTRIB          0x8626
@@ -2351,7 +2351,7 @@ typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source,GLenum type,GLuint id,GLenum
 #define GL_MAX_NUM_COMPATIBLE_SUBROUTINES 0x92F8
 #define GL_NAME_LENGTH                    0x92F9
 #define GL_TYPE                           0x92FA
-#define GL_ARRAY_SIZE                     0x92FB
+#define GL_ARRAY_LEN                     0x92FB
 #define GL_OFFSET                         0x92FC
 #define GL_BLOCK_INDEX                    0x92FD
 #define GL_ARRAY_STRIDE                   0x92FE
@@ -2368,7 +2368,7 @@ typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source,GLenum type,GLuint id,GLenum
 #define GL_REFERENCED_BY_GEOMETRY_SHADER  0x9309
 #define GL_REFERENCED_BY_FRAGMENT_SHADER  0x930A
 #define GL_REFERENCED_BY_COMPUTE_SHADER   0x930B
-#define GL_TOP_LEVEL_ARRAY_SIZE           0x930C
+#define GL_TOP_LEVEL_ARRAY_LEN           0x930C
 #define GL_TOP_LEVEL_ARRAY_STRIDE         0x930D
 #define GL_LOCATION                       0x930E
 #define GL_LOCATION_INDEX                 0x930F
@@ -3652,7 +3652,7 @@ GLAPI void APIENTRY glVertexAttribDivisorARB (GLuint index, GLuint divisor);
 #define GL_CURRENT_PALETTE_MATRIX_ARB     0x8843
 #define GL_MATRIX_INDEX_ARRAY_ARB         0x8844
 #define GL_CURRENT_MATRIX_INDEX_ARB       0x8845
-#define GL_MATRIX_INDEX_ARRAY_SIZE_ARB    0x8846
+#define GL_MATRIX_INDEX_ARRAY_LEN_ARB    0x8846
 #define GL_MATRIX_INDEX_ARRAY_TYPE_ARB    0x8847
 #define GL_MATRIX_INDEX_ARRAY_STRIDE_ARB  0x8848
 #define GL_MATRIX_INDEX_ARRAY_POINTER_ARB 0x8849
@@ -4616,7 +4616,7 @@ GLAPI void APIENTRY glMultTransposeMatrixdARB (const GLdouble *m);
 #define GL_CURRENT_WEIGHT_ARB             0x86A8
 #define GL_WEIGHT_ARRAY_TYPE_ARB          0x86A9
 #define GL_WEIGHT_ARRAY_STRIDE_ARB        0x86AA
-#define GL_WEIGHT_ARRAY_SIZE_ARB          0x86AB
+#define GL_WEIGHT_ARRAY_LEN_ARB          0x86AB
 #define GL_WEIGHT_ARRAY_POINTER_ARB       0x86AC
 #define GL_WEIGHT_ARRAY_ARB               0x86AD
 #define GL_MODELVIEW0_ARB                 0x1700
@@ -4741,7 +4741,7 @@ GLAPI void APIENTRY glGetBufferPointervARB (GLenum target, GLenum pname, void **
 #define GL_COLOR_SUM_ARB                  0x8458
 #define GL_VERTEX_PROGRAM_ARB             0x8620
 #define GL_VERTEX_ATTRIB_ARRAY_ENABLED_ARB 0x8622
-#define GL_VERTEX_ATTRIB_ARRAY_SIZE_ARB   0x8623
+#define GL_VERTEX_ATTRIB_ARRAY_LEN_ARB   0x8623
 #define GL_VERTEX_ATTRIB_ARRAY_STRIDE_ARB 0x8624
 #define GL_VERTEX_ATTRIB_ARRAY_TYPE_ARB   0x8625
 #define GL_CURRENT_VERTEX_ATTRIB_ARB      0x8626
@@ -8026,7 +8026,7 @@ GLAPI void APIENTRY glRasterSamplesEXT (GLuint samples, GLboolean fixedsampleloc
 #define GL_EXT_secondary_color 1
 #define GL_COLOR_SUM_EXT                  0x8458
 #define GL_CURRENT_SECONDARY_COLOR_EXT    0x8459
-#define GL_SECONDARY_COLOR_ARRAY_SIZE_EXT 0x845A
+#define GL_SECONDARY_COLOR_ARRAY_LEN_EXT 0x845A
 #define GL_SECONDARY_COLOR_ARRAY_TYPE_EXT 0x845B
 #define GL_SECONDARY_COLOR_ARRAY_STRIDE_EXT 0x845C
 #define GL_SECONDARY_COLOR_ARRAY_POINTER_EXT 0x845D
@@ -8732,21 +8732,21 @@ GLAPI void APIENTRY glGetTransformFeedbackVaryingEXT (GLuint program, GLuint ind
 #define GL_INDEX_ARRAY_EXT                0x8077
 #define GL_TEXTURE_COORD_ARRAY_EXT        0x8078
 #define GL_EDGE_FLAG_ARRAY_EXT            0x8079
-#define GL_VERTEX_ARRAY_SIZE_EXT          0x807A
+#define GL_VERTEX_ARRAY_LEN_EXT          0x807A
 #define GL_VERTEX_ARRAY_TYPE_EXT          0x807B
 #define GL_VERTEX_ARRAY_STRIDE_EXT        0x807C
 #define GL_VERTEX_ARRAY_COUNT_EXT         0x807D
 #define GL_NORMAL_ARRAY_TYPE_EXT          0x807E
 #define GL_NORMAL_ARRAY_STRIDE_EXT        0x807F
 #define GL_NORMAL_ARRAY_COUNT_EXT         0x8080
-#define GL_COLOR_ARRAY_SIZE_EXT           0x8081
+#define GL_COLOR_ARRAY_LEN_EXT           0x8081
 #define GL_COLOR_ARRAY_TYPE_EXT           0x8082
 #define GL_COLOR_ARRAY_STRIDE_EXT         0x8083
 #define GL_COLOR_ARRAY_COUNT_EXT          0x8084
 #define GL_INDEX_ARRAY_TYPE_EXT           0x8085
 #define GL_INDEX_ARRAY_STRIDE_EXT         0x8086
 #define GL_INDEX_ARRAY_COUNT_EXT          0x8087
-#define GL_TEXTURE_COORD_ARRAY_SIZE_EXT   0x8088
+#define GL_TEXTURE_COORD_ARRAY_LEN_EXT   0x8088
 #define GL_TEXTURE_COORD_ARRAY_TYPE_EXT   0x8089
 #define GL_TEXTURE_COORD_ARRAY_STRIDE_EXT 0x808A
 #define GL_TEXTURE_COORD_ARRAY_COUNT_EXT  0x808B
@@ -9033,7 +9033,7 @@ GLAPI void APIENTRY glGetLocalConstantFloatvEXT (GLuint id, GLenum value, GLfloa
 #define GL_MODELVIEW1_EXT                 0x850A
 #define GL_CURRENT_VERTEX_WEIGHT_EXT      0x850B
 #define GL_VERTEX_WEIGHT_ARRAY_EXT        0x850C
-#define GL_VERTEX_WEIGHT_ARRAY_SIZE_EXT   0x850D
+#define GL_VERTEX_WEIGHT_ARRAY_LEN_EXT   0x850D
 #define GL_VERTEX_WEIGHT_ARRAY_TYPE_EXT   0x850E
 #define GL_VERTEX_WEIGHT_ARRAY_STRIDE_EXT 0x850F
 #define GL_VERTEX_WEIGHT_ARRAY_POINTER_EXT 0x8510
@@ -11632,7 +11632,7 @@ GLAPI void APIENTRY glGetIntegerui64i_vNV (GLenum value, GLuint index, GLuint64E
 #define GL_NV_vertex_program 1
 #define GL_VERTEX_PROGRAM_NV              0x8620
 #define GL_VERTEX_STATE_PROGRAM_NV        0x8621
-#define GL_ATTRIB_ARRAY_SIZE_NV           0x8623
+#define GL_ATTRIB_ARRAY_LEN_NV           0x8623
 #define GL_ATTRIB_ARRAY_STRIDE_NV         0x8624
 #define GL_ATTRIB_ARRAY_TYPE_NV           0x8625
 #define GL_CURRENT_ATTRIB_NV              0x8626

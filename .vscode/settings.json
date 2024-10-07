@@ -21,7 +21,7 @@
         "profile.h": "c",
         "string.h": "c",
         "hash.h": "c",
-        "profile_defs.h": "c",
+        "profile.h": "c",
         "platform.h": "c",
         "defines.h": "c"
     }

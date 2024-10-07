@@ -1,23 +1,28 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
 #pragma warning(error:4820)   //error on "Padding added to struct" 
-#pragma warning(error:4324)   //error "structure was padded due to alignment specifier" (when using explicti modifer to align struct)
-#pragma warning(disable:4464) //Dissable "relative include path contains '..'"
-#pragma warning(disable:4702) //Dissable "unrelachable code"
-#pragma warning(disable:4255) //Dissable "no function prototype given: converting '()' to '(void)"  
-#pragma warning(disable:5045) //Dissable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
-#pragma warning(disable:4201) //Dissable "nonstandard extension used: nameless struct/union" 
-#pragma warning(disable:4296) //Dissable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
-#pragma warning(disable:4996) //Dissable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
+#pragma warning(error:4324)   //error "structure was padded due to alignment specifier" (when using explicit modifier to align struct)
+#pragma warning(disable:4464) //Disable "relative include path contains '..'"
+#pragma warning(disable:4702) //Disable "unreachable code"
+#pragma warning(disable:4255) //Disable "no function prototype given: converting '()' to '(void)"  
+#pragma warning(disable:5045) //Disable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
+#pragma warning(disable:4201) //Disable "nonstandard extension used: nameless struct/union" 
+#pragma warning(disable:4296) //Disable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
+#pragma warning(disable:4996) //Disable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
+#pragma warning(disable:6255) //Disable use _malloca instead of _alloca.
+
 
 #define EXTERNAL static
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
 #define JOT_COUPLED
+#define HASH_DEBUG 0
 #define RUN_TESTS
 //#define RUN_JUST_TESTS
 //#define DO_PROFILE 0
 //#include "mdump.h"
 
+#include "lib/assert.h"
+#include "lib/profile.h"
 #include "lib/string.h"
 #include "lib/platform.h"
 #include "lib/allocator.h"
@@ -29,7 +34,6 @@
 #include "lib/random.h"
 #include "lib/math.h"
 #include "lib/guid.h"
-#include "lib/profile.h"
 #include "lib/stable_array.h"
 
 #include "gl_utils/gl.h"
@@ -39,7 +43,7 @@
 #include "format_obj.h"
 #include "image_loader.h"
 #include "todo.h"
-#include "resource_loading.h"
+#include "asset_loading.h"
 #include "camera.h"
 
 #include "glfw/glfw3.h"
@@ -280,26 +284,21 @@ void run_func(void* context);
 void run_test_func(void* context);
 void error_func(void* context, Platform_Sandbox_Error error);
 
+#define PROFILE_NATIVE_OUTPUT "logs/profile.prof"
+#define PROFILE_JSON_OUTPUT "logs/profile.json"
+
 int main()
 {
     platform_init();
     arena_stack_init(scratch_arena_stack(), "scratch arena", 0, 0, 0);
 
-    Malloc_Allocator static_allocator = {0};
-    malloc_allocator_init(&static_allocator, "static allocator");
-    allocator_set_static(&static_allocator.allocator);
-    
-    Malloc_Allocator malloc_allocator = {0};
-    malloc_allocator_init(&malloc_allocator, "fallback allocator");
-
-    profile_init(&malloc_allocator.allocator);
+    TEST(profile_init(PROFILE_NATIVE_OUTPUT));
 
     File_Logger file_logger = {0};
-    //error_system_init(&static_allocator.allocator);
-    file_logger_init_use(&file_logger, &malloc_allocator.allocator, "logs");
+    file_logger_init_use(&file_logger, allocator_get_malloc(), "logs");
 
     Debug_Allocator debug_alloc = {0};
-    debug_allocator_init_use(&debug_alloc, &malloc_allocator.allocator, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
+    debug_allocator_init_use(&debug_alloc, allocator_get_malloc(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
     #ifdef RUN_TESTS
     platform_exception_sandbox(
@@ -314,13 +313,6 @@ int main()
     if(quit)
         return 0;
 
-    GLFWallocator allocator = {0};
-    allocator.allocate = glfw_malloc_func;
-    allocator.reallocate = glfw_realloc_func;
-    allocator.deallocate = glfw_free_func;
-    allocator.user = &malloc_allocator;
- 
-    glfwInitAllocator(&allocator);
     glfwSetErrorCallback(glfw_error_func);
     TEST(glfwInit(), "Failed to init glfw");
 
@@ -353,19 +345,6 @@ int main()
     platform_exception_sandbox(
         run_func, window, 
         error_func, window);
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
-    debug_allocator_deinit(&debug_alloc);
-    
-    file_logger_deinit(&file_logger);
-    //error_system_deinit();
-
-    //@TODO: fix
-    ASSERT(malloc_allocator.bytes_allocated == 0);
-    malloc_allocator_deinit(&malloc_allocator);
-    platform_deinit();
 
     return 0;    
 }
@@ -470,7 +449,7 @@ void process_first_person_input(App_State* app, f64 start_frame_time)
             settings->fov = app->zoom_target_fov;
     }
             
-    PROFILE_END(input_counter);
+    PROFILE_STOP(input_counter);
 }
 
 Mat4 mat4_from_transform(Transform trans)
@@ -536,7 +515,7 @@ GL_Shader_Block_Info shader_storage_block_make(GLuint program_handle, const char
     GLuint index = glGetProgramResourceIndex(program_handle, GL_SHADER_STORAGE_BLOCK, name);
 
     //GLenum queried_properties[] = {GL_BUFFER_DATA_SIZE};
-    //glGetProgramResourceiv(program_handle, GL_SHADER_STORAGE_BUFFER, out.index, ARRAY_SIZE(queried_properties), queried_properties, 1, NULL, &out.buffer_size);
+    //glGetProgramResourceiv(program_handle, GL_SHADER_STORAGE_BUFFER, out.index, ARRAY_LEN(queried_properties), queried_properties, 1, NULL, &out.buffer_size);
 
     glShaderStorageBlockBinding(program_handle, index, binding_point);
 
@@ -862,71 +841,74 @@ void render_texture_manager_init(Render_Texture_Manager* manager, Allocator* all
 
 void render_texture_manager_add_default_resolutions(Render_Texture_Manager* manager, f64 fraction_of_remaining_memory_budget)
 {
-    isize remaining_budget = manager->memory_budget - manager->memory_used;
-    LOG_INFO("render", "Adding default resolutions for %lf of remainign memory budget (%s) Using %s / %s", 
-        fraction_of_remaining_memory_budget, format_bytes(remaining_budget).data, format_bytes(manager->memory_used).data, format_bytes(manager->memory_budget).data);
-
-    Pixel_Type pixel_type = PIXEL_TYPE_U8;
-    i32 channel_counts[4] = {1, 2, 3, 0};
-
-    //These act like proportions rather than final counts because we still have the memory budget to worry about!
-    i32 layer_counts[20] = {0};
-    layer_counts[int_log2_lower_bound(32)] = 128;
-    layer_counts[int_log2_lower_bound(64)] = 128;
-    layer_counts[int_log2_lower_bound(128)] = 128;
-    layer_counts[int_log2_lower_bound(256)] = 128;
-    layer_counts[int_log2_lower_bound(512)] = 32;
-    layer_counts[int_log2_lower_bound(1024)] = 32;
-    layer_counts[int_log2_lower_bound(2048)] = 16;
-    layer_counts[int_log2_lower_bound(4096)] = 8;
-
-    isize combined_layer_size = 0;
-    for(isize i = 0; i < ARRAY_SIZE(layer_counts); i++)
+    PROFILE_SCOPE() 
     {
-        i32 size = 1 << i;
-        i32 layers = layer_counts[i];
-        combined_layer_size += size*size*layers;
-    }
-    
-    isize combined_channel_count = 0;
-    for(isize i = 0; i < ARRAY_SIZE(channel_counts); i++)
-        combined_channel_count += channel_counts[i];
+        isize remaining_budget = manager->memory_budget - manager->memory_used;
+        LOG_INFO("render", "Adding default resolutions for %lf of remainign memory budget (%s) Using %s / %s", 
+            fraction_of_remaining_memory_budget, format_bytes(remaining_budget).data, format_bytes(manager->memory_used).data, format_bytes(manager->memory_budget).data);
 
-    isize ideal_total_size = combined_channel_count * combined_layer_size * pixel_type_size(pixel_type);
-    isize desired_total_size = (isize) (remaining_budget * fraction_of_remaining_memory_budget);
-    
-    f64 scaling_factor = (f64) desired_total_size / (f64) ideal_total_size;
-    
-    log_indent();
-    isize combined_size = 0;
-    for(i32 j = 0; j < ARRAY_SIZE(channel_counts); j++)
-    {
-        for(i32 i = 0; i < ARRAY_SIZE(layer_counts); i++)
+        Pixel_Type pixel_type = PIXEL_TYPE_U8;
+        i32 channel_counts[4] = {1, 2, 3, 0};
+
+        //These act like proportions rather than final counts because we still have the memory budget to worry about!
+        i32 layer_counts[20] = {0};
+        layer_counts[int_log2_lower_bound(32)] = 128;
+        layer_counts[int_log2_lower_bound(64)] = 128;
+        layer_counts[int_log2_lower_bound(128)] = 128;
+        layer_counts[int_log2_lower_bound(256)] = 128;
+        layer_counts[int_log2_lower_bound(512)] = 32;
+        layer_counts[int_log2_lower_bound(1024)] = 32;
+        layer_counts[int_log2_lower_bound(2048)] = 16;
+        layer_counts[int_log2_lower_bound(4096)] = 8;
+
+        isize combined_layer_size = 0;
+        for(isize i = 0; i < ARRAY_LEN(layer_counts); i++)
         {
             i32 size = 1 << i;
-            i32 channels = channel_counts[j];
             i32 layers = layer_counts[i];
-            i32 scaled_layers = (i32) ((f64) layers * scaling_factor);
-            if(scaled_layers == 0 && layers != 0)
-            {
-                LOG_WARN("render", "skipped resolution %d x %d because number of layers got rounded to zero!", size, size);
-            }
+            combined_layer_size += size*size*layers;
+        }
+    
+        isize combined_channel_count = 0;
+        for(isize i = 0; i < ARRAY_LEN(channel_counts); i++)
+            combined_channel_count += channel_counts[i];
 
-            if(layers && channels)
+        isize ideal_total_size = combined_channel_count * combined_layer_size * pixel_type_size(pixel_type);
+        isize desired_total_size = (isize) (remaining_budget * fraction_of_remaining_memory_budget);
+    
+        f64 scaling_factor = (f64) desired_total_size / (f64) ideal_total_size;
+    
+        log_indent();
+        isize combined_size = 0;
+        for(i32 j = 0; j < ARRAY_LEN(channel_counts); j++)
+        {
+            for(i32 i = 0; i < ARRAY_LEN(layer_counts); i++)
             {
-                i32 grow_by = layers / 8;
+                i32 size = 1 << i;
+                i32 channels = channel_counts[j];
+                i32 layers = layer_counts[i];
+                i32 scaled_layers = (i32) ((f64) layers * scaling_factor);
+                if(scaled_layers == 0 && layers != 0)
+                {
+                    LOG_WARN("render", "skipped resolution %d x %d because number of layers got rounded to zero!", size, size);
+                }
+
+                if(layers && channels)
+                {
+                    i32 grow_by = layers / 8;
             
-                i32 resolution_bytes_size = size*size*scaled_layers*channels;
-                combined_size += resolution_bytes_size;
+                    i32 resolution_bytes_size = size*size*scaled_layers*channels;
+                    combined_size += resolution_bytes_size;
             
 
-                render_texture_manager_add_resolution(manager, size, size, scaled_layers, grow_by, PIXEL_TYPE_U8, channels);
+                    render_texture_manager_add_resolution(manager, size, size, scaled_layers, grow_by, PIXEL_TYPE_U8, channels);
+                }
             }
         }
-    }
-    log_outdent();
+        log_outdent();
 
-    LOG_WARN("render", "using %s combined RAM on textures", format_bytes(combined_size).data);
+        LOG_WARN("render", "using %s combined RAM on textures", format_bytes(combined_size).data);
+    }
 }
 
 typedef enum Found_Type{
@@ -938,93 +920,92 @@ typedef enum Found_Type{
 
 Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager, Found_Type* found_type_or_null, i32 width, i32 height, Pixel_Type type, i32 channel_count, bool used)
 {
-    PROFILE_START(render_texture_manager_find_counter);
     Render_Texture_Layer out = {0};
-
-    bool state = false;
-    i32 max_dim = MAX(width, height);
-    i32 min_dim = MIN(width, height);
-    isize needed_size = width * height;
-
-    Found_Type found_type = NOT_FOUND;
-
-    if(max_dim > 0)
+    PROFILE_SCOPE() 
     {
-        //Simple for loop to find a best fit in terms of space wasted 
-        // because this will not be called very often.
-        isize min_diff = INT64_MAX;
-        isize min_diff_index = -1;
-        for(isize i = 0; i < manager->resolutions.len; i++)
-        {
-            Render_Texture_Resolution* resolution = &manager->resolutions.data[i];
-            GL_Texture_Array* array = &resolution->array;
-            isize max_layer_dim = MAX(array->width, array->height);
-            isize min_layer_dim = MIN(array->width, array->height);
+        bool state = false;
+        i32 max_dim = MAX(width, height);
+        i32 min_dim = MIN(width, height);
+        isize needed_size = width * height;
 
-            //The layer must have:
-            // 1) image_fits: big enough (can be rotated) @TODO: IMPLEMENT FURTHER DOWN!
-            // 2) format_fits: the pixel format is the same and the number of channels is big enough
-            // 3) has_space: needs to not be full or not be empty based on what we are looking for.
-            bool image_fits = max_layer_dim >= max_dim && min_layer_dim >= min_dim;
-            bool format_fits = array->type == type && array->channel_count >= channel_count;
-            bool has_space = true;
+        Found_Type found_type = NOT_FOUND;
+
+        if(max_dim > 0)
+        {
+            //Simple for loop to find a best fit in terms of space wasted 
+            // because this will not be called very often.
+            isize min_diff = INT64_MAX;
+            isize min_diff_index = -1;
+            for(isize i = 0; i < manager->resolutions.len; i++)
+            {
+                Render_Texture_Resolution* resolution = &manager->resolutions.data[i];
+                GL_Texture_Array* array = &resolution->array;
+                isize max_layer_dim = MAX(array->width, array->height);
+                isize min_layer_dim = MIN(array->width, array->height);
+
+                //The layer must have:
+                // 1) image_fits: big enough (can be rotated) @TODO: IMPLEMENT FURTHER DOWN!
+                // 2) format_fits: the pixel format is the same and the number of channels is big enough
+                // 3) has_space: needs to not be full or not be empty based on what we are looking for.
+                bool image_fits = max_layer_dim >= max_dim && min_layer_dim >= min_dim;
+                bool format_fits = array->type == type && array->channel_count >= channel_count;
+                bool has_space = true;
          
-            if(used == false)
-                has_space = resolution->used_layers != resolution->layers.len;
-            else
-                has_space = resolution->used_layers != 0;
+                if(used == false)
+                    has_space = resolution->used_layers != resolution->layers.len;
+                else
+                    has_space = resolution->used_layers != 0;
 
-            if(image_fits && format_fits && has_space)
-            {
-                isize layer_size = array->width * array->height;
-                isize size_diff = layer_size - needed_size;
-                isize channel_diff = array->channel_count - channel_count;
-                ASSERT(size_diff >= 0);
-
-                //If number of channels dont match we effectively also waste all the other channels 
-                // on that layer
-                size_diff += channel_diff*layer_size;
-                ASSERT(size_diff >= 0);
-
-                if(min_diff > size_diff)
+                if(image_fits && format_fits && has_space)
                 {
-                    min_diff = size_diff;
-                    min_diff_index = i;
+                    isize layer_size = array->width * array->height;
+                    isize size_diff = layer_size - needed_size;
+                    isize channel_diff = array->channel_count - channel_count;
+                    ASSERT(size_diff >= 0);
+
+                    //If number of channels dont match we effectively also waste all the other channels 
+                    // on that layer
+                    size_diff += channel_diff*layer_size;
+                    ASSERT(size_diff >= 0);
+
+                    if(min_diff > size_diff)
+                    {
+                        min_diff = size_diff;
+                        min_diff_index = i;
+                    }
                 }
             }
-        }
         
-        //If was found
-        if(min_diff_index != -1)
-        {
-            Render_Texture_Resolution* resolution = &manager->resolutions.data[min_diff_index];
-            if(min_diff == 0)
-                found_type = FOUND_EXACT;
-            else if(resolution->array.type == type)
-                found_type = FOUND_APPROXIMATE;
-            else
-                found_type = FOUND_APPROXIMATE_BAD_FORMAT;
-
-            out.resolution_index = (i32) min_diff_index + 1;
-            out.layer = -1;
-            for(isize i = 0; i < resolution->layers.len; i++)
+            //If was found
+            if(min_diff_index != -1)
             {
-                if(resolution->layers.data[i].is_used == used)
+                Render_Texture_Resolution* resolution = &manager->resolutions.data[min_diff_index];
+                if(min_diff == 0)
+                    found_type = FOUND_EXACT;
+                else if(resolution->array.type == type)
+                    found_type = FOUND_APPROXIMATE;
+                else
+                    found_type = FOUND_APPROXIMATE_BAD_FORMAT;
+
+                out.resolution_index = (i32) min_diff_index + 1;
+                out.layer = -1;
+                for(isize i = 0; i < resolution->layers.len; i++)
                 {
-                    out.layer = (i32) i;
-                    break;
+                    if(resolution->layers.data[i].is_used == used)
+                    {
+                        out.layer = (i32) i;
+                        break;
+                    }
                 }
+
+                ASSERT(out.layer != -1, "The resolution->used_layers must be wrong!");
+                state = true;
             }
-
-            ASSERT(out.layer != -1, "The resolution->used_layers must be wrong!");
-            state = true;
         }
+
+        if(found_type_or_null)
+            *found_type_or_null = found_type;
     }
-
-    if(found_type_or_null)
-        *found_type_or_null = found_type;
-
-    PROFILE_END(render_texture_manager_find_counter);
     return out;
 }
 
@@ -1039,40 +1020,45 @@ Render_Texture_Layer render_texture_manager_find(Render_Texture_Manager* manager
 
 Render_Texture_Layer render_texture_manager_add(Render_Texture_Manager* manager, Image image, String name)
 {
-    Found_Type found_type = NOT_FOUND;
-    Render_Texture_Layer empty_slot = render_texture_manager_find(manager, &found_type, image.width, image.height, (Pixel_Type) image.type, image_channel_count(image), false);
+    Render_Texture_Layer empty_slot = {0};
 
-    LOG_INFO("render", "adding texture %d x %d : %s x %d", image.width, image.height, pixel_type_name(image.type), image_channel_count(image));
-
-    if(empty_slot.resolution_index <= 0)
-        LOG_ERROR(">render", "render_texture_manager_add() Unable to find empty slot! ");
-    else
+    PROFILE_SCOPE() 
     {
-        Render_Texture_Resolution* resolution = &manager->resolutions.data[empty_slot.resolution_index - 1];
-        LOG_DEBUG(">render", "added to resolution #%d layer #%d", empty_slot.resolution_index, empty_slot.layer + 1);
+        Found_Type found_type = NOT_FOUND;
+        empty_slot = render_texture_manager_find(manager, &found_type, image.width, image.height, (Pixel_Type) image.type, image_channel_count(image), false);
 
-        if(found_type == FOUND_APPROXIMATE)
+        LOG_INFO("render", "adding texture %d x %d : %s x %d", image.width, image.height, pixel_type_name(image.type), image_channel_count(image));
+
+        if(empty_slot.resolution_index <= 0)
+            LOG_ERROR(">render", "render_texture_manager_add() Unable to find empty slot! ");
+        else
         {
-            LOG_WARN(">render", "Found only approximate match!");
-            LOG_WARN(">render", "resolution %d x %d : %s x %d", resolution->array.width, resolution->array.height, pixel_type_name(resolution->array.type), resolution->array.channel_count);
-        }
+            Render_Texture_Resolution* resolution = &manager->resolutions.data[empty_slot.resolution_index - 1];
+            LOG_DEBUG(">render", "added to resolution #%d layer #%d", empty_slot.resolution_index, empty_slot.layer + 1);
+
+            if(found_type == FOUND_APPROXIMATE)
+            {
+                LOG_WARN(">render", "Found only approximate match!");
+                LOG_WARN(">render", "resolution %d x %d : %s x %d", resolution->array.width, resolution->array.height, pixel_type_name(resolution->array.type), resolution->array.channel_count);
+            }
             
-        if(found_type == FOUND_APPROXIMATE_BAD_FORMAT)
-        {
-            LOG_WARN(">render", "Found only approximate match with wrong format!");
-            LOG_WARN(">render", "resolution %d x %d : %s x %d", resolution->array.width, resolution->array.height, pixel_type_name(resolution->array.type), resolution->array.channel_count);
+            if(found_type == FOUND_APPROXIMATE_BAD_FORMAT)
+            {
+                LOG_WARN(">render", "Found only approximate match with wrong format!");
+                LOG_WARN(">render", "resolution %d x %d : %s x %d", resolution->array.width, resolution->array.height, pixel_type_name(resolution->array.type), resolution->array.channel_count);
+            }
+
+            resolution->used_layers += 1;
+
+            Render_Texture_Layer_Info* layer_info = &resolution->layers.data[empty_slot.layer];
+            layer_info->is_used = true;
+            layer_info->used_width = image.width;
+            layer_info->used_height = image.height;
+            layer_info->name = name_make(name);
+
+            bool fill_state = gl_texture_array_fill_layer(&resolution->array, empty_slot.layer, image, false);
+            ASSERT(fill_state);
         }
-
-        resolution->used_layers += 1;
-
-        Render_Texture_Layer_Info* layer_info = &resolution->layers.data[empty_slot.layer];
-        layer_info->is_used = true;
-        layer_info->used_width = image.width;
-        layer_info->used_height = image.height;
-        layer_info->name = name_make(name);
-
-        bool fill_state = gl_texture_array_fill_layer(&resolution->array, empty_slot.layer, image, false);
-        ASSERT(fill_state);
     }
 
     return empty_slot;
@@ -1100,8 +1086,6 @@ typedef enum Vertex_Index_Type {
     VERTEX_INDEX_TYPE_U32,
     VERTEX_INDEX_TYPE_U16,
 } Vertex_Index_Type;
-
-
 
 
 typedef struct Render_Info {
@@ -1182,67 +1166,73 @@ typedef Array(Render_Geometry_Batch) Render_Geometry_Batch_Array;
 
 void render_geometry_batch_init(Render_Geometry_Batch* mesh, Allocator* alloc, isize vertex_count, isize index_count, GLuint instance_buffer)
 {
-    memset(mesh, 0, sizeof* mesh);
-
-    array_init(&mesh->groups, alloc);
-
-    glGenVertexArrays(1, &mesh->vertex_array_handle);
-    glGenBuffers(1, &mesh->vertex_buffer_handle);
-    glGenBuffers(1, &mesh->index_buffer_handle);
-  
-    glBindVertexArray(mesh->vertex_array_handle);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->vertex_buffer_handle);
-    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(Vertex), NULL, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->index_buffer_handle);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * sizeof(i32), NULL, GL_STATIC_DRAW);
-    
-    i32 i = 0;
-    i++; glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
-    i++; glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
-    i++; glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
-    i++; glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tan));
-    
-    glEnableVertexAttribArray(0);	
-    glEnableVertexAttribArray(1);	
-    glEnableVertexAttribArray(2);	
-    glEnableVertexAttribArray(4);	
-
-    if(instance_buffer)
+    PROFILE_SCOPE() 
     {
-        enum {model_slot = 4};
+        memset(mesh, 0, sizeof* mesh);
 
+        array_init(&mesh->groups, alloc);
+
+        glGenVertexArrays(1, &mesh->vertex_array_handle);
+        glGenBuffers(1, &mesh->vertex_buffer_handle);
+        glGenBuffers(1, &mesh->index_buffer_handle);
+  
         glBindVertexArray(mesh->vertex_array_handle);
-        glBindBuffer(GL_ARRAY_BUFFER, instance_buffer);
-        i++; glVertexAttribPointer(model_slot + 0, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[0]));
-        i++; glVertexAttribPointer(model_slot + 1, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[1]));
-        i++; glVertexAttribPointer(model_slot + 2, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[2]));
-        i++; glVertexAttribPointer(model_slot + 3, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[3]));
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->vertex_buffer_handle);
+        glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(Vertex), NULL, GL_STATIC_DRAW);
 
-        glEnableVertexAttribArray(model_slot + 0);	
-        glEnableVertexAttribArray(model_slot + 1);	
-        glEnableVertexAttribArray(model_slot + 2);	
-        glEnableVertexAttribArray(model_slot + 3);	
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->index_buffer_handle);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * sizeof(i32), NULL, GL_STATIC_DRAW);
     
-        glVertexAttribDivisor(model_slot + 0, 1);  
-        glVertexAttribDivisor(model_slot + 1, 1);  
-        glVertexAttribDivisor(model_slot + 2, 1);  
-        glVertexAttribDivisor(model_slot + 3, 1);  
+        i32 i = 0;
+        i++; glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+        i++; glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+        i++; glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, norm));
+        i++; glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tan));
+    
+        glEnableVertexAttribArray(0);	
+        glEnableVertexAttribArray(1);	
+        glEnableVertexAttribArray(2);	
+        glEnableVertexAttribArray(4);	
+
+        if(instance_buffer)
+        {
+            enum {model_slot = 4};
+
+            glBindVertexArray(mesh->vertex_array_handle);
+            glBindBuffer(GL_ARRAY_BUFFER, instance_buffer);
+            i++; glVertexAttribPointer(model_slot + 0, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[0]));
+            i++; glVertexAttribPointer(model_slot + 1, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[1]));
+            i++; glVertexAttribPointer(model_slot + 2, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[2]));
+            i++; glVertexAttribPointer(model_slot + 3, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)offsetof(Mat4, col[3]));
+
+            glEnableVertexAttribArray(model_slot + 0);	
+            glEnableVertexAttribArray(model_slot + 1);	
+            glEnableVertexAttribArray(model_slot + 2);	
+            glEnableVertexAttribArray(model_slot + 3);	
+    
+            glVertexAttribDivisor(model_slot + 0, 1);  
+            glVertexAttribDivisor(model_slot + 1, 1);  
+            glVertexAttribDivisor(model_slot + 2, 1);  
+            glVertexAttribDivisor(model_slot + 3, 1);  
+        }
+
+        mesh->num_vertex_attributes = i;
+        mesh->vertex_count = (i32) vertex_count;
+        mesh->index_count = (i32) index_count;
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        gl_check_error();
     }
-
-    mesh->num_vertex_attributes = i;
-    mesh->vertex_count = (i32) vertex_count;
-    mesh->index_count = (i32) index_count;
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    gl_check_error();
 }
 
 void render_geometry_batch_set_data(Render_Geometry_Batch* mesh, const Vertex vertices[], i32 vertex_count, i32 vertex_offset, const i32 indices[], i32 index_count, i32 index_offset)
 {
-    glNamedBufferSubData(mesh->vertex_buffer_handle, sizeof(Vertex)*vertex_offset, sizeof(Vertex)*vertex_count, vertices);
-    glNamedBufferSubData(mesh->index_buffer_handle, sizeof(i32)*index_offset, sizeof(i32)*index_count, indices);
+    PROFILE_SCOPE() 
+    {
+        glNamedBufferSubData(mesh->vertex_buffer_handle, sizeof(Vertex)*vertex_offset, sizeof(Vertex)*vertex_count, vertices);
+        glNamedBufferSubData(mesh->index_buffer_handle, sizeof(i32)*index_offset, sizeof(i32)*index_count, indices);
+    }
 }
 
 typedef struct GL_Buffer {
@@ -1256,13 +1246,16 @@ typedef struct GL_Buffer {
 GL_Buffer gl_buffer_make(isize item_size, isize item_count, const void* data_or_null, bool is_static_draw)
 {
     GL_Buffer out = {0};
-    out.item_size = (i32) item_size;
-    out.item_count = (i32) item_count;
-    out.is_static_draw = is_static_draw;
-    out.byte_size = item_size*item_count;
+    PROFILE_SCOPE() 
+    {
+        out.item_size = (i32) item_size;
+        out.item_count = (i32) item_count;
+        out.is_static_draw = is_static_draw;
+        out.byte_size = item_size*item_count;
 
-    glCreateBuffers(1, &out.handle);
-    glNamedBufferData(out.handle, out.byte_size, data_or_null, is_static_draw ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
+        glCreateBuffers(1, &out.handle);
+        glNamedBufferData(out.handle, out.byte_size, data_or_null, is_static_draw ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
+    }
 
     return out;
 }
@@ -1303,111 +1296,117 @@ void render_geometry_manager_init(Render_Geometry_Manager* manager, Allocator* a
 Render_Geometry_Batch_Index render_geometry_manager_find(Render_Geometry_Manager* manager, String name)
 {
     Render_Geometry_Batch_Index out = {0};
-    Name n = name_make(name);
-    for(isize k = 0; k < manager->batches.len; k++)
+    
+    PROFILE_SCOPE() 
     {
-        Render_Geometry_Batch* batch = &manager->batches.data[k];
-        for(isize i = 0; i < batch->groups.len; i++)
+        Name n = name_make(name);
+        for(isize k = 0; k < manager->batches.len; k++)
         {
-            Render_Geometry_Batch_Group* group = &batch->groups.data[i];
-            if(name_is_equal(&group->name, &n))
+            Render_Geometry_Batch* batch = &manager->batches.data[k];
+            for(isize i = 0; i < batch->groups.len; i++)
             {
-                out.index_from = group->index_from;
-                out.index_count = group->index_count;
-                out.vertex_from = group->vertex_from;
-                out.vertex_count = group->vertex_count;
-                out.batch_index = (i32) k + 1;
-                goto function_end;
+                Render_Geometry_Batch_Group* group = &batch->groups.data[i];
+                if(name_is_equal(&group->name, &n))
+                {
+                    out.index_from = group->index_from;
+                    out.index_count = group->index_count;
+                    out.vertex_from = group->vertex_from;
+                    out.vertex_count = group->vertex_count;
+                    out.batch_index = (i32) k + 1;
+                    goto function_end;
+                }
             }
         }
+        function_end:;
     }
-
-    function_end:
     return out;
 }
 
 i32 render_geometry_manager_add_batch(Render_Geometry_Manager* manager, isize min_vertex_count, isize min_index_count)
 {
-    isize vertex_count = MAX(manager->def_batch_vertex_size, min_vertex_count);
-    isize index_count = MAX(manager->def_batch_index_size, min_index_count);
-
-    isize memory_requirement = min_vertex_count * sizeof(Vertex) + min_index_count * sizeof(i32);
-
-    if(manager->used_memory >= manager->memory_limit * 3/4)
-        LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", format_bytes(manager->used_memory).data, format_bytes(manager->memory_limit).data);
-    
     i32 out = 0;
-    if(memory_requirement + manager->used_memory <= manager->memory_limit)
+    PROFILE_SCOPE() 
     {
-        LOG_INFO("render", "creating new geometry batch %i:%i", (int) vertex_count, (int) index_count);
-        Render_Geometry_Batch batch = {0};
-        render_geometry_batch_init(&batch, manager->allocator, vertex_count, index_count, manager->instance_buffer->handle);
-        manager->used_memory += memory_requirement;
+        isize vertex_count = MAX(manager->def_batch_vertex_size, min_vertex_count);
+        isize index_count = MAX(manager->def_batch_index_size, min_index_count);
 
-        array_push(&manager->batches, batch);
-        out = (i32) manager->batches.len;
-    }
-    else
-    {
-        LOG_ERROR("render", "Not enough memory");
+        isize memory_requirement = min_vertex_count * sizeof(Vertex) + min_index_count * sizeof(i32);
+
+        if(manager->used_memory >= manager->memory_limit * 3/4)
+            LOG_WARN("render", "Geometry manager nearly out of memory. Using %s out of %s", format_bytes(manager->used_memory).data, format_bytes(manager->memory_limit).data);
+    
+        if(memory_requirement + manager->used_memory <= manager->memory_limit)
+        {
+            LOG_INFO("render", "creating new geometry batch %i:%i", (int) vertex_count, (int) index_count);
+            Render_Geometry_Batch batch = {0};
+            render_geometry_batch_init(&batch, manager->allocator, vertex_count, index_count, manager->instance_buffer->handle);
+            manager->used_memory += memory_requirement;
+
+            array_push(&manager->batches, batch);
+            out = (i32) manager->batches.len;
+        }
+        else
+        {
+            LOG_ERROR("render", "Not enough memory");
+        }
     }
     return out;
 }
 
 Render_Geometry_Batch_Index render_geometry_manager_add(Render_Geometry_Manager* manager, const Vertex vertices[], isize vertex_count, const i32 indices[], isize index_count, String name)
 {
-    
-
-    i32 batch_index = 0;
-    for(isize i = 0; i < manager->batches.len; i++)
+    Render_Geometry_Batch_Index out = {0};
+    PROFILE_SCOPE() 
     {
-        Render_Geometry_Batch* batch = &manager->batches.data[i];
-        if(batch->used_index_count + index_count <= batch->index_count && batch->used_vertex_count + vertex_count <= batch->vertex_count)
+        i32 batch_index = 0;
+        for(isize i = 0; i < manager->batches.len; i++)
         {
-            batch_index = (i32) i + 1;
-            break;
+            Render_Geometry_Batch* batch = &manager->batches.data[i];
+            if(batch->used_index_count + index_count <= batch->index_count && batch->used_vertex_count + vertex_count <= batch->vertex_count)
+            {
+                batch_index = (i32) i + 1;
+                break;
+            }
+        }
+    
+        if(batch_index == 0)
+        {
+            log_indent();
+            batch_index = render_geometry_manager_add_batch(manager, vertex_count, index_count);
+            log_outdent();
+        }
+
+        if(batch_index)
+        {
+            Render_Geometry_Batch* batch = &manager->batches.data[batch_index - 1];
+            Render_Geometry_Batch_Group group = {0};
+            group.index_from = batch->used_index_count;
+            group.index_count = (i32) index_count;
+        
+            group.vertex_from = batch->used_vertex_count;
+            group.vertex_count = (i32) vertex_count;
+
+            group.name = name_make(name);
+
+            batch->used_index_count += (i32) index_count;
+            batch->used_vertex_count += (i32) vertex_count;
+
+            render_geometry_batch_set_data(batch, vertices, group.vertex_count, group.vertex_from, indices, group.index_count, group.index_from);
+
+            out.index_from = group.index_from;
+            out.index_count = group.index_count;
+            out.vertex_from = group.vertex_from;
+            out.vertex_count = group.vertex_count;
+            out.batch_index = batch_index;
+            LOG_INFO("render", "render_geometry_manager_add() '%.*s' %i:%i (vertex:index) added to batch #%i", STRING_PRINT(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
+
+            array_push(&batch->groups, group);
+        }
+        else
+        {
+            LOG_ERROR("render", "render_geometry_manager_add() '%.*s' %i:%i (vertex:index) failed", STRING_PRINT(name), (int) vertex_count, (int) index_count);
         }
     }
-    
-    if(batch_index == 0)
-    {
-        log_indent();
-        batch_index = render_geometry_manager_add_batch(manager, vertex_count, index_count);
-        log_outdent();
-    }
-
-    Render_Geometry_Batch_Index out = {0};
-    if(batch_index)
-    {
-        Render_Geometry_Batch* batch = &manager->batches.data[batch_index - 1];
-        Render_Geometry_Batch_Group group = {0};
-        group.index_from = batch->used_index_count;
-        group.index_count = (i32) index_count;
-        
-        group.vertex_from = batch->used_vertex_count;
-        group.vertex_count = (i32) vertex_count;
-
-        group.name = name_make(name);
-
-        batch->used_index_count += (i32) index_count;
-        batch->used_vertex_count += (i32) vertex_count;
-
-        render_geometry_batch_set_data(batch, vertices, group.vertex_count, group.vertex_from, indices, group.index_count, group.index_from);
-
-        out.index_from = group.index_from;
-        out.index_count = group.index_count;
-        out.vertex_from = group.vertex_from;
-        out.vertex_count = group.vertex_count;
-        out.batch_index = batch_index;
-        LOG_INFO("render", "render_geometry_manager_add() '%.*s' %i:%i (vertex:index) added to batch #%i", STRING_PRINT(name), (int) vertex_count, (int) index_count, (int) out.batch_index);
-
-        array_push(&batch->groups, group);
-    }
-    else
-    {
-        LOG_ERROR("render", "render_geometry_manager_add() '%.*s' %i:%i (vertex:index) failed", STRING_PRINT(name), (int) vertex_count, (int) index_count);
-    }
-
     return out;
 }
 
@@ -1714,101 +1713,103 @@ Render_Environment render_environment_find(Render* render, String name, Id id);
 
 void render_queue_init(Render_Queue* buffers, Allocator* allocator, isize total_byte_size)
 {
-    allocator = allocator ? allocator : allocator_get_default();
+    PROFILE_SCOPE() 
+    {
+        allocator = allocator ? allocator : allocator_get_default();
 
-    isize command_bytes = (isize) (total_byte_size * 0.75);
-    isize material_bytes = (isize) (total_byte_size * 0.10);
-    isize geometry_bytes = (isize) (total_byte_size * 0.10);
-    isize environemnt_bytes = total_byte_size - command_bytes - material_bytes - geometry_bytes; // * 0.05
+        isize command_bytes = (isize) (total_byte_size * 0.75);
+        isize material_bytes = (isize) (total_byte_size * 0.10);
+        isize geometry_bytes = (isize) (total_byte_size * 0.10);
+        isize environemnt_bytes = total_byte_size - command_bytes - material_bytes - geometry_bytes; // * 0.05
 
-    isize command_cound = command_bytes / (sizeof(Mat4) + sizeof(u8) + sizeof(Render_Command_Expanded));
-    isize material_count = material_bytes / sizeof(Render_Material);
-    isize geometry_count = geometry_bytes / sizeof(Render_Geometry);
-    isize environemnt_count = environemnt_bytes / sizeof(Render_Environment);
+        isize command_cound = command_bytes / (sizeof(Mat4) + sizeof(u8) + sizeof(Render_Command_Expanded));
+        isize material_count = material_bytes / sizeof(Render_Material);
+        isize geometry_count = geometry_bytes / sizeof(Render_Geometry);
+        isize environemnt_count = environemnt_bytes / sizeof(Render_Environment);
 
-    //If you dont want these arrays to grow you can give failing allocator.
-    array_init_with_capacity(&buffers->masks, allocator, command_cound);
-    array_init_with_capacity(&buffers->transforms, allocator, command_cound);
-    array_init_with_capacity(&buffers->expanded, allocator, command_cound);
-    array_init_with_capacity(&buffers->materials, allocator, material_count);
-    array_init_with_capacity(&buffers->geometries, allocator, geometry_count);
-    array_init_with_capacity(&buffers->environments, allocator, environemnt_count);
-    array_init_with_capacity(&buffers->mono_queue, allocator, command_cound);
+        //If you dont want these arrays to grow you can give failing allocator.
+        array_init_with_capacity(&buffers->masks, allocator, command_cound);
+        array_init_with_capacity(&buffers->transforms, allocator, command_cound);
+        array_init_with_capacity(&buffers->expanded, allocator, command_cound);
+        array_init_with_capacity(&buffers->materials, allocator, material_count);
+        array_init_with_capacity(&buffers->geometries, allocator, geometry_count);
+        array_init_with_capacity(&buffers->environments, allocator, environemnt_count);
+        array_init_with_capacity(&buffers->mono_queue, allocator, command_cound);
+    }
 }
 
 void render_queue_submit_phong(Render* render, const Render_Phong_Command* command)
 {
     Render_Queue* buffers = &render->render_queue;
-    PROFILE_START(render_queue_submit);
+    {
+        //#if defined(DO_MONO_RENDER_QUEUE)
+
+        //array_push(&buffers->mono_queue, *command);
+
+        #if defined(DO_MONO_EXPANDED_QUEUE)
+
+        Render_Geometry* geometry = render_geometry_get(render, command->geometry);
+        Render_Material* material = render_material_get(render, command->material);
+        Render_Environment* environment = render_environment_get(render, command->environment);
     
-    //#if defined(DO_MONO_RENDER_QUEUE)
-
-    //array_push(&buffers->mono_queue, *command);
-
-    #if defined(DO_MONO_EXPANDED_QUEUE)
-
-    Render_Geometry* geometry = render_geometry_get(render, command->geometry);
-    Render_Material* material = render_material_get(render, command->material);
-    Render_Environment* environment = render_environment_get(render, command->environment);
-    
-    if(geometry && material && environment)
-    {
-        i32 geometry_batch_index = geometry->group.batch_index;
-        
-        Render_Command_Expanded expanded = {0};
-        expanded.geometry = geometry;
-        expanded.material = material;
-        expanded.environment = environment;
-        expanded.transform_index = (i32) buffers->transforms.len;
-        expanded.geometry_batch_index = geometry_batch_index;
-
-        array_push(&buffers->transforms, command->transform);
-        array_push(&buffers->expanded, expanded);
-    }
-
-    #else
-    if(buffers->transforms.len == 0)
-    //if(1)
-    {
-        //If empty just add all
-        array_push(&buffers->geometries, command->geometry);
-        array_push(&buffers->materials, command->material);
-        array_push(&buffers->transforms, command->transform);
-        array_push(&buffers->environments, command->environment);
-        array_push(&buffers->masks, (u8) -1);
-    }
-    else
-    {
-        //If not only ad if chnaged. This greatly reduces the size of our buffers thus speeds
-        // the supbsequent expanding and sorting.
-        u8 mask = COMMAND_BUFFER_TRANSFORM_BIT;
-        Render_Geometry_Ptr* last_geometry = array_last(buffers->geometries);
-        Render_Material_Ptr* last_material = array_last(buffers->materials);
-        Render_Environment_Ptr* last_environment = array_last(buffers->environments);
-        if(last_geometry->id != command->geometry.id)
+        if(geometry && material && environment)
         {
+            i32 geometry_batch_index = geometry->group.batch_index;
+        
+            Render_Command_Expanded expanded = {0};
+            expanded.geometry = geometry;
+            expanded.material = material;
+            expanded.environment = environment;
+            expanded.transform_index = (i32) buffers->transforms.len;
+            expanded.geometry_batch_index = geometry_batch_index;
+
+            array_push(&buffers->transforms, command->transform);
+            array_push(&buffers->expanded, expanded);
+        }
+
+        #else
+        if(buffers->transforms.len == 0)
+        //if(1)
+        {
+            //If empty just add all
             array_push(&buffers->geometries, command->geometry);
-            mask |= COMMAND_BUFFER_GEOMETRY_BIT;
-        }
-
-        if(last_material->id != command->material.id)
-        {
             array_push(&buffers->materials, command->material);
-            mask |= COMMAND_BUFFER_MATERIAL_BIT;
-        }
-        
-        if(last_environment->id != command->environment.id)
-        {
+            array_push(&buffers->transforms, command->transform);
             array_push(&buffers->environments, command->environment);
-            mask |= COMMAND_BUFFER_ENVIRONMENT_BIT;
+            array_push(&buffers->masks, (u8) -1);
+        }
+        else
+        {
+            //If not only ad if chnaged. This greatly reduces the size of our buffers thus speeds
+            // the supbsequent expanding and sorting.
+            u8 mask = COMMAND_BUFFER_TRANSFORM_BIT;
+            Render_Geometry_Ptr* last_geometry = array_last(buffers->geometries);
+            Render_Material_Ptr* last_material = array_last(buffers->materials);
+            Render_Environment_Ptr* last_environment = array_last(buffers->environments);
+            if(last_geometry->id != command->geometry.id)
+            {
+                array_push(&buffers->geometries, command->geometry);
+                mask |= COMMAND_BUFFER_GEOMETRY_BIT;
+            }
+
+            if(last_material->id != command->material.id)
+            {
+                array_push(&buffers->materials, command->material);
+                mask |= COMMAND_BUFFER_MATERIAL_BIT;
+            }
+        
+            if(last_environment->id != command->environment.id)
+            {
+                array_push(&buffers->environments, command->environment);
+                mask |= COMMAND_BUFFER_ENVIRONMENT_BIT;
+            }
+
+            array_push(&buffers->transforms, command->transform);
+            array_push(&buffers->masks, mask);
         }
 
-        array_push(&buffers->transforms, command->transform);
-        array_push(&buffers->masks, mask);
+        #endif
     }
-
-    #endif
-    PROFILE_END(render_queue_submit);
 }
 
 void render_queue_expand(Render* render)
@@ -1877,7 +1878,7 @@ void render_queue_expand(Render* render)
 
     if(skipped_meshes_count > 0)
         LOG_WARN("render", "render_queue_expand detected %i / %i are invalid meshes!", (int) skipped_meshes_count, (int) buffers->masks.len);
-    PROFILE_END(render_queue_expand);
+    PROFILE_STOP(render_queue_expand);
 }
 
 void render_queue_clear(Render_Queue* buffers)
@@ -1900,38 +1901,41 @@ typedef struct Render_Memory_Budget {
 
 void render_init(Render* render, Allocator* alloc, GL_Shader* blinn_phong, Render_Memory_Budget mem_budget)
 {
-    render->allocator = alloc ? alloc : allocator_get_default();
+    PROFILE_SCOPE() 
+    {
+        render->allocator = alloc ? alloc : allocator_get_default();
 
-    isize max_num_instances = mem_budget.instance_buffer / (sizeof(Blinn_Phong_Per_Instance) + sizeof(Render_Per_Instance));
-    isize max_num_draws = mem_budget.draw_buffer / (sizeof(Blinn_Phong_Per_Draw) + sizeof(Render_Per_Draw) + sizeof(Gl_Draw_Elements_Indirect_Command));
+        isize max_num_instances = mem_budget.instance_buffer / (sizeof(Blinn_Phong_Per_Instance) + sizeof(Render_Per_Instance));
+        isize max_num_draws = mem_budget.draw_buffer / (sizeof(Blinn_Phong_Per_Draw) + sizeof(Render_Per_Draw) + sizeof(Gl_Draw_Elements_Indirect_Command));
     
-    array_init_with_capacity(&render->blinn_phong_per_instance, render->allocator, max_num_instances);
-    array_init_with_capacity(&render->blinn_phong_per_draw, render->allocator, max_num_draws);
-    array_init_with_capacity(&render->render_per_instance, render->allocator, max_num_instances);
-    array_init_with_capacity(&render->render_per_draw, render->allocator, max_num_draws);
-    array_init_with_capacity(&render->indirect_draws, render->allocator, max_num_draws);
-    //Allocator* failing = allocator_get_failing();
+        array_init_with_capacity(&render->blinn_phong_per_instance, render->allocator, max_num_instances);
+        array_init_with_capacity(&render->blinn_phong_per_draw, render->allocator, max_num_draws);
+        array_init_with_capacity(&render->render_per_instance, render->allocator, max_num_instances);
+        array_init_with_capacity(&render->render_per_draw, render->allocator, max_num_draws);
+        array_init_with_capacity(&render->indirect_draws, render->allocator, max_num_draws);
+        //Allocator* failing = allocator_get_failing();
 
-    //@TODO: budget?
-    stable_array_init(&render->textures, render->allocator, sizeof(Render_Texture));
-    stable_array_init(&render->geometries, render->allocator, sizeof(Render_Material));
-    stable_array_init(&render->materials, render->allocator, sizeof(Render_Geometry));
+        //@TODO: budget?
+        stable_array_init(&render->textures, render->allocator, sizeof(Render_Texture));
+        stable_array_init(&render->geometries, render->allocator, sizeof(Render_Material));
+        stable_array_init(&render->materials, render->allocator, sizeof(Render_Geometry));
 
-    render->buffer_command = gl_buffer_make(sizeof(Gl_Draw_Elements_Indirect_Command), max_num_draws, NULL, false);
-    render->buffer_instance = gl_buffer_make(sizeof(Blinn_Phong_Per_Instance), max_num_instances, NULL, false);
-    render->buffer_environment_uniform = gl_buffer_make(sizeof(Blinn_Phong_Per_Batch), 1, NULL, false);
-    render->buffer_draw_uniform = gl_buffer_make(sizeof(Blinn_Phong_Per_Draw), max_num_draws, NULL, false);
+        render->buffer_command = gl_buffer_make(sizeof(Gl_Draw_Elements_Indirect_Command), max_num_draws, NULL, false);
+        render->buffer_instance = gl_buffer_make(sizeof(Blinn_Phong_Per_Instance), max_num_instances, NULL, false);
+        render->buffer_environment_uniform = gl_buffer_make(sizeof(Blinn_Phong_Per_Batch), 1, NULL, false);
+        render->buffer_draw_uniform = gl_buffer_make(sizeof(Blinn_Phong_Per_Draw), max_num_draws, NULL, false);
 
-    render_texture_manager_init(&render->texture_manager, render->allocator, mem_budget.texture);
-    render_geometry_manager_init(&render->geometry_manager, render->allocator, &render->buffer_instance, mem_budget.geometry);
-    render_texture_manager_add_default_resolutions(&render->texture_manager, 1.0f);
-    render_queue_init(&render->render_queue, render->allocator, mem_budget.command_buffer);
+        render_texture_manager_init(&render->texture_manager, render->allocator, mem_budget.texture);
+        render_geometry_manager_init(&render->geometry_manager, render->allocator, &render->buffer_instance, mem_budget.geometry);
+        render_texture_manager_add_default_resolutions(&render->texture_manager, 1.0f);
+        render_queue_init(&render->render_queue, render->allocator, mem_budget.command_buffer);
 
-    render->shader_blinn_phong = *blinn_phong;
+        render->shader_blinn_phong = *blinn_phong;
 
     
-    render->uniform_block_draw = shader_storage_block_make(render->shader_blinn_phong.handle, "Params", 0, render->buffer_draw_uniform.handle);
-    render->uniform_block_environment = uniform_block_make(render->shader_blinn_phong.handle, "Environment", 1, render->buffer_environment_uniform.handle);
+        render->uniform_block_draw = shader_storage_block_make(render->shader_blinn_phong.handle, "Params", 0, render->buffer_draw_uniform.handle);
+        render->uniform_block_environment = uniform_block_make(render->shader_blinn_phong.handle, "Environment", 1, render->buffer_environment_uniform.handle);
+    }
 }
 
 Render_Info_Ptr _render_resource_find(Stable_Array stable, String name, Id id)
@@ -2039,326 +2043,328 @@ int command_buffer_compare_func(const void* a_, const void* b_)
 
 void render_render(Render* render, Camera camera)
 {
-    //@TODO get from environment
-    Mat4 view = camera_make_view_matrix(camera);
-    Mat4 projection = camera_make_projection_matrix(camera);
-
-    Render_Queue* buffers = &render->render_queue;
-    
-    #if !defined(DO_MONO_EXPANDED_QUEUE)
-    render_queue_expand(render);
-    #endif
-
-    PROFILE_START(render_queue_sort);
-    qsort(buffers->expanded.data, buffers->expanded.len, sizeof *buffers->expanded.data, command_buffer_compare_func);
-    PROFILE_END(render_queue_sort);
-
-    glEnable(GL_DEPTH_TEST); 
-    glEnable(GL_CULL_FACE);  
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
-    
-    typedef struct Render_Per_Batch {
-        i32 texture_slots[MAX_TEXTURE_SLOTS];
-        i32 used_texture_slots;
-
-        i32 geometry_batch_index;
-        //@TODO
-        Render_Environment* environment;
-        GL_Shader* shader;
-    } Render_Per_Batch;
-
-    Render_Per_Draw_Array* batch_draws = &render->render_per_draw;
-    Render_Per_Instance_Array* batch_instances = &render->render_per_instance;
-
-    i32 not_found_textures = 0;
-    for(isize j = 0; j < buffers->expanded.len; )
+    PROFILE_SCOPE() 
     {
-        PROFILE_START(batch_prepare);
+        //@TODO get from environment
+        Mat4 view = camera_make_view_matrix(camera);
+        Mat4 projection = camera_make_projection_matrix(camera);
 
-        Render_Command_Expanded first = buffers->expanded.data[j];
+        Render_Queue* buffers = &render->render_queue;
+    
+        #if !defined(DO_MONO_EXPANDED_QUEUE)
+        render_queue_expand(render);
+        #endif
 
-        Render_Per_Batch batch = {0};
-        array_clear(batch_draws);
-        array_clear(batch_instances);
+        PROFILE_SCOPE(sort) 
+            qsort(buffers->expanded.data, buffers->expanded.len, sizeof *buffers->expanded.data, command_buffer_compare_func);
 
-        batch.geometry_batch_index = first.geometry->group.batch_index;
-        batch.environment = first.environment;
-        batch.shader = NULL; //@TODO
+        glEnable(GL_DEPTH_TEST); 
+        glEnable(GL_CULL_FACE);  
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
+    
+        typedef struct Render_Per_Batch {
+            i32 texture_slots[MAX_TEXTURE_SLOTS];
+            i32 used_texture_slots;
 
-        Render_Per_Draw prev_draw = {0};
-        isize k = j;
-        for(; k < buffers->expanded.len; k++)
+            i32 geometry_batch_index;
+            //@TODO
+            Render_Environment* environment;
+            GL_Shader* shader;
+        } Render_Per_Batch;
+
+        Render_Per_Draw_Array* batch_draws = &render->render_per_draw;
+        Render_Per_Instance_Array* batch_instances = &render->render_per_instance;
+
+        i32 not_found_textures = 0;
+        for(isize j = 0; j < buffers->expanded.len; )
         {
-            Render_Command_Expanded curr = buffers->expanded.data[k];   
-            Mat4 curr_transform = buffers->transforms.data[curr.transform_index];
+            PROFILE_START(batch_prepare);
 
-            //If differs too much end the batch
-            if(curr.geometry_batch_index != first.geometry_batch_index || 
-                curr.environment != first.environment)
-                goto end_batch;
+            Render_Command_Expanded first = buffers->expanded.data[j];
+
+            Render_Per_Batch batch = {0};
+            array_clear(batch_draws);
+            array_clear(batch_instances);
+
+            batch.geometry_batch_index = first.geometry->group.batch_index;
+            batch.environment = first.environment;
+            batch.shader = NULL; //@TODO
+
+            Render_Per_Draw prev_draw = {0};
+            isize k = j;
+            for(; k < buffers->expanded.len; k++)
+            {
+                Render_Command_Expanded curr = buffers->expanded.data[k];   
+                Mat4 curr_transform = buffers->transforms.data[curr.transform_index];
+
+                //If differs too much end the batch
+                if(curr.geometry_batch_index != first.geometry_batch_index || 
+                    curr.environment != first.environment)
+                    goto end_batch;
                 
-            //If draws or isntances would no longer fit into the gpu buffers
-            // end the batch.
-            if(batch_draws->len >= render->buffer_draw_uniform.item_count
-                || batch_instances->len >= render->buffer_instance.item_count)
-            {
-                ASSERT(batch_draws->len == render->buffer_draw_uniform.item_count || batch_instances->len == render->buffer_instance.item_count);
-                goto end_batch;
-            }
-
-            bool push_new_draw = false;
-            Render_Per_Draw new_draw = {0}; //@TODO: modify directly draw
-
-            //if geoemtries or matterials differ add new draw
-            if(curr.material != prev_draw.material)
-            {
-                push_new_draw = true;
-
-                //We prohibit a single material with too many textures to be rendered!
-                isize used_textures = curr.material->used_textures;
-                (void) used_textures; //@TODO
-                    
-                //material changed so we analyze anew its textures
-                //Go through all of the materials textures and check if it was added
-                //If not add it. If too full end the batch early.
-                for(isize tex_i = 0; tex_i < curr.material->used_textures; tex_i ++)
+                //If draws or isntances would no longer fit into the gpu buffers
+                // end the batch.
+                if(batch_draws->len >= render->buffer_draw_uniform.item_count
+                    || batch_instances->len >= render->buffer_instance.item_count)
                 {
-                    Render_Texture_Ptr texture_ptr = curr.material->textures[tex_i];
-                    Render_Texture* texture = render_texture_get(render, texture_ptr);
-                    if(!texture)
-                        not_found_textures += 1;
-                    else
+                    ASSERT(batch_draws->len == render->buffer_draw_uniform.item_count || batch_instances->len == render->buffer_instance.item_count);
+                    goto end_batch;
+                }
+
+                bool push_new_draw = false;
+                Render_Per_Draw new_draw = {0}; //@TODO: modify directly draw
+
+                //if geoemtries or matterials differ add new draw
+                if(curr.material != prev_draw.material)
+                {
+                    push_new_draw = true;
+
+                    //We prohibit a single material with too many textures to be rendered!
+                    isize used_textures = curr.material->used_textures;
+                    (void) used_textures; //@TODO
+                    
+                    //material changed so we analyze anew its textures
+                    //Go through all of the materials textures and check if it was added
+                    //If not add it. If too full end the batch early.
+                    for(isize tex_i = 0; tex_i < curr.material->used_textures; tex_i ++)
                     {
-                        i32 resolution_index = texture->layer.resolution_index;
-                        ASSERT(resolution_index > 0, "valid textures must have valid res index. index %d", resolution_index);
-
-                        //We use dense hashtable to acelaret the search
-                        // Start at the has for the texture (its id can be used as hash)
-                        // and iterate unill we have either 
-                        // 1) iterated the whole array
-                        // 2) found it
-                        // 3) found empty index (thus this hash couldnt have been added before)
-                        //bool was_texture_found = false;
-                        //u64 slot_at = 0;
-                        //for(u64 iter = 0; iter < MAX_TEXTURE_SLOTS; iter++)
-                        //{
-                        //    slot_at = ((u64) texture_ptr.id + iter) % MAX_TEXTURE_SLOTS;
-                        //    if(batch.texture_slots[slot_at] == 0)
-                        //        break;
-                        //    if(batch.texture_slots[slot_at] == resolution_index)
-                        //    {
-                        //        was_texture_found = true;
-                        //        break;
-                        //    }
-                        //}
-
-                        i32 found = 0;
-                        for(i32 iter = 0; iter < batch.used_texture_slots; iter++)
+                        Render_Texture_Ptr texture_ptr = curr.material->textures[tex_i];
+                        Render_Texture* texture = render_texture_get(render, texture_ptr);
+                        if(!texture)
+                            not_found_textures += 1;
+                        else
                         {
-                            if(batch.texture_slots[iter] == resolution_index)
+                            i32 resolution_index = texture->layer.resolution_index;
+                            ASSERT(resolution_index > 0, "valid textures must have valid res index. index %d", resolution_index);
+
+                            //We use dense hashtable to acelaret the search
+                            // Start at the has for the texture (its id can be used as hash)
+                            // and iterate unill we have either 
+                            // 1) iterated the whole array
+                            // 2) found it
+                            // 3) found empty index (thus this hash couldnt have been added before)
+                            //bool was_texture_found = false;
+                            //u64 slot_at = 0;
+                            //for(u64 iter = 0; iter < MAX_TEXTURE_SLOTS; iter++)
+                            //{
+                            //    slot_at = ((u64) texture_ptr.id + iter) % MAX_TEXTURE_SLOTS;
+                            //    if(batch.texture_slots[slot_at] == 0)
+                            //        break;
+                            //    if(batch.texture_slots[slot_at] == resolution_index)
+                            //    {
+                            //        was_texture_found = true;
+                            //        break;
+                            //    }
+                            //}
+
+                            i32 found = 0;
+                            for(i32 iter = 0; iter < batch.used_texture_slots; iter++)
                             {
-                                found = iter + 1;
-                                break;
+                                if(batch.texture_slots[iter] == resolution_index)
+                                {
+                                    found = iter + 1;
+                                    break;
+                                }
                             }
-                        }
 
-                        //If not found add it
-                        if(!found)
-                        {
-                            //If we have too many textures end the batch
-                            if(batch.used_texture_slots >= MAX_TEXTURE_SLOTS)
-                                goto end_batch;
+                            //If not found add it
+                            if(!found)
+                            {
+                                //If we have too many textures end the batch
+                                if(batch.used_texture_slots >= MAX_TEXTURE_SLOTS)
+                                    goto end_batch;
 
-                            //ASSERT(slot_at < MAX_TEXTURE_SLOTS);
-                            //batch.texture_slots[slot_at] = resolution_index;
-                            //batch.used_texture_slots += 1;
+                                //ASSERT(slot_at < MAX_TEXTURE_SLOTS);
+                                //batch.texture_slots[slot_at] = resolution_index;
+                                //batch.used_texture_slots += 1;
 
-                            //This is slightly confusing configuration with all the indexes flying about but...
-                            // the draw should have its textures in the exact same order as within the material.
-                            //Therefor we assign to index tex_i (the index of the current texture)
-                            // and link it to the slot_at and appropriate texture layer.
-                            //new_draw.compressed_texture_layers[tex_i] = COMPRESS_TEXTURE_LAYER(texture->layer.layer, slot_at);
+                                //This is slightly confusing configuration with all the indexes flying about but...
+                                // the draw should have its textures in the exact same order as within the material.
+                                //Therefor we assign to index tex_i (the index of the current texture)
+                                // and link it to the slot_at and appropriate texture layer.
+                                //new_draw.compressed_texture_layers[tex_i] = COMPRESS_TEXTURE_LAYER(texture->layer.layer, slot_at);
 
-                            batch.texture_slots[batch.used_texture_slots] = resolution_index;
-                            batch.used_texture_slots += 1;
-                            found = batch.used_texture_slots;
-                        }
+                                batch.texture_slots[batch.used_texture_slots] = resolution_index;
+                                batch.used_texture_slots += 1;
+                                found = batch.used_texture_slots;
+                            }
                         
-                        new_draw.bound_textures[tex_i].layer = texture->layer.layer;
-                        new_draw.bound_textures[tex_i].resolution_index = found;
+                            new_draw.bound_textures[tex_i].layer = texture->layer.layer;
+                            new_draw.bound_textures[tex_i].resolution_index = found;
+                        }
                     }
                 }
+                else if(curr.geometry != prev_draw.geometry)
+                {
+                    if(curr.material == prev_draw.material)
+                        memcpy(new_draw.bound_textures, prev_draw.bound_textures, sizeof prev_draw.bound_textures);
+                    push_new_draw = true;
+                }
+
+                if(batch_draws->len == 0)
+                    ASSERT(push_new_draw);
+
+                if(push_new_draw)
+                {
+                    new_draw.material = curr.material;
+                    new_draw.geometry = curr.geometry;
+                    new_draw.instance_from = (i32) batch_instances->len;
+                    prev_draw = new_draw;
+                    array_push(batch_draws, new_draw);
+                }
+
+                ASSERT(batch_draws->len > 0);
+
+                Render_Per_Instance instance = {0};
+                instance.model = curr_transform;
+                array_push(batch_instances, instance);
             }
-            else if(curr.geometry != prev_draw.geometry)
-            {
-                if(curr.material == prev_draw.material)
-                    memcpy(new_draw.bound_textures, prev_draw.bound_textures, sizeof prev_draw.bound_textures);
-                push_new_draw = true;
-            }
 
-            if(batch_draws->len == 0)
-                ASSERT(push_new_draw);
-
-            if(push_new_draw)
-            {
-                new_draw.material = curr.material;
-                new_draw.geometry = curr.geometry;
-                new_draw.instance_from = (i32) batch_instances->len;
-                prev_draw = new_draw;
-                array_push(batch_draws, new_draw);
-            }
-
-            ASSERT(batch_draws->len > 0);
-
-            Render_Per_Instance instance = {0};
-            instance.model = curr_transform;
-            array_push(batch_instances, instance);
-        }
-
-        end_batch:
+            end_batch:
         
 
-        //Only now we prepare the OPENGL specific buffers
-        //@NOTE: 
-        //THE FOLLOWING IS VERY SPECIFIC TO OUR CURRENT SHADERS!
-        //Also at this point we could push all finalized batches into a buffer 
-        // and then have a separet loop execute all the draw commands. Howver we can use 
-        // the fact that gl functions are async to overlap the rendering time with 
-        // prepering the next batch draw.
+            //Only now we prepare the OPENGL specific buffers
+            //@NOTE: 
+            //THE FOLLOWING IS VERY SPECIFIC TO OUR CURRENT SHADERS!
+            //Also at this point we could push all finalized batches into a buffer 
+            // and then have a separet loop execute all the draw commands. Howver we can use 
+            // the fact that gl functions are async to overlap the rendering time with 
+            // prepering the next batch draw.
 
-        //@NOTE: we dont currently use blinn_phong_per_instance at all since the ata required is the same as batch_instances.
-        //array_resize_for_overwrite(&render->blinn_phong_per_instance, batch_instances);
+            //@NOTE: we dont currently use blinn_phong_per_instance at all since the ata required is the same as batch_instances.
+            //array_resize_for_overwrite(&render->blinn_phong_per_instance, batch_instances);
 
-        array_resize_for_overwrite(&render->blinn_phong_per_draw, batch_draws->len);
-        array_resize_for_overwrite(&render->indirect_draws, batch_draws->len);
+            array_resize_for_overwrite(&render->blinn_phong_per_draw, batch_draws->len);
+            array_resize_for_overwrite(&render->indirect_draws, batch_draws->len);
 
-        ASSERT(render->indirect_draws.len >= batch_draws->len);
-        Gl_Draw_Elements_Indirect_Command* indirect_commands = render->indirect_draws.data;
-        for(u32 i = 0; i < (u32) batch_draws->len; i++)
-        {
-            Render_Per_Draw* draw = &batch_draws->data[i];
-            Render_Geometry_Batch_Index* geometry = &draw->geometry->group;
-
-            indirect_commands[i].first_index = geometry->index_from;
-            indirect_commands[i].count = geometry->index_count;
-            indirect_commands[i].base_instance = draw->instance_from;
-            indirect_commands[i].base_vertex = geometry->vertex_from;
-
-            //@TODO: this can be solved in some better way.
-            if(i != batch_draws->len - 1)
+            ASSERT(render->indirect_draws.len >= batch_draws->len);
+            Gl_Draw_Elements_Indirect_Command* indirect_commands = render->indirect_draws.data;
+            for(u32 i = 0; i < (u32) batch_draws->len; i++)
             {
-                Render_Per_Draw* next_draw = &batch_draws->data[i + 1];
-                indirect_commands[i].instance_count = next_draw->instance_from - draw->instance_from;
+                Render_Per_Draw* draw = &batch_draws->data[i];
+                Render_Geometry_Batch_Index* geometry = &draw->geometry->group;
+
+                indirect_commands[i].first_index = geometry->index_from;
+                indirect_commands[i].count = geometry->index_count;
+                indirect_commands[i].base_instance = draw->instance_from;
+                indirect_commands[i].base_vertex = geometry->vertex_from;
+
+                //@TODO: this can be solved in some better way.
+                if(i != batch_draws->len - 1)
+                {
+                    Render_Per_Draw* next_draw = &batch_draws->data[i + 1];
+                    indirect_commands[i].instance_count = next_draw->instance_from - draw->instance_from;
+                }
+                else
+                {
+                    indirect_commands[i].instance_count = (GLuint) (batch_instances->len - draw->instance_from);
+                }
             }
-            else
-            {
-                indirect_commands[i].instance_count = (GLuint) (batch_instances->len - draw->instance_from);
-            }
-        }
                 
         
-        ASSERT(render->blinn_phong_per_draw.len >= batch_draws->len);
-        //Blinn_Phong_Per_Draw* blinn_per_draw = render->blinn_phong_per_draw.data;
-        for(isize i = 0; i < batch_draws->len; i++)
-        {
-            Render_Per_Draw* draw = &batch_draws->data[i];
-            Render_Material* material = draw->material;
-            Blinn_Phong_Per_Draw* blinn = &render->blinn_phong_per_draw.data[i];
-            blinn->diffuse_color = (Vec4){material->diffuse_color};
-            blinn->specular_color = (Vec4){material->specular_color};
-            blinn->ambient_color = (Vec4){material->ambient_color};
-            blinn->specular_exponent = material->specular_exponent;
-            blinn->metallic = material->metallic;
-            //@TODO: strcuture
-            #define COMPRESS_TEXTURE_LAYER(layer, slot_at) (i32) ((u32) (layer) | ((u32) (slot_at) << 16))
-            #define COMPRESS_TEXTURE_LAYER2(layer_struct) COMPRESS_TEXTURE_LAYER(layer_struct.layer, layer_struct.resolution_index)
-
-            blinn->map_diffuse =  COMPRESS_TEXTURE_LAYER2(draw->bound_textures[0]);
-            blinn->map_specular = COMPRESS_TEXTURE_LAYER2(draw->bound_textures[1]);
-        }
-
-        Blinn_Phong_Per_Batch blinn_environment = {0};
-        {
-            blinn_environment.light_quadratic_attentuation = 0.05f;
-            blinn_environment.base_illumination = vec4_of(0.5f);
-            blinn_environment.projection = projection; 
-            blinn_environment.view = view; 
-            blinn_environment.view_pos = (Vec4){camera.pos};
-
-            blinn_environment.lights_count = 2;
-            blinn_environment.lights[0].color_and_radius = vec4(10, 8, 7, 0);
-            blinn_environment.lights[0].pos_and_range = vec4(40, 20, -10, 100);
-                    
-            blinn_environment.lights[1].color_and_radius = vec4(8, 10, 8.5f, 0);
-            blinn_environment.lights[1].pos_and_range = vec4(0, 0, 10, 100);
-        }
-        
-        PROFILE_END(batch_prepare);
-        
-        PROFILE_START(batch_flush);
-
-        
-        PROFILE_START(texture_set);
-        render_shader_use(&render->shader_blinn_phong);
-        GLuint map_array_loc = glGetUniformLocation(render->shader_blinn_phong.handle, "u_map_resolutions");
-
-        i32 tex_slots[MAX_TEXTURE_SLOTS] = {0};
-        for(GLint i = 0; i < MAX_TEXTURE_SLOTS; i++)
-        {
-            tex_slots[i] = i;
-            i32 resolution_index = batch.texture_slots[i];
-
-            if(resolution_index)
+            ASSERT(render->blinn_phong_per_draw.len >= batch_draws->len);
+            //Blinn_Phong_Per_Draw* blinn_per_draw = render->blinn_phong_per_draw.data;
+            for(isize i = 0; i < batch_draws->len; i++)
             {
-                CHECK_BOUNDS(resolution_index - 1, render->texture_manager.resolutions.len);
-                GL_Texture_Array* resolution_array = &render->texture_manager.resolutions.data[resolution_index - 1].array;
+                Render_Per_Draw* draw = &batch_draws->data[i];
+                Render_Material* material = draw->material;
+                Blinn_Phong_Per_Draw* blinn = &render->blinn_phong_per_draw.data[i];
+                blinn->diffuse_color = (Vec4){material->diffuse_color};
+                blinn->specular_color = (Vec4){material->specular_color};
+                blinn->ambient_color = (Vec4){material->ambient_color};
+                blinn->specular_exponent = material->specular_exponent;
+                blinn->metallic = material->metallic;
+                //@TODO: strcuture
+                #define COMPRESS_TEXTURE_LAYER(layer, slot_at) (i32) ((u32) (layer) | ((u32) (slot_at) << 16))
+                #define COMPRESS_TEXTURE_LAYER2(layer_struct) COMPRESS_TEXTURE_LAYER(layer_struct.layer, layer_struct.resolution_index)
 
-                glActiveTexture(GL_TEXTURE0 + i);
-                glBindTexture(GL_TEXTURE_2D_ARRAY, resolution_array->handle);
+                blinn->map_diffuse =  COMPRESS_TEXTURE_LAYER2(draw->bound_textures[0]);
+                blinn->map_specular = COMPRESS_TEXTURE_LAYER2(draw->bound_textures[1]);
             }
+
+            Blinn_Phong_Per_Batch blinn_environment = {0};
+            {
+                blinn_environment.light_quadratic_attentuation = 0.05f;
+                blinn_environment.base_illumination = vec4_of(0.5f);
+                blinn_environment.projection = projection; 
+                blinn_environment.view = view; 
+                blinn_environment.view_pos = (Vec4){camera.pos};
+
+                blinn_environment.lights_count = 2;
+                blinn_environment.lights[0].color_and_radius = vec4(10, 8, 7, 0);
+                blinn_environment.lights[0].pos_and_range = vec4(40, 20, -10, 100);
+                    
+                blinn_environment.lights[1].color_and_radius = vec4(8, 10, 8.5f, 0);
+                blinn_environment.lights[1].pos_and_range = vec4(0, 0, 10, 100);
+            }
+        
+            PROFILE_STOP(batch_prepare);
+        
+            PROFILE_START(batch_flush);
+
+        
+            PROFILE_START(texture_set);
+            render_shader_use(&render->shader_blinn_phong);
+            GLuint map_array_loc = glGetUniformLocation(render->shader_blinn_phong.handle, "u_map_resolutions");
+
+            i32 tex_slots[MAX_TEXTURE_SLOTS] = {0};
+            for(GLint i = 0; i < MAX_TEXTURE_SLOTS; i++)
+            {
+                tex_slots[i] = i;
+                i32 resolution_index = batch.texture_slots[i];
+
+                if(resolution_index)
+                {
+                    CHECK_BOUNDS(resolution_index - 1, render->texture_manager.resolutions.len);
+                    GL_Texture_Array* resolution_array = &render->texture_manager.resolutions.data[resolution_index - 1].array;
+
+                    glActiveTexture(GL_TEXTURE0 + i);
+                    glBindTexture(GL_TEXTURE_2D_ARRAY, resolution_array->handle);
+                }
+            }
+            glUniform1iv(map_array_loc, (GLsizei) MAX_TEXTURE_SLOTS, tex_slots);
+            PROFILE_STOP(texture_set);
+
+            ASSERT(sizeof(blinn_environment) <= render->uniform_block_environment.buffer_size);
+            //ASSERT(array_byte_size(render->blinn_phong_per_draw) <= render->uniform_block_draw.buffer_size);
+            ASSERT(array_byte_size(render->render_per_instance) <= render->buffer_instance.byte_size);
+            ASSERT(array_byte_size(render->blinn_phong_per_draw) <= render->buffer_draw_uniform.byte_size);
+
+            ASSERT(sizeof *batch_instances->data == render->buffer_instance.item_size);
+            ASSERT(batch_instances->len <= render->buffer_instance.item_count);
+
+        
+            PROFILE_START(batch_upload);
+            glNamedBufferSubData(render->buffer_environment_uniform.handle, 0, sizeof(blinn_environment), &blinn_environment);
+            glNamedBufferSubData(render->buffer_draw_uniform.handle, 0, array_byte_size(render->blinn_phong_per_draw), render->blinn_phong_per_draw.data);
+            glNamedBufferSubData(render->buffer_instance.handle, 0, array_byte_size(render->render_per_instance), render->render_per_instance.data);
+            //glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, render->buffer_draw_uniform.handle); //@TEMP
+            PROFILE_STOP(batch_upload);
+
+        
+            PROFILE_START(draw_call);
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER , render->buffer_command.handle);
+            glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, batch_draws->len * sizeof *indirect_commands, indirect_commands);
+
+
+            Render_Geometry_Batch* geometry_batch = &render->geometry_manager.batches.data[batch.geometry_batch_index - 1];
+            glBindVertexArray(geometry_batch->vertex_array_handle);
+            //glBindBuffer(GL_ARRAY_BUFFER, geometry_batch->vertex_buffer_handle);
+            glBindBuffer(GL_ARRAY_BUFFER, render->buffer_instance.handle);
+            PROFILE_STOP(draw_call);
+
+            PROFILE_STOP(batch_flush);
+
+            glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->len, 0);
+
+            ASSERT(k > j, "Must make progress k:%i > i:%i", (int) k, (int) j);
+            j = k;
         }
-        glUniform1iv(map_array_loc, (GLsizei) MAX_TEXTURE_SLOTS, tex_slots);
-        PROFILE_END(texture_set);
-
-        ASSERT(sizeof(blinn_environment) <= render->uniform_block_environment.buffer_size);
-        //ASSERT(array_byte_size(render->blinn_phong_per_draw) <= render->uniform_block_draw.buffer_size);
-        ASSERT(array_byte_size(render->render_per_instance) <= render->buffer_instance.byte_size);
-        ASSERT(array_byte_size(render->blinn_phong_per_draw) <= render->buffer_draw_uniform.byte_size);
-
-        ASSERT(sizeof *batch_instances->data == render->buffer_instance.item_size);
-        ASSERT(batch_instances->len <= render->buffer_instance.item_count);
-
-        
-        PROFILE_START(batch_upload);
-        glNamedBufferSubData(render->buffer_environment_uniform.handle, 0, sizeof(blinn_environment), &blinn_environment);
-        glNamedBufferSubData(render->buffer_draw_uniform.handle, 0, array_byte_size(render->blinn_phong_per_draw), render->blinn_phong_per_draw.data);
-        glNamedBufferSubData(render->buffer_instance.handle, 0, array_byte_size(render->render_per_instance), render->render_per_instance.data);
-        //glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, render->buffer_draw_uniform.handle); //@TEMP
-        PROFILE_END(batch_upload);
-
-        
-        PROFILE_START(draw_call);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER , render->buffer_command.handle);
-        glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, batch_draws->len * sizeof *indirect_commands, indirect_commands);
 
 
-        Render_Geometry_Batch* geometry_batch = &render->geometry_manager.batches.data[batch.geometry_batch_index - 1];
-        glBindVertexArray(geometry_batch->vertex_array_handle);
-        //glBindBuffer(GL_ARRAY_BUFFER, geometry_batch->vertex_buffer_handle);
-        glBindBuffer(GL_ARRAY_BUFFER, render->buffer_instance.handle);
-        PROFILE_END(draw_call);
-
-        PROFILE_END(batch_flush);
-
-        glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, NULL, (u32) batch_draws->len, 0);
-
-        ASSERT(k > j, "Must make progress k:%i > i:%i", (int) k, (int) j);
-        j = k;
+        render_queue_clear(&render->render_queue);
     }
-
-
-    render_queue_clear(&render->render_queue);
 }
 
 Render_Texture_Ptr render_texture_add(Render* render, Image image, String name)
@@ -2406,22 +2412,22 @@ Render_Geometry_Ptr render_geometry_add_shape(Render* render, Shape shape, Strin
 
 bool render_texture_add_from_disk_named(Render* render, Render_Texture_Ptr* out, String path, String name)
 {
-    LOG_INFO("render", "Adding texture at path '%.*s' current working dir '%s'", STRING_PRINT(path), platform_directory_get_current_working());
-    log_indent();
-    PROFILE_START(image_read_counter);
-
     bool state = true;
-    Arena_Frame arena = scratch_arena_frame_acquire();
+    PROFILE_SCOPE()
     {
-        Image temp_storage = {arena.alloc};
-        state = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
-        if(state)
-            *out = render_texture_add(render, temp_storage, name);
+        LOG_INFO("render", "Adding texture at path '%.*s' current working dir '%s'", STRING_PRINT(path), platform_directory_get_startup_working());
+        log_indent();
+
+        Arena_Frame arena = scratch_arena_frame_acquire();
+        {
+            Image temp_storage = {arena.alloc};
+            state = image_read_from_file(&temp_storage, path, 0, PIXEL_TYPE_U8, IMAGE_LOAD_FLAG_FLIP_Y);
+            if(state)
+                *out = render_texture_add(render, temp_storage, name);
+        }
+        arena_frame_release(&arena);
+        log_outdent();
     }
-    arena_frame_release(&arena);
-    
-    PROFILE_END(image_read_counter);
-    log_outdent();
     return state;
 }
 
@@ -2431,6 +2437,8 @@ bool render_texture_add_from_disk(Render* render, Render_Texture_Ptr* out, Strin
 }
 void run_func(void* context)
 {
+    PROFILE_START(init);
+    
     LOG_INFO("APP", "run_func enter");
     Allocator* upstream_alloc = allocator_get_default();
 
@@ -2467,11 +2475,7 @@ void run_func(void* context)
     debug_allocator_init(&resources_alloc, upstream_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
     debug_allocator_init(&renderer_alloc, upstream_alloc, DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
 
-    Resources resources = {0};
     Render render = {0};
-
-    resources_init(&resources, resources_alloc.alloc);
-    resources_set(&resources);
 
     Shape uv_sphere = {0};
     Shape cube_sphere = {0};
@@ -2518,237 +2522,224 @@ void run_func(void* context)
 
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     
+    PROFILE_STOP(init);
+    
     //Platform_File_Watch watch = {0};
     //platform_file_watch(&watch, STRING("./"), PLATFORM_FILE_WATCH_ALL | PLATFORM_FILE_WATCH_SUBDIRECTORIES, NULL, NULL);
 
     for(isize frame_num = 0; app->should_close == false; frame_num ++)
     {
-        //Platform_File_Watch_Event file_event = {0};
-        //while(platform_file_watch_poll(watch, &file_event))
-        //{
-        //    const char* event = "";
-        //    switch(file_event.action) {
-        //        case PLATFORM_FILE_WATCH_CREATED : event = "CREATED"; break;
-        //        case PLATFORM_FILE_WATCH_DELETED : event = "DELETED"; break;
-        //        case PLATFORM_FILE_WATCH_MODIFIED: event = "MODIFIED"; break;
-        //        case PLATFORM_FILE_WATCH_RENAMED : event = "RENAMED"; break;
-        //    }
-
-        //    LOG_OKAY("FILE WATCH", "%s: %s '%s' -> '%s'", event, file_event.watched_path, file_event.old_path, file_event.path);
-        //}
-
-        glfwSwapBuffers(window);
-        f64 start_frame_time = clock_s();
-        app->delta_time = start_frame_time - app->last_frame_timepoint; 
-        app->last_frame_timepoint = start_frame_time; 
-
-        window_process_input(window, frame_num == 0);
-        //if(app->window_framebuffer_width != app->window_framebuffer_width_prev 
-        //    || app->window_framebuffer_height != app->window_framebuffer_height_prev
-        //    || frame_num == 0)
-        //{
-        //    ASSERT(false);
-        //}
         
-        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
-            || control_was_pressed(&app->controls, CONTROL_REFRESH_SHADERS)
-            || frame_num == 0)
+        PROFILE_SCOPE(frame)
         {
-            LOG_INFO("APP", "Refreshing shaders");
-            PROFILE_START(shader_load_counter);
-            
-            bool shader_state = true;
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_solid_color,       STRING("shaders/solid_color.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_depth_color,       STRING("shaders/depth_color.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_screen,            STRING("shaders/screen.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_skybox,            STRING("shaders/skybox.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_debug,             STRING("shaders/uv_debug.glsl"));
-            shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_instanced,         STRING("shaders/instanced_texture.glsl"));
-
-            ASSERT(shader_state);
-
-            {
-                GLint max_textures = 0;
-                glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_textures);
-                LOG_WARN("app", "max textures %i", max_textures);
-            }
-
-            PROFILE_END(shader_load_counter);
-        }
-
-
-        if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
-            || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
-            || frame_num == 0)
-        {
-            LOG_INFO("APP", "Refreshing art");
-            PROFILE_START(art_load_counter);
-
-            PROFILE_START(art_counter_shapes);
-            shape_deinit(&uv_sphere);
-            shape_deinit(&cube_sphere);
-            shape_deinit(&screen_quad);
-            shape_deinit(&unit_cube);
-            shape_deinit(&unit_quad);
-
-            uv_sphere = shapes_make_uv_sphere(40, 1);
-            cube_sphere = shapes_make_cube_sphere(20, 1);
-            screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3(0));
-            unit_cube = shapes_make_unit_cube();
-            unit_quad = shapes_make_unit_quad();
-            PROFILE_END(art_counter_shapes);
-
-            bool texture_state = true;
-            render_uv_sphere = render_geometry_add_shape(&render, uv_sphere, STRING("uv_sphere"));
-            render_cube_sphere = render_geometry_add_shape(&render, cube_sphere, STRING("cube_sphere"));
-            render_screen_quad = render_geometry_add_shape(&render, screen_quad, STRING("screen_quad"));
-            render_cube = render_geometry_add_shape(&render, unit_cube, STRING("unit_cube"));
-            render_quad = render_geometry_add_shape(&render, unit_quad, STRING("unit_cube"));
-            
-            texture_state = texture_state && render_texture_add_from_disk(&render, &image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"));
-            texture_state = texture_state && render_texture_add_from_disk(&render, &image_floor, STRING("resources/floor.jpg"));
-            texture_state = texture_state && render_texture_add_from_disk(&render, &image_debug, STRING("resources/debug.png"));
-
-            material_shiny_debug = render_material_add(&render, STRING("material_shiny_debug"));
-            material_mat_floor = render_material_add(&render, STRING("material_mat_floor"));
-
-            //@TODO
-            material_shiny_debug.ptr->diffuse_color = vec3(1, 0, 0);
-            material_shiny_debug.ptr->specular_color = vec3(1, 1, 1);
-            material_shiny_debug.ptr->specular_exponent = 256;
-            material_shiny_debug.ptr->textures[0] = image_debug;
-            material_shiny_debug.ptr->textures[1] = image_rusted_iron_metallic;
-            material_shiny_debug.ptr->used_textures = 2;
-
-            material_mat_floor.ptr->diffuse_color = vec3(0, 1, 0);
-            material_mat_floor.ptr->specular_color = vec3(0, 1, 1);
-            material_mat_floor.ptr->specular_exponent = 10;
-            material_mat_floor.ptr->textures[0] = image_floor;
-            material_mat_floor.ptr->used_textures = 1;
-
-            render_texture_manager_generate_mips(&render.texture_manager);
-
-            PROFILE_END(art_load_counter);
-            ASSERT(texture_state);
-        }
-
-        if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
-        {
-            app->is_in_mouse_mode = !app->is_in_mouse_mode;
-        }
-        
-        if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
-        {
-            profile_log_all(log_info("app"), true);
-        }
-        
-        if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
-        {
-            app->is_in_uv_debug_mode = !app->is_in_uv_debug_mode;
-        }
-
-        if(app->is_in_mouse_mode == false)
-            process_first_person_input(app, start_frame_time);
-
-        
-        app->camera.fov = settings->fov;
-        app->camera.near = 0.01f;
-        app->camera.far = 1000.0f;
-        app->camera.is_ortographic = false;
-        app->camera.is_position_relative = true;
-        app->camera.aspect_ratio = (f32) app->window_framebuffer_width / (f32) app->window_framebuffer_height;
-
-        //Mat4 view = camera_make_view_matrix(app->camera);
-        //Mat4 projection = camera_make_projection_matrix(app->camera);
-
-        
-        //================ FIRST PASS ==================
-        {
-            PROFILE_START(first_pass_counter);
-            //render_screen_frame_buffers_msaa_render_begin(&screen_buffers);
-            glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            
-            
-            enum {
-                GRID_Y = 400,
-                GRID_X = 400,
-            };
-
-
-            PROFILE_START(submit_counter);
-            for(isize y = 0; y < GRID_Y; y++)
-                for(isize x = 0; x < GRID_X; x++)
-                {
-                    Render_Phong_Command phong_command = {0};
-
-                    phong_command.transform = mat4_translation(vec3((f32) 2*x, (f32) 2*y, 0));
-
-                    i32 do_x = 0;
-                    if(1)
-                    {
-                        isize v = x + y;
-                        do_x = v % 3 == 0;
-                    }
-                    else
-                    {
-                        isize v = x + y*GRID_Y;
-                        if(v < GRID_X*GRID_Y * 2/3)
-                            do_x = 1;
-                        if(v < GRID_X*GRID_Y * 1/3)
-                            do_x = 2;
-                    }
-
-                    if(do_x == 0)
-                    {
-                        phong_command.material = material_shiny_debug;    
-                        phong_command.geometry = render_cube;
-                    }
-                    else if(do_x == 1)
-                    {
-                        phong_command.material = material_shiny_debug;    
-                        phong_command.geometry = render_cube_sphere;
-                    }
-                    else
-                    {
-                        phong_command.geometry = render_cube;
-                        phong_command.material = material_mat_floor;
-                    }
-
-                    render_queue_submit_phong(&render, &phong_command);
-                }
-            PROFILE_END(submit_counter);
-            render_render(&render, app->camera);
-  
-
-            //render skybox
+            PROFILE_INSTANT("frame boundary");
+            //Platform_File_Watch_Event file_event = {0};
+            //while(platform_file_watch_poll(watch, &file_event))
             //{
-            //    Mat4 model = mat4_scaling(vec3_of(-1));
-            //    Mat4 stationary_view = mat4_from_mat3(mat3_from_mat4(view));
-            //    render_mesh_draw_using_skybox(render_cube, &shader_skybox, projection, stationary_view, model, 1, cubemap_skybox);
+            //    const char* event = "";
+            //    switch(file_event.action) {
+            //        case PLATFORM_FILE_WATCH_CREATED : event = "CREATED"; break;
+            //        case PLATFORM_FILE_WATCH_DELETED : event = "DELETED"; break;
+            //        case PLATFORM_FILE_WATCH_MODIFIED: event = "MODIFIED"; break;
+            //        case PLATFORM_FILE_WATCH_RENAMED : event = "RENAMED"; break;
+            //    }
+
+            //    LOG_OKAY("FILE WATCH", "%s: %s '%s' -> '%s'", event, file_event.watched_path, file_event.old_path, file_event.path);
             //}
 
-            //render_screen_frame_buffers_msaa_render_end(&screen_buffers);
-            PROFILE_END(first_pass_counter);
-        }
+            glfwSwapBuffers(window);
+            f64 start_frame_time = clock_s();
+            app->delta_time = start_frame_time - app->last_frame_timepoint; 
+            app->last_frame_timepoint = start_frame_time; 
 
-        //// ============== POST PROCESSING PASS ==================
-        //{
-        //    PROFILE_START(second_pass_counter);
-        //    render_screen_frame_buffers_msaa_post_process_begin(&screen_buffers);
-        //    render_mesh_draw_using_postprocess(render_screen_quad, &shader_screen, screen_buffers.screen_color_buff, settings->screen_gamma, settings->screen_exposure);
-        //    render_screen_frame_buffers_msaa_post_process_end(&screen_buffers);
-        //    PROFILE_END(second_pass_counter);
-        //}
+            window_process_input(window, frame_num == 0);
+            //if(app->window_framebuffer_width != app->window_framebuffer_width_prev 
+            //    || app->window_framebuffer_height != app->window_framebuffer_height_prev
+            //    || frame_num == 0)
+            //{
+            //    ASSERT(false);
+            //}
+        
+            if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+                || control_was_pressed(&app->controls, CONTROL_REFRESH_SHADERS)
+                || frame_num == 0)
+            {
+                LOG_INFO("APP", "Refreshing shaders");
+                PROFILE_START(shader_load_counter);
+            
+                bool shader_state = true;
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_solid_color,       STRING("shaders/solid_color.glsl"));
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_depth_color,       STRING("shaders/depth_color.glsl"));
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_screen,            STRING("shaders/screen.glsl"));
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_blinn_phong,       STRING("shaders/blinn_phong.glsl"));
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_skybox,            STRING("shaders/skybox.glsl"));
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_debug,             STRING("shaders/uv_debug.glsl"));
+                shader_state = shader_state && render_shader_init_from_disk(&shader_cache, &shader_instanced,         STRING("shaders/instanced_texture.glsl"));
 
-        f64 end_frame_time = clock_s();
-        f64 frame_time = end_frame_time - start_frame_time;
-        if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
-        {
-            fps_display_last_update = end_frame_time;
-            SCRATCH_ARENA(arena)
-                glfwSetWindowTitle(window, format(arena.alloc, "Render %5d fps", (int) (1.0f/frame_time)).data);
+                ASSERT(shader_state);
+
+                {
+                    GLint max_textures = 0;
+                    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_textures);
+                    LOG_WARN("app", "max textures %i", max_textures);
+                }
+
+                PROFILE_STOP(shader_load_counter);
+            }
+
+
+            if(control_was_pressed(&app->controls, CONTROL_REFRESH_ALL) 
+                || control_was_pressed(&app->controls, CONTROL_REFRESH_ART)
+                || frame_num == 0)
+            {
+                LOG_INFO("APP", "Refreshing art");
+                PROFILE_SCOPE(art_load)
+                {
+                    PROFILE_START(art_counter_shapes);
+                    shape_deinit(&uv_sphere);
+                    shape_deinit(&cube_sphere);
+                    shape_deinit(&screen_quad);
+                    shape_deinit(&unit_cube);
+                    shape_deinit(&unit_quad);
+
+                    uv_sphere = shapes_make_uv_sphere(40, 1);
+                    cube_sphere = shapes_make_cube_sphere(20, 1);
+                    screen_quad = shapes_make_quad(2, vec3(0, 0, 1), vec3(0, 1, 0), vec3(0));
+                    unit_cube = shapes_make_unit_cube();
+                    unit_quad = shapes_make_unit_quad();
+                    PROFILE_STOP(art_counter_shapes);
+
+                    bool texture_state = true;
+                    render_uv_sphere = render_geometry_add_shape(&render, uv_sphere, STRING("uv_sphere"));
+                    render_cube_sphere = render_geometry_add_shape(&render, cube_sphere, STRING("cube_sphere"));
+                    render_screen_quad = render_geometry_add_shape(&render, screen_quad, STRING("screen_quad"));
+                    render_cube = render_geometry_add_shape(&render, unit_cube, STRING("unit_cube"));
+                    render_quad = render_geometry_add_shape(&render, unit_quad, STRING("unit_cube"));
+            
+                    texture_state = texture_state && render_texture_add_from_disk(&render, &image_rusted_iron_metallic, STRING("resources/rustediron2/rustediron2_metallic.png"));
+                    texture_state = texture_state && render_texture_add_from_disk(&render, &image_floor, STRING("resources/floor.jpg"));
+                    texture_state = texture_state && render_texture_add_from_disk(&render, &image_debug, STRING("resources/debug.png"));
+
+                    material_shiny_debug = render_material_add(&render, STRING("material_shiny_debug"));
+                    material_mat_floor = render_material_add(&render, STRING("material_mat_floor"));
+
+                    //@TODO
+                    material_shiny_debug.ptr->diffuse_color = vec3(1, 0, 0);
+                    material_shiny_debug.ptr->specular_color = vec3(1, 1, 1);
+                    material_shiny_debug.ptr->specular_exponent = 256;
+                    material_shiny_debug.ptr->textures[0] = image_debug;
+                    material_shiny_debug.ptr->textures[1] = image_rusted_iron_metallic;
+                    material_shiny_debug.ptr->used_textures = 2;
+
+                    material_mat_floor.ptr->diffuse_color = vec3(0, 1, 0);
+                    material_mat_floor.ptr->specular_color = vec3(0, 1, 1);
+                    material_mat_floor.ptr->specular_exponent = 10;
+                    material_mat_floor.ptr->textures[0] = image_floor;
+                    material_mat_floor.ptr->used_textures = 1;
+
+                    render_texture_manager_generate_mips(&render.texture_manager);
+                    ASSERT(texture_state);
+                }
+            }
+
+            if(control_was_pressed(&app->controls, CONTROL_ESCAPE))
+            {
+                app->is_in_mouse_mode = !app->is_in_mouse_mode;
+            }
+        
+            if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
+            {
+                profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
+            }
+        
+            if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
+            {
+                app->is_in_uv_debug_mode = !app->is_in_uv_debug_mode;
+            }
+
+            if(app->is_in_mouse_mode == false)
+                process_first_person_input(app, start_frame_time);
+
+        
+            app->camera.fov = settings->fov;
+            app->camera.near = 0.01f;
+            app->camera.far = 1000.0f;
+            app->camera.is_ortographic = false;
+            app->camera.is_position_relative = true;
+            app->camera.aspect_ratio = (f32) app->window_framebuffer_width / (f32) app->window_framebuffer_height;
+
+            //Mat4 view = camera_make_view_matrix(app->camera);
+            //Mat4 projection = camera_make_projection_matrix(app->camera);
+        
+            //================ FIRST PASS ==================
+            PROFILE_SCOPE(first_pass)
+            {
+                PROFILE_SCOPE(submit)
+                {
+                    enum {
+                        GRID_Y = 400,
+                        GRID_X = 400,
+                    };
+
+                    for(isize y = 0; y < GRID_Y; y++)
+                        for(isize x = 0; x < GRID_X; x++)
+                        {
+                            Render_Phong_Command phong_command = {0};
+
+                            phong_command.transform = mat4_translation(vec3((f32) 2*x, (f32) 2*y, 0));
+
+                            i32 do_x = 0;
+                            if(1)
+                            {
+                                isize v = x + y;
+                                do_x = v % 3 == 0;
+                            }
+                            else
+                            {
+                                isize v = x + y*GRID_Y;
+                                if(v < GRID_X*GRID_Y * 2/3)
+                                    do_x = 1;
+                                if(v < GRID_X*GRID_Y * 1/3)
+                                    do_x = 2;
+                            }
+
+                            if(do_x == 0)
+                            {
+                                phong_command.material = material_shiny_debug;    
+                                phong_command.geometry = render_cube;
+                            }
+                            else if(do_x == 1)
+                            {
+                                phong_command.material = material_shiny_debug;    
+                                phong_command.geometry = render_cube_sphere;
+                            }
+                            else
+                            {
+                                phong_command.geometry = render_cube;
+                                phong_command.material = material_mat_floor;
+                            }
+
+                            render_queue_submit_phong(&render, &phong_command);
+                        }
+                }
+                
+                //render_screen_frame_buffers_msaa_render_begin(&screen_buffers);
+                glClearColor(0.3f, 0.3f, 0.2f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                render_render(&render, app->camera);
+            }
+
+            PROFILE_SCOPE(fpc_counter)
+            {
+                f64 end_frame_time = clock_s();
+                f64 frame_time = end_frame_time - start_frame_time;
+                if(end_frame_time - fps_display_last_update > 1.0/fps_display_frequency)
+                {
+                    fps_display_last_update = end_frame_time;
+                    SCRATCH_ARENA(arena)
+                        glfwSetWindowTitle(window, format(arena.alloc, "Render %5d fps", (int) (1.0f/frame_time)).data);
+                }
+            }
         }
     }
 
@@ -2760,9 +2751,7 @@ void run_func(void* context)
     shape_deinit(&unit_cube);
     shape_deinit(&unit_quad);
 
-    resources_deinit(&resources);
-    
-    profile_log_all(log_info("APP"), true);
+    //profile_log_all(log_info("APP"), true);
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
     log_allocator_stats(log_info(">RESOURCES"), resources_alloc.alloc);
@@ -2785,6 +2774,7 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 //#include "mdump2.h"
 #include "lib/_test_all.h"
+#if 0
 #include "neoasset.h"
 
 typedef struct {
@@ -2831,10 +2821,16 @@ void test_neo_asset()
     TEST(asset_get_by_path(path) == NULL);
     TEST(asset_get_by_name(name) == NULL);
 }
+#endif
 
 void run_test_func(void* context)
 {
-    test_neo_asset();
-    (void) context;
-    test_all(6.0);
+    PROFILE_SCOPE() 
+    {
+        (void) context;
+        test_all(3.0);
+
+        profile_flush();
+        profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
+    }
 }

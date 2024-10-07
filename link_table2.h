@@ -141,7 +141,7 @@ String_Buffer_64 format_handle(Handle handle)
     };
 
     Handle_Struct unpacked = handle_unpack(handle);
-    const char* type = unpacked.type < ARRAY_SIZE(type) ? types[unpacked.type] : "err";
+    const char* type = unpacked.type < ARRAY_LEN(type) ? types[unpacked.type] : "err";
     String_Buffer_64 out = {0};
     snprintf(out.data, sizeof(out.data), "H[%s %i/%i]", type, unpacked.index, unpacked.generation);
     return out;

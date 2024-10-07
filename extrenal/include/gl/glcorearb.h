@@ -675,7 +675,7 @@ typedef khronos_int8_t GLbyte;
 typedef khronos_uint16_t GLushort;
 #define GL_BLEND_EQUATION_RGB             0x8009
 #define GL_VERTEX_ATTRIB_ARRAY_ENABLED    0x8622
-#define GL_VERTEX_ATTRIB_ARRAY_SIZE       0x8623
+#define GL_VERTEX_ATTRIB_ARRAY_LEN       0x8623
 #define GL_VERTEX_ATTRIB_ARRAY_STRIDE     0x8624
 #define GL_VERTEX_ATTRIB_ARRAY_TYPE       0x8625
 #define GL_CURRENT_VERTEX_ATTRIB          0x8626
@@ -2403,7 +2403,7 @@ typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source,GLenum type,GLuint id,GLenum
 #define GL_MAX_NUM_COMPATIBLE_SUBROUTINES 0x92F8
 #define GL_NAME_LENGTH                    0x92F9
 #define GL_TYPE                           0x92FA
-#define GL_ARRAY_SIZE                     0x92FB
+#define GL_ARRAY_LEN                     0x92FB
 #define GL_OFFSET                         0x92FC
 #define GL_BLOCK_INDEX                    0x92FD
 #define GL_ARRAY_STRIDE                   0x92FE
@@ -2420,7 +2420,7 @@ typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source,GLenum type,GLuint id,GLenum
 #define GL_REFERENCED_BY_GEOMETRY_SHADER  0x9309
 #define GL_REFERENCED_BY_FRAGMENT_SHADER  0x930A
 #define GL_REFERENCED_BY_COMPUTE_SHADER   0x930B
-#define GL_TOP_LEVEL_ARRAY_SIZE           0x930C
+#define GL_TOP_LEVEL_ARRAY_LEN           0x930C
 #define GL_TOP_LEVEL_ARRAY_STRIDE         0x930D
 #define GL_LOCATION                       0x930E
 #define GL_LOCATION_INDEX                 0x930F

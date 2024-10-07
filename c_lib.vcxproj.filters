@@ -47,13 +47,10 @@
     <ClInclude Include="image_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resource.h">
+    <ClInclude Include="asset_descriptions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resource_descriptions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="resource_loading.h">
+    <ClInclude Include="asset_loading.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resources.h">
@@ -90,15 +87,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mdump2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="link_table.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
-      <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\profile.h">
@@ -239,10 +227,7 @@
     <ClInclude Include="lib\profile.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\profile_defs.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\profile2.h">
+    <ClInclude Include="lib\profile.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\random.h">
@@ -260,7 +245,7 @@
     <ClInclude Include="lib\string.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\string_map.h">
+    <ClInclude Include="lib\_string_map.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\time.h">
@@ -272,11 +257,29 @@
     <ClInclude Include="lib\sort.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="neoasset.h">
+    <ClInclude Include="asset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="thread_pool.h">
       <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="asset_types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\map.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="job.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\string_map.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="atomic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\profile.h">
+      <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -331,5 +334,6 @@
     <None Include="shaders\test_included.glsl">
       <Filter>shaders</Filter>
     </None>
+    <None Include="cpp.hint" />
   </ItemGroup>
 </Project>

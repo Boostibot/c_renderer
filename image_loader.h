@@ -128,7 +128,9 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
     bool state = false;
 
     builder_clear(into);
-    Arena_Frame arena = scratch_arena_frame_acquire();
+
+    PROFILE_SCOPE()
+    SCRATCH_ARENA(arena) 
     {
         Image contiguous = {0};
         //not contigous in memory => make contiguous copy
@@ -207,21 +209,21 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
         if(had_internal_error)
             LOG_ERROR("Asset", "%s", error_msg_unspecfied);
     }
-    arena_frame_release(&arena);
     return state;
 }
 
 EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
-    Arena_Frame arena = scratch_arena_frame_acquire();
-    String_Builder formatted = {arena.alloc};
+    bool state = true;
+    PROFILE_SCOPE() 
+        SCRATCH_ARENA(arena) 
+        {
+            String_Builder formatted = {arena.alloc};
+            LOG_INFO("ASSET", "Writing and image '%.*s'", STRING_PRINT(path));
 
-    LOG_INFO("ASSET", "Writing and image '%.*s'", STRING_PRINT(path));
-
-    bool state = image_write_to_memory(image, &formatted, file_format);
-    state = state && file_write_entire(path, formatted.string, log_error(">ASSET"));
-
-    arena_frame_release(&arena);
+            state = state && image_write_to_memory(image, &formatted, file_format);
+            state = state && file_write_entire(path, formatted.string, log_error(">ASSET"));
+        }
     return state;
 }
 
