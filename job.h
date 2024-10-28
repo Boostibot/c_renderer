@@ -47,7 +47,7 @@ void atomic_transfer_write_parts(Atomic_Transfer_Block** channel, const void** p
         do {
             cur_transfer = platform_atomic_load64(channel);
             platform_atomic_store64(&block->next, cur_transfer);
-        } while(platform_atomic_compare_and_swap64(channel, cur_transfer, (int64_t) block) == false);
+        } while(platform_atomic_cas64(channel, cur_transfer, (int64_t) block) == false);
     }
 }
 
@@ -64,7 +64,7 @@ Atomic_Transfer_Block* atomic_transfer_read_last(Atomic_Transfer_Block** channel
         if(cur_transfer == NULL)
             break;
 
-    } while(platform_atomic_compare_and_swap64(channel, (int64_t) cur_transfer, (int64_t) platform_atomic_load64(&cur_transfer->next)) == false);
+    } while(platform_atomic_cas64(channel, (int64_t) cur_transfer, (int64_t) platform_atomic_load64(&cur_transfer->next)) == false);
 
   return cur_transfer;
 }

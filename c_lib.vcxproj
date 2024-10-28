@@ -222,7 +222,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="asset_types.h" />
-    <ClInclude Include="atomic.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
@@ -293,6 +292,8 @@
     <ClInclude Include="asset_descriptions.h" />
     <ClInclude Include="asset_loading.h" />
     <ClInclude Include="shapes.h" />
+    <ClInclude Include="sync.h" />
+    <ClInclude Include="channel.h" />
     <ClInclude Include="thread_pool.h" />
     <ClInclude Include="todo.h" />
   </ItemGroup>

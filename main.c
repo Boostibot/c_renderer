@@ -10,7 +10,6 @@
 #pragma warning(disable:4996) //Disable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
 #pragma warning(disable:6255) //Disable use _malloca instead of _alloca.
 
-
 #define EXTERNAL static
 #define JOT_ALL_IMPL
 #define JOT_ALL_TEST
@@ -2774,63 +2773,17 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 //#include "mdump2.h"
 #include "lib/_test_all.h"
-#if 0
-#include "neoasset.h"
-
-typedef struct {
-    const NAsset asset;
-    String_Builder builder;
-} STR_Asset;
-
-void nasset_init(void* asset_untyped)
-{
-    STR_Asset* asset = (STR_Asset*) asset_untyped;
-    asset->builder = builder_from_cstring(asset_string_allocator(), "FIRST_BUILDER");
-    LOG_INFO("TEST", "hello from '%s'", asset->builder.data);
-}
-void nasset_deinit(void* asset_untyped)
-{
-    STR_Asset* asset = (STR_Asset*) asset_untyped;
-    LOG_INFO("TEST", "hello from '%s'", asset->builder.data);
-
-    builder_deinit(&asset->builder);
-}
-
-enum {NASSET_STR = 1};
-void test_neo_asset()
-{
-    asset_system_init(allocator_get_default(), allocator_get_default());
-
-    NAsset_Type_Description type = {0};
-    type.size = sizeof(STR_Asset);
-    type.init = nasset_init;
-    type.deinit = nasset_deinit;
-    type.name = STRING("String_Builder");
-    type.abbreviation = STRING("STR");
-
-    asset_type_add(NASSET_STR, type);
-    NAsset* asset = asset_create(NASSET_STR);
-
-    Hash_String name = HSTRING("Name");
-    Hash_String path = HSTRING("path/to/file");
-    asset_set_name(asset->handle, name);
-    asset_set_path(asset->handle, path);
-
-    asset_delete(asset->handle, false);
-
-    TEST(asset_get_by_path(path) == NULL);
-    TEST(asset_get_by_name(name) == NULL);
-}
-#endif
+#include "channel.h"
 
 void run_test_func(void* context)
 {
     PROFILE_SCOPE() 
     {
+        test_channel();
         (void) context;
         test_all(3.0);
 
-        profile_flush();
+        profile_flush(true);
         profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
     }
 }
