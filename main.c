@@ -1,4 +1,6 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+﻿#include "channel.h"
+
+#define _CRT_SECURE_NO_WARNINGS
 #pragma warning(error:4820)   //error on "Padding added to struct" 
 #pragma warning(error:4324)   //error "structure was padded due to alignment specifier" (when using explicit modifier to align struct)
 #pragma warning(disable:4464) //Disable "relative include path contains '..'"
@@ -2773,13 +2775,12 @@ void error_func(void* context, Platform_Sandbox_Error error)
 
 //#include "mdump2.h"
 #include "lib/_test_all.h"
-#include "channel.h"
 
 void run_test_func(void* context)
 {
     PROFILE_SCOPE() 
     {
-        test_channel();
+        test_channel(3.0);
         (void) context;
         test_all(3.0);
 
