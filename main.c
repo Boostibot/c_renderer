@@ -2781,6 +2781,27 @@ void run_test_func(void* context)
 {
     PROFILE_SCOPE() 
     {
+        if(0)
+        {
+            uint32_t futex = 1;
+
+            Perf_Benchmark bench_futex = {0};
+	        while(perf_benchmark_custom(&bench_futex, NULL, 0.3, 3, 4)) {
+                platform_futex_wake(&futex);
+                platform_futex_wake(&futex);
+                platform_futex_wake(&futex);
+                platform_futex_wake(&futex);
+	        }
+        
+            Perf_Benchmark protected_futex = {0};
+	        while(perf_benchmark_custom(&protected_futex, NULL, 0.3, 3, 4)) {
+                platform_futex_wake(&futex);
+                platform_futex_wake(&futex);
+                platform_futex_wake(&futex);
+                platform_futex_wake(&futex);
+	        }
+        }
+
         test_channel(10.0);
         exit(0);
         (void) context;
