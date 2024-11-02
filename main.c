@@ -1,4 +1,4 @@
-﻿#include "channel.h"
+﻿
 
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning(error:4820)   //error on "Padding added to struct" 
@@ -46,6 +46,7 @@
 #include "todo.h"
 #include "asset_loading.h"
 #include "camera.h"
+#include "channel.h"
 
 #include "glfw/glfw3.h"
 #include "control.h"
@@ -2780,7 +2781,8 @@ void run_test_func(void* context)
 {
     PROFILE_SCOPE() 
     {
-        test_channel(3.0);
+        test_channel(10.0);
+        exit(0);
         (void) context;
         test_all(3.0);
 
