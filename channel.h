@@ -10,6 +10,17 @@
     #define ASSERT(x, ...) assert(x)
 #endif
 
+#ifdef __cplusplus
+    #include <atomic>
+    #define _CHAN_USE_ATOMICS using namespace std
+    #define _CHAN_ATOMIC(T) std::atomic<T>
+#else
+    #include <stdatomic.h>
+    #define _CHAN_USE_ATOMICS 
+    #define _CHAN_ATOMIC(T) _Atomic(T) 
+#endif
+
+
 #if defined(_MSC_VER)
     #define _CHAN_INLINE_ALWAYS   __forceinline
     #define _CHAN_INLINE_NEVER    __declspec(noinline)
@@ -69,27 +80,27 @@ typedef struct Channel_Info {
 
 typedef struct Channel {
     _CHAN_ALIGNED(CHAN_CACHE_LINE) 
-    volatile uint64_t head;
-    volatile uint64_t head_barrier;
-    volatile uint64_t head_cancel_count;
+    _CHAN_ATOMIC(uint64_t) head;
+    _CHAN_ATOMIC(uint64_t) head_barrier;
+    _CHAN_ATOMIC(uint64_t) head_cancel_count;
     uint64_t _head_pad[5];
 
     _CHAN_ALIGNED(CHAN_CACHE_LINE) 
-    volatile uint64_t tail;
-    volatile uint64_t tail_barrier;
-    volatile uint64_t tail_cancel_count;
+    _CHAN_ATOMIC(uint64_t) tail;
+    _CHAN_ATOMIC(uint64_t) tail_barrier;
+    _CHAN_ATOMIC(uint64_t) tail_cancel_count;
     uint64_t _tail_pad[5];
 
     _CHAN_ALIGNED(CHAN_CACHE_LINE) 
     Channel_Info info;
     isize capacity; 
     uint8_t* items; 
-    uint32_t* ids; 
-    volatile uint32_t ref_count; 
-    volatile uint32_t allocated;
-    volatile uint32_t closing_state;
-    volatile uint32_t closing_lock_requested;
-    volatile uint32_t closing_lock_completed;
+    _CHAN_ATOMIC(uint32_t)* ids; 
+    _CHAN_ATOMIC(uint32_t) ref_count; 
+    _CHAN_ATOMIC(uint32_t) allocated;
+    _CHAN_ATOMIC(uint32_t) closing_state;
+    _CHAN_ATOMIC(uint32_t) closing_lock_requested;
+    _CHAN_ATOMIC(uint32_t) closing_lock_completed;
     uint8_t _[60];
 } Channel;
 
@@ -101,14 +112,12 @@ typedef enum Channel_Res {
     CHANNEL_EMPTY = 4,
 } Channel_Res;
 
-
 enum {
     CHANNEL_CLOSING_PUSH = 1, 
     CHANNEL_CLOSING_POP = 2, 
     CHANNEL_CLOSING_CLOSED = 4, 
     CHANNEL_CLOSING_HARD = 8,
 };
-
 
 //Allocates a new channel on the heap and returns pointer to it. If the allocation fails returns 0.
 //capacity >= 0. If capacity == 0 then creates an "unbuffered" channel which acts as unbuffered channel in Go.
@@ -205,12 +214,12 @@ CHANAPI Channel_Res channel_ticket_try_pop_weak(Channel* chan, void* item, uint6
 // Once a node is popped using sync_list_pop_all() the "popper" thread has exclusive ownership of that node
 //  and can even dealloc the node without any risk of use after free.
 #define sync_list_push(head_ptr_ptr, node_ptr) sync_list_push_chain(head_ptr_ptr, node_ptr, node_ptr)
-#define sync_list_pop_all(head_ptr_ptr) (void*) chan_atomic_exchange64((head_ptr_ptr), 0)
+#define sync_list_pop_all(head_ptr_ptr) atomic_exchange((head_ptr_ptr), NULL)
 #define sync_list_push_chain(head_ptr_ptr, first_node_ptr, last_node_ptr) \
     for(;;) { \
-        uint64_t curr = chan_atomic_load64((head_ptr_ptr)); \
-        chan_atomic_store64(&(last_node_ptr)->next, curr); \
-        if(chan_atomic_cas64((head_ptr_ptr), curr, (uint64_t) (first_node_ptr))) \
+        uint64_t __curr = atomic_load((_CHAN_ATOMIC(uint64_t*) (void*) (head_ptr_ptr)); \
+        atomic_store((_CHAN_ATOMIC(uint64_t*) (void*) &(last_node_ptr)->next, __curr); \
+        if(atomic_compare_exchange_weak((_CHAN_ATOMIC(uint64_t*) (void*) (head_ptr_ptr), &__curr, (uint64_t) (first_node_ptr))) \
             break; \
     } \
 
@@ -262,10 +271,14 @@ CHANAPI bool sync_timed_wait_for_greater(volatile void* state, uint32_t desired,
 // The wake field is incremented every time the count crosses to or below zero, preventing
 // the ABA problem.
 typedef union Wait_Group {
-    uint64_t combined;
+    _CHAN_ATOMIC(uint64_t) combined;
     struct {
-        volatile int32_t count;
-        volatile uint32_t wakes;
+        _CHAN_ATOMIC(int32_t) atomic_count;
+        _CHAN_ATOMIC(uint32_t) atomic_wakes;
+    };
+    struct {
+        int32_t count;
+        uint32_t wakes;
     };
 } Wait_Group; 
 
@@ -284,7 +297,7 @@ CHANAPI bool wait_group_wait_timed(volatile Wait_Group* wg, double timeout, Sync
 //   //init code here...
 //   sync_once_end(&once);
 // }
-typedef uint32_t Sync_Once;
+typedef _CHAN_ATOMIC(uint32_t) Sync_Once;
 enum {
     SYNC_ONCE_UNINIT = 0,
     SYNC_ONCE_INIT = 1,
@@ -316,26 +329,6 @@ CHAN_OS_API bool     chan_wait_yield(volatile void* state, uint32_t undesired, i
 #define SYNC_WAIT_SPIN  _CHAN_SINIT(Sync_Wait){}
 #define SYNC_WAIT_BLOCK_BIT(bit) _CHAN_SINIT(Sync_Wait){chan_wait_block, chan_wake_block, 1u << bit}
 
-//Atomics
-CHAN_INTRINSIC uint64_t chan_atomic_load64(const volatile void* target);
-CHAN_INTRINSIC uint32_t chan_atomic_load32(const volatile void* target);
-CHAN_INTRINSIC void     chan_atomic_store64(volatile void* target, uint64_t value);
-CHAN_INTRINSIC void     chan_atomic_store32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC bool     chan_atomic_cas64(volatile void* target, uint64_t old_value, uint64_t new_value);
-CHAN_INTRINSIC bool     chan_atomic_cas32(volatile void* target, uint32_t old_value, uint32_t new_value);
-CHAN_INTRINSIC uint64_t chan_atomic_exchange64(volatile void* target, uint64_t value);
-CHAN_INTRINSIC uint32_t chan_atomic_exchange32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC uint64_t chan_atomic_add64(volatile void* target, uint64_t value);
-CHAN_INTRINSIC uint32_t chan_atomic_add32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC uint64_t chan_atomic_sub64(volatile void* target, uint64_t value);
-CHAN_INTRINSIC uint32_t chan_atomic_sub32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC uint64_t chan_atomic_and64(volatile void* target, uint64_t value);
-CHAN_INTRINSIC uint32_t chan_atomic_and32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC uint64_t chan_atomic_or64(volatile void* target, uint64_t value);
-CHAN_INTRINSIC uint32_t chan_atomic_or32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC uint32_t chan_atomic_xor32(volatile void* target, uint32_t value);
-CHAN_INTRINSIC bool     chan_atomic_cas128(volatile void* target, uint64_t old_value_lo, uint64_t old_value_hi, uint64_t new_value_lo, uint64_t new_value_hi);
-
 //Os specific
 CHAN_OS_API int64_t chan_perf_counter();
 CHAN_OS_API int64_t chan_perf_frequency();
@@ -346,39 +339,33 @@ CHAN_OS_API void chan_sleep(double seconds);
 CHAN_OS_API const char* chan_thread_name();
 CHAN_OS_API uint32_t chan_thread_id();
 
-//Debug 
-typedef struct Sync_Mem_Log {
-    const char* n;
-    const char* m;
-    uint64_t c1;
-    uint64_t c2;
-} Sync_Mem_Log;
-
-typedef struct Sync_Mem_Logger {
-    uint64_t capacity_pow2;
-    Sync_Mem_Log* logs;
-    volatile uint64_t pos;
-} Sync_Mem_Logger;
-
-CHANAPI uint64_t sync_mem_log_func(Sync_Mem_Logger* logger, const char* msg, uint64_t custom1, uint64_t custom2);
-
-
-//IMPL FROM HERE
-
-CHANAPI uint64_t sync_mem_log_func(Sync_Mem_Logger* logger, const char* msg, uint64_t custom1, uint64_t custom2)
-{
-    uint64_t curr = chan_atomic_add64(&logger->pos, 1);
-    uint64_t index = curr & (logger->capacity_pow2 - 1);
-
-    Sync_Mem_Log log = {chan_thread_name(), msg, custom1, custom2};
-    logger->logs[index] = log;
-
-    return curr;
-}
-
 
 #define CHANNEL_DEBUG
 #ifdef CHANNEL_DEBUG
+    typedef struct Sync_Mem_Log {
+        const char* n;
+        const char* m;
+        uint64_t c1;
+        uint64_t c2;
+    } Sync_Mem_Log;
+
+    typedef struct Sync_Mem_Logger {
+        uint64_t capacity_pow2;
+        Sync_Mem_Log* logs;
+        _CHAN_ATOMIC(uint64_t) pos;
+    } Sync_Mem_Logger;
+
+    CHANAPI uint64_t sync_mem_log_func(Sync_Mem_Logger* logger, const char* msg, uint64_t custom1, uint64_t custom2)
+    {
+        uint64_t curr = atomic_fetch_add_explicit(&logger->pos, 1, memory_order_relaxed);
+        uint64_t index = curr & (logger->capacity_pow2 - 1);
+
+        Sync_Mem_Log log = {chan_thread_name(), msg, custom1, custom2};
+        logger->logs[index] = log;
+
+        return curr;
+    }
+
     static Sync_Mem_Log _sync_mem_logs[1 << 20] = {0};
     static Sync_Mem_Logger _sync_mem_logger = {1 << 20, _sync_mem_logs};
 
@@ -391,9 +378,9 @@ CHANAPI uint64_t sync_mem_log_func(Sync_Mem_Logger* logger, const char* msg, uin
     
     CHANAPI void _chan_wait_n(int n)
     {
-        static uint32_t dummy = 0;
+        static _CHAN_ATOMIC(uint32_t) dummy = 0;
         for(int i = 0; i < n; i++)
-            chan_atomic_add32(&dummy, 1);
+            atomic_fetch_add_explicit(&dummy, 1, memory_order_relaxed);
     }
 #else
     #define sync_mem_log(msg)                  
@@ -427,18 +414,18 @@ CHANAPI bool _channel_id_equals(uint32_t id1, uint32_t id2)
 
 CHANAPI void _channel_advance_id(Channel* chan, uint64_t target, uint32_t id, Channel_Info info)
 {
-    uint32_t* id_ptr = &chan->ids[target];
+    _CHAN_ATOMIC(uint32_t)* id_ptr = &chan->ids[target];
     
     uint32_t new_id = (uint32_t) (id + _CHAN_ID_FILLED_BIT);
     if(info.wake)
     {
-        uint32_t prev_id = chan_atomic_exchange32(id_ptr, new_id);
+        uint32_t prev_id = atomic_exchange(id_ptr, new_id);
         ASSERT(_channel_id_equals(prev_id + _CHAN_ID_FILLED_BIT, new_id));
         if(prev_id & _CHAN_ID_WAITING_BIT)
-            info.wake(id_ptr);
+            info.wake((void*) id_ptr);
     }
     else
-        chan_atomic_store32(id_ptr, new_id);
+        atomic_store(id_ptr, new_id);
 }
 
 _CHAN_INLINE_NEVER
@@ -449,9 +436,9 @@ static bool _channel_ticket_push_potentially_cancel(Channel* chan, uint64_t tick
         canceled = true;
     else
     {
-        uint64_t new_tail = chan_atomic_load64(&chan->tail);
-        uint64_t new_head = chan_atomic_load64(&chan->head);
-        uint64_t barrier = chan_atomic_load64(&chan->tail_barrier);
+        uint64_t new_tail = atomic_load(&chan->tail);
+        uint64_t new_head = atomic_load(&chan->head);
+        uint64_t barrier = atomic_load(&chan->tail_barrier);
 
         if((new_head & _CHAN_TICKET_PUSH_CLOSED_BIT) || (new_tail & _CHAN_TICKET_PUSH_CLOSED_BIT))
             if(channel_ticket_is_less_or_eq(barrier, ticket))
@@ -460,8 +447,8 @@ static bool _channel_ticket_push_potentially_cancel(Channel* chan, uint64_t tick
 
     if(canceled)
     {
-        chan_atomic_add64(&chan->tail_cancel_count, _CHAN_TICKET_INCREMENT);
-        chan_atomic_sub64(&chan->tail, _CHAN_TICKET_INCREMENT);
+        atomic_fetch_add(&chan->tail_cancel_count, _CHAN_TICKET_INCREMENT);
+        atomic_fetch_sub(&chan->tail, _CHAN_TICKET_INCREMENT);
         return false;
     }
     else
@@ -483,16 +470,16 @@ CHANAPI bool channel_ticket_push(Channel* chan, const void* item, uint64_t* out_
     ASSERT(memcmp(&chan->info, &info, sizeof info) == 0, "info must be matching");
     ASSERT(item || (item == NULL && info.item_size == 0), "item must be provided");
     
-    uint64_t tail = chan_atomic_add64(&chan->tail, _CHAN_TICKET_INCREMENT);
+    uint64_t tail = atomic_fetch_add(&chan->tail, _CHAN_TICKET_INCREMENT);
     uint64_t ticket = tail / _CHAN_TICKET_INCREMENT;
     uint64_t target = _channel_get_target(chan, ticket);
     uint32_t id = _channel_get_id(chan, ticket);
     sync_mem_log_val("push called", ticket);
     
     for(;;) {
-        uint32_t curr = chan_atomic_load32(&chan->ids[target]);
+        uint32_t curr = atomic_load(&chan->ids[target]);
         chan_wait_n(3);
-        uint32_t closing = chan_atomic_load32(&chan->closing_state);
+        uint32_t closing = atomic_load(&chan->closing_state);
         if(closing) {
             if(_channel_ticket_push_potentially_cancel(chan, ticket, closing) == false) {
                 sync_mem_log_val("push canceled", ticket);
@@ -505,13 +492,13 @@ CHANAPI bool channel_ticket_push(Channel* chan, const void* item, uint64_t* out_
             break;
             
         if(info.wake) {
-            chan_atomic_or32(&chan->ids[target], _CHAN_ID_WAITING_BIT);
+            atomic_fetch_or(&chan->ids[target], _CHAN_ID_WAITING_BIT);
             curr |= _CHAN_ID_WAITING_BIT;
         }
 
         sync_mem_log_val("push waiting", ticket);
         if(info.wait)
-            info.wait(&chan->ids[target], curr, -1);
+            info.wait((void*) &chan->ids[target], curr, -1);
         else
             chan_pause();
         sync_mem_log_val("push woken", ticket);
@@ -520,12 +507,12 @@ CHANAPI bool channel_ticket_push(Channel* chan, const void* item, uint64_t* out_
     memcpy(chan->items + target*info.item_size, item, info.item_size);
     
     #ifdef CHANNEL_DEBUG
-        uint32_t closing = chan_atomic_load32(&chan->closing_state);
+        uint32_t closing = atomic_load(&chan->closing_state);
         if((closing & ~CHANNEL_CLOSING_HARD))
         {
-            uint64_t new_tail = chan_atomic_load64(&chan->tail);
-            uint64_t new_head = chan_atomic_load64(&chan->head);
-            uint64_t barrier = chan_atomic_load64(&chan->tail_barrier);
+            uint64_t new_tail = atomic_load(&chan->tail);
+            uint64_t new_head = atomic_load(&chan->head);
+            uint64_t barrier = atomic_load(&chan->tail_barrier);
             chan_wait_n(1);
             
             const char* name = chan_thread_name(); (void) name;
@@ -557,8 +544,8 @@ static bool _channel_ticket_pop_potentially_cancel(Channel* chan, uint64_t ticke
         canceled = true;
     else
     {
-        uint64_t new_head = chan_atomic_load64(&chan->head);
-        uint64_t barrier = chan_atomic_load64(&chan->head_barrier);
+        uint64_t new_head = atomic_load(&chan->head);
+        uint64_t barrier = atomic_load(&chan->head_barrier);
 
         canceled = (new_head & _CHAN_TICKET_POP_CLOSED_BIT) && channel_ticket_is_less_or_eq(barrier, ticket); 
     }
@@ -566,8 +553,8 @@ static bool _channel_ticket_pop_potentially_cancel(Channel* chan, uint64_t ticke
     if(canceled)
     {
         sync_mem_log_val("push canceled", ticket);
-        chan_atomic_add64(&chan->head_cancel_count, _CHAN_TICKET_INCREMENT);
-        chan_atomic_sub64(&chan->head, _CHAN_TICKET_INCREMENT);
+        atomic_fetch_add(&chan->head_cancel_count, _CHAN_TICKET_INCREMENT);
+        atomic_fetch_sub(&chan->head, _CHAN_TICKET_INCREMENT);
         return false;
     }
     return true;
@@ -578,16 +565,16 @@ CHANAPI bool channel_ticket_pop(Channel* chan, void* item, uint64_t* out_ticket_
     ASSERT(memcmp(&chan->info, &info, sizeof info) == 0, "info must be matching");
     ASSERT(item || (item == NULL && info.item_size == 0), "item must be provided");
 
-    uint64_t head = chan_atomic_add64(&chan->head, _CHAN_TICKET_INCREMENT);
+    uint64_t head = atomic_fetch_add(&chan->head, _CHAN_TICKET_INCREMENT);
     uint64_t ticket = head / _CHAN_TICKET_INCREMENT;
     uint64_t target = _channel_get_target(chan, ticket);
     uint32_t id = _channel_get_id(chan, ticket) + _CHAN_ID_FILLED_BIT;
     sync_mem_log_val("pop called", ticket);
 
     for(;;) {
-        uint32_t curr = chan_atomic_load32(&chan->ids[target]);
+        uint32_t curr = atomic_load(&chan->ids[target]);
         sync_mem_log_val("pop loaded curr", curr);
-        uint32_t closing = chan_atomic_load32(&chan->closing_state);
+        uint32_t closing = atomic_load(&chan->closing_state);
         if(closing) {
             if(_channel_ticket_pop_potentially_cancel(chan, ticket, closing) == false) {
                 sync_mem_log_val("pop canceled", ticket);
@@ -601,13 +588,13 @@ CHANAPI bool channel_ticket_pop(Channel* chan, void* item, uint64_t* out_ticket_
             break;
         
         if(info.wake) {
-            chan_atomic_or32(&chan->ids[target], _CHAN_ID_WAITING_BIT);
+            atomic_fetch_or(&chan->ids[target], _CHAN_ID_WAITING_BIT);
             curr |= _CHAN_ID_WAITING_BIT;
         }
         
         sync_mem_log_val("pop waiting", ticket);
         if(info.wait)
-            info.wait(&chan->ids[target], curr, -1);
+            info.wait((void*) &chan->ids[target], curr, -1);
         else
             chan_pause();
         sync_mem_log_val("pop woken", ticket);
@@ -616,11 +603,11 @@ CHANAPI bool channel_ticket_pop(Channel* chan, void* item, uint64_t* out_ticket_
     memcpy(item, chan->items + target*info.item_size, info.item_size);
     
     #ifdef CHANNEL_DEBUG
-        uint32_t closing = chan_atomic_load32(&chan->closing_state);
+        uint32_t closing = atomic_load(&chan->closing_state);
         if((closing & ~CHANNEL_CLOSING_HARD) != 0)
         {
-            uint64_t new_head = chan_atomic_load64(&chan->head);
-            uint64_t barrier = chan_atomic_load64(&chan->head_barrier);
+            uint64_t new_head = atomic_load(&chan->head);
+            uint64_t barrier = atomic_load(&chan->head_barrier);
 
             const char* name = chan_thread_name(); (void) name;
             if(new_head & _CHAN_TICKET_POP_CLOSED_BIT)
@@ -641,26 +628,26 @@ CHANAPI Channel_Res channel_ticket_try_push_weak(Channel* chan, const void* item
     ASSERT(memcmp(&chan->info, &info, sizeof info) == 0, "info must be matching");
     ASSERT(item || (item == NULL && info.item_size == 0), "item must be provided");
 
-    uint64_t tail = chan_atomic_load64(&chan->tail);
+    uint64_t tail = atomic_load(&chan->tail);
     uint64_t ticket = tail / _CHAN_TICKET_INCREMENT;
     uint64_t target = _channel_get_target(chan, ticket);
     uint32_t id = _channel_get_id(chan, ticket);
     
     chan_wait_n(3);
-    uint32_t curr_id = chan_atomic_load32(&chan->ids[target]);
+    uint32_t curr_id = atomic_load(&chan->ids[target]);
     chan_wait_n(3);
-    uint32_t closing = chan_atomic_load32(&chan->closing_state);
+    uint32_t closing = atomic_load(&chan->closing_state);
     if(closing)
     {
         if(closing & CHANNEL_CLOSING_HARD)
             return CHANNEL_CLOSED;
         else
         {
-            uint64_t new_tail = chan_atomic_load64(&chan->tail);
+            uint64_t new_tail = atomic_load(&chan->tail);
             chan_wait_n(10);
-            uint64_t new_head = chan_atomic_load64(&chan->head);
+            uint64_t new_head = atomic_load(&chan->head);
             chan_wait_n(10);
-            uint64_t barrier = chan_atomic_load64(&chan->tail_barrier);
+            uint64_t barrier = atomic_load(&chan->tail_barrier);
 
             if((new_head & _CHAN_TICKET_PUSH_CLOSED_BIT) || (new_tail & _CHAN_TICKET_PUSH_CLOSED_BIT))
                 if(channel_ticket_is_less_or_eq(barrier, ticket))
@@ -672,7 +659,7 @@ CHANAPI Channel_Res channel_ticket_try_push_weak(Channel* chan, const void* item
         return CHANNEL_FULL;
         
     chan_wait_n(3);
-    if(chan_atomic_cas64(&chan->tail, tail, tail+_CHAN_TICKET_INCREMENT) == false)
+    if(atomic_compare_exchange_strong(&chan->tail, &tail, tail+_CHAN_TICKET_INCREMENT) == false)
         return CHANNEL_LOST_RACE;
 
     memcpy(chan->items + target*info.item_size, item, info.item_size);
@@ -688,15 +675,15 @@ CHANAPI Channel_Res channel_ticket_try_pop_weak(Channel* chan, void* item, uint6
     ASSERT(memcmp(&chan->info, &info, sizeof info) == 0, "info must be matching");
     ASSERT(item || (item == NULL && info.item_size == 0), "item must be provided");
 
-    uint64_t head = chan_atomic_load64(&chan->head);
+    uint64_t head = atomic_load(&chan->head);
     uint64_t ticket = head / _CHAN_TICKET_INCREMENT;
     uint64_t target = _channel_get_target(chan, ticket);
     uint32_t id = _channel_get_id(chan, ticket) + _CHAN_ID_FILLED_BIT;
     
     chan_wait_n(3);
-    uint32_t curr_id = chan_atomic_load32(&chan->ids[target]);
+    uint32_t curr_id = atomic_load(&chan->ids[target]);
     chan_wait_n(3);
-    uint32_t closing = chan_atomic_load32(&chan->closing_state);
+    uint32_t closing = atomic_load(&chan->closing_state);
     if(closing)
     {
         if(closing & CHANNEL_CLOSING_HARD)
@@ -704,9 +691,9 @@ CHANAPI Channel_Res channel_ticket_try_pop_weak(Channel* chan, void* item, uint6
         else
         {
             chan_wait_n(10);
-            uint64_t new_head = chan_atomic_load64(&chan->head);
+            uint64_t new_head = atomic_load(&chan->head);
             chan_wait_n(10);
-            uint64_t barrier = chan_atomic_load64(&chan->head_barrier);
+            uint64_t barrier = atomic_load(&chan->head_barrier);
 
             if((new_head & _CHAN_TICKET_POP_CLOSED_BIT))
                 if(channel_ticket_is_less_or_eq(barrier, ticket))
@@ -718,7 +705,7 @@ CHANAPI Channel_Res channel_ticket_try_pop_weak(Channel* chan, void* item, uint6
         return CHANNEL_EMPTY;
         
     chan_wait_n(3);
-    if(chan_atomic_cas64(&chan->head, head, head+_CHAN_TICKET_INCREMENT) == false)
+    if(atomic_compare_exchange_strong(&chan->head, &head, head+_CHAN_TICKET_INCREMENT) == false)
         return CHANNEL_LOST_RACE;
         
     memcpy(item, chan->items + target*info.item_size, info.item_size);
@@ -734,14 +721,14 @@ CHANAPI Channel_Res channel_ticket_try_pop_weak(Channel* chan, void* item, uint6
 
 CHANAPI void _channel_close_lock(Channel* chan, Channel_Info info)
 {
-    uint32_t ticket = chan_atomic_add32(&chan->closing_lock_requested, 1);
+    uint32_t ticket = atomic_fetch_add(&chan->closing_lock_requested, 1);
     for(;;) {
-        uint32_t curr_completed = chan_atomic_load32(&chan->closing_lock_completed);
+        uint32_t curr_completed = atomic_load(&chan->closing_lock_completed);
         if(curr_completed == ticket)
             break;
 
         if(info.wait)
-            info.wait(&chan->closing_lock_completed, curr_completed, -1);
+            info.wait((void*) &chan->closing_lock_completed, curr_completed, -1);
         else
             chan_pause();
     }
@@ -749,9 +736,9 @@ CHANAPI void _channel_close_lock(Channel* chan, Channel_Info info)
 
 CHANAPI void _channel_close_unlock(Channel* chan, Channel_Info info)
 {
-    chan_atomic_add32(&chan->closing_lock_completed, 1);
+    atomic_fetch_add(&chan->closing_lock_completed, 1);
     if(info.wake)
-        info.wake(&chan->closing_lock_completed);
+        info.wake((void*) &chan->closing_lock_completed);
 }
 
 CHANAPI void _channel_close_wakeup_ticket_range(Channel* chan, uint64_t from, uint64_t to, Channel_Info info)
@@ -762,13 +749,13 @@ CHANAPI void _channel_close_wakeup_ticket_range(Channel* chan, uint64_t from, ui
         for(uint64_t ticket = from; channel_ticket_is_less(ticket, to); ticket++)
         {
             uint64_t target = _channel_get_target(chan, ticket);
-            chan_atomic_or32(&chan->ids[target], _CHAN_ID_CLOSE_NOTIFY_BIT);
-            uint32_t id = chan_atomic_load32(&chan->ids[target]);
+            atomic_fetch_or(&chan->ids[target], _CHAN_ID_CLOSE_NOTIFY_BIT);
+            uint32_t id = atomic_load(&chan->ids[target]);
             if(id & _CHAN_ID_WAITING_BIT)
             {
-                chan_atomic_and32(&chan->ids[target], ~_CHAN_ID_WAITING_BIT);
+                atomic_fetch_and(&chan->ids[target], ~_CHAN_ID_WAITING_BIT);
                 sync_mem_log_val2("close waken up", ticket, id);
-                info.wake(&chan->ids[target]);
+                info.wake((void*) &chan->ids[target]);
             }
             else
             {
@@ -794,10 +781,10 @@ CHANAPI bool _channel_close_soft_custom(Channel* chan, Channel_Info info, bool p
             uint64_t tail_barrier = 0;
             uint64_t head_barrier = 0;
 
-            chan_atomic_or32(&chan->closing_state, CHANNEL_CLOSING_PUSH);
+            atomic_fetch_or(&chan->closing_state, CHANNEL_CLOSING_PUSH);
             for(;;) {
-                tail = chan_atomic_load64(&chan->tail);
-                head = chan_atomic_load64(&chan->head);
+                tail = atomic_load(&chan->tail);
+                head = atomic_load(&chan->head);
 
                 uint64_t barrier_from_head = (head + chan->capacity*_CHAN_TICKET_INCREMENT)/_CHAN_TICKET_INCREMENT;
                 uint64_t barrier_from_tail = tail/_CHAN_TICKET_INCREMENT;
@@ -805,8 +792,8 @@ CHANAPI bool _channel_close_soft_custom(Channel* chan, Channel_Info info, bool p
                 if(channel_ticket_is_less(barrier_from_head, barrier_from_tail))
                 {
                     tail_barrier = barrier_from_head;
-                    chan_atomic_store64(&chan->tail_barrier, tail_barrier);
-                    if(chan_atomic_cas64(&chan->head, head, head | _CHAN_TICKET_PUSH_CLOSED_BIT))
+                    atomic_store(&chan->tail_barrier, tail_barrier);
+                    if(atomic_compare_exchange_weak(&chan->head, &head, head | _CHAN_TICKET_PUSH_CLOSED_BIT))
                     {
                         //since we didnt CAS tail we dont know if it hasnt changed
                         // if it has changed. Thus we need to load it.
@@ -817,9 +804,9 @@ CHANAPI bool _channel_close_soft_custom(Channel* chan, Channel_Info info, bool p
                         //         because of this we also keep count of the number of backoffs
                         //         and add it to get upper estimate on the tail at the time of CAS.
                         chan_wait_n(20); 
-                        uint64_t tail_after_backoff = chan_atomic_load64(&chan->tail);
+                        uint64_t tail_after_backoff = atomic_load(&chan->tail);
                         chan_wait_n(10);
-                        uint64_t tail_backed_off_count = chan_atomic_load64(&chan->tail_cancel_count);
+                        uint64_t tail_backed_off_count = atomic_load(&chan->tail_cancel_count);
                         tail = (tail_after_backoff + tail_backed_off_count) % CHANNEL_MAX_TICKET;
                         break;
                     }
@@ -827,8 +814,8 @@ CHANAPI bool _channel_close_soft_custom(Channel* chan, Channel_Info info, bool p
                 else
                 {
                     tail_barrier = barrier_from_tail;
-                    chan_atomic_store64(&chan->tail_barrier, tail_barrier);
-                    if(chan_atomic_cas64(&chan->tail, tail, tail | _CHAN_TICKET_PUSH_CLOSED_BIT))
+                    atomic_store(&chan->tail_barrier, tail_barrier);
+                    if(atomic_compare_exchange_weak(&chan->tail, &tail, tail | _CHAN_TICKET_PUSH_CLOSED_BIT))
                         break;
                 }
             }
@@ -836,24 +823,24 @@ CHANAPI bool _channel_close_soft_custom(Channel* chan, Channel_Info info, bool p
             sync_mem_log_val2("_channel_close_soft tail_barrier", tail_barrier, tail/_CHAN_TICKET_INCREMENT);
 
             chan_wait_n(10);
-            chan_atomic_or32(&chan->closing_state, CHANNEL_CLOSING_POP);
+            atomic_fetch_or(&chan->closing_state, CHANNEL_CLOSING_POP);
             if(push_close)
             {
                 head_barrier = tail_barrier;
-                chan_atomic_store64(&chan->head_barrier, head_barrier);
-                head = chan_atomic_or64(&chan->head, _CHAN_TICKET_POP_CLOSED_BIT);
+                atomic_store(&chan->head_barrier, head_barrier);
+                head = atomic_fetch_or(&chan->head, _CHAN_TICKET_POP_CLOSED_BIT);
             }
             else
             {
                 for(;;) {
-                    head = chan_atomic_load64(&chan->head);
+                    head = atomic_load(&chan->head);
                 
                     uint64_t barrier_from_head = head/_CHAN_TICKET_INCREMENT;  // owo
                     uint64_t barrier_from_tail = tail_barrier;
                 
                     head_barrier = channel_ticket_is_less(barrier_from_head, barrier_from_tail) ? barrier_from_head : barrier_from_tail;
-                    chan_atomic_store64(&chan->head_barrier, head_barrier);
-                    if(chan_atomic_cas64(&chan->head, head, head | _CHAN_TICKET_POP_CLOSED_BIT))
+                    atomic_store(&chan->head_barrier, head_barrier);
+                    if(atomic_compare_exchange_weak(&chan->head, &head, head | _CHAN_TICKET_POP_CLOSED_BIT))
                         break;
                 }
             }
@@ -873,7 +860,7 @@ CHANAPI bool _channel_close_soft_custom(Channel* chan, Channel_Info info, bool p
             _channel_close_wakeup_ticket_range(chan, head_barrier, head_ticket, info);
             _channel_close_wakeup_ticket_range(chan, tail_barrier, tail_ticket, info);
             
-            chan_atomic_or32(&chan->closing_state, CHANNEL_CLOSING_CLOSED);
+            atomic_fetch_or(&chan->closing_state, CHANNEL_CLOSING_CLOSED);
         }
         _channel_close_unlock(chan, info);
     }
@@ -902,16 +889,16 @@ CHANAPI bool channel_is_invariant_converged_state(Channel* chan, Channel_Info in
     bool out = true;
     if(channel_is_hard_closed(chan) == false)
     {
-        uint64_t tail_and_closed = chan_atomic_load64(&chan->tail);
-        uint64_t head_and_closed = chan_atomic_load64(&chan->head);
+        uint64_t tail_and_closed = atomic_load(&chan->tail);
+        uint64_t head_and_closed = atomic_load(&chan->head);
 
         uint64_t tail = tail_and_closed/_CHAN_TICKET_INCREMENT;
         uint64_t head = head_and_closed/_CHAN_TICKET_INCREMENT;
         
-        uint64_t tail_barrier = chan_atomic_load64(&chan->tail_barrier);
-        uint64_t head_barrier = chan_atomic_load64(&chan->head_barrier);
+        uint64_t tail_barrier = atomic_load(&chan->tail_barrier);
+        uint64_t head_barrier = atomic_load(&chan->head_barrier);
 
-        uint32_t closing = chan_atomic_load32(&chan->closing_state);
+        uint32_t closing = atomic_load(&chan->closing_state);
         if(closing & CHANNEL_CLOSING_CLOSED)
         {
             int64_t dist_barrier = (int64_t)(tail_barrier - head_barrier);
@@ -972,16 +959,16 @@ CHANAPI bool channel_reopen(Channel* chan, Channel_Info info)
         if(channel_is_closed(chan) && channel_is_hard_closed(chan) == false)
         {
             sync_mem_log("channel_reopen lock start");
-            chan_atomic_store32(&chan->closing_state, 0);
+            atomic_store(&chan->closing_state, 0);
             for(isize i = 0; i < chan->capacity; i++)
-                chan_atomic_and32(&chan->ids[i], ~_CHAN_ID_CLOSE_NOTIFY_BIT);
+                atomic_fetch_and(&chan->ids[i], ~_CHAN_ID_CLOSE_NOTIFY_BIT);
 
-            chan_atomic_and64(&chan->head, ~(_CHAN_TICKET_PUSH_CLOSED_BIT | _CHAN_TICKET_POP_CLOSED_BIT));
-            chan_atomic_and64(&chan->tail, ~(_CHAN_TICKET_PUSH_CLOSED_BIT | _CHAN_TICKET_POP_CLOSED_BIT));
-            chan_atomic_store64(&chan->head_barrier, 0);
-            chan_atomic_store64(&chan->head_cancel_count, 0);
-            chan_atomic_store64(&chan->tail_barrier, 0);
-            chan_atomic_store64(&chan->tail_cancel_count, 0);
+            atomic_fetch_and(&chan->head, ~(_CHAN_TICKET_PUSH_CLOSED_BIT | _CHAN_TICKET_POP_CLOSED_BIT));
+            atomic_fetch_and(&chan->tail, ~(_CHAN_TICKET_PUSH_CLOSED_BIT | _CHAN_TICKET_POP_CLOSED_BIT));
+            atomic_store(&chan->head_barrier, 0);
+            atomic_store(&chan->head_cancel_count, 0);
+            atomic_store(&chan->tail_barrier, 0);
+            atomic_store(&chan->tail_cancel_count, 0);
 
             out = true;
             sync_mem_log("channel_reopen lock end");
@@ -997,7 +984,7 @@ CHANAPI bool channel_close_hard(Channel* chan, Channel_Info info)
     ASSERT(memcmp(&chan->info, &info, sizeof info) == 0, "info must be matching");
     
     sync_mem_log("channel_close_hard called");
-    bool out = (chan_atomic_or32(&chan->closing_state, CHANNEL_CLOSING_HARD) & CHANNEL_CLOSING_HARD) == 0;
+    bool out = (atomic_fetch_or(&chan->closing_state, CHANNEL_CLOSING_HARD) & CHANNEL_CLOSING_HARD) == 0;
     sync_mem_log("channel_close_hard done");
     return out;
 }
@@ -1047,8 +1034,8 @@ CHANAPI Channel_Res channel_try_pop(Channel* chan, void* item, Channel_Info info
 
 CHANAPI isize channel_signed_distance(const Channel* chan)
 {
-    uint64_t head = chan_atomic_load64(&chan->head);
-    uint64_t tail = chan_atomic_load64(&chan->tail);
+    uint64_t head = atomic_load(&chan->head);
+    uint64_t tail = atomic_load(&chan->tail);
 
     uint64_t diff = tail/_CHAN_TICKET_INCREMENT - head/_CHAN_TICKET_INCREMENT;
     return (isize) diff;
@@ -1072,13 +1059,13 @@ CHANAPI bool channel_is_empty(const Channel* chan)
 
 CHANAPI bool channel_is_closed(const Channel* chan) 
 {
-    uint32_t closing = chan_atomic_load32(&chan->closing_state);
+    uint32_t closing = atomic_load(&chan->closing_state);
     return closing != 0;
 }
 
 CHANAPI bool channel_is_hard_closed(const Channel* chan) 
 {
-    uint32_t closing = chan_atomic_load32(&chan->closing_state);
+    uint32_t closing = atomic_load(&chan->closing_state);
     return (closing & CHANNEL_CLOSING_HARD) != 0;
 }
 
@@ -1115,9 +1102,9 @@ CHANAPI void channel_init(Channel* chan, void* items, uint32_t* ids, isize capac
     #endif
 
     //essentially a memory fence with respect to any other function
-    chan_atomic_store64(&chan->head, 0);
-    chan_atomic_store64(&chan->tail, 0);
-    chan_atomic_store32(&chan->closing_state, 0);
+    atomic_store(&chan->head, 0);
+    atomic_store(&chan->tail, 0);
+    atomic_store(&chan->closing_state, 0);
 }
 
 CHANAPI isize channel_memory_size(isize capacity, Channel_Info info)
@@ -1134,7 +1121,7 @@ CHANAPI Channel* channel_init_into_memory(void* aligned_memory, isize capacity, 
         void* items = ids + capacity;
 
         channel_init(chan, items, ids, capacity, info);
-        chan_atomic_store32(&chan->allocated, true);
+        atomic_store(&chan->allocated, true);
     }
     return chan;
 }
@@ -1149,7 +1136,7 @@ CHANAPI Channel* channel_malloc(isize capacity, Channel_Info info)
 CHANAPI Channel* channel_share(Channel* chan)
 {
     if(chan != NULL)
-        chan_atomic_add32(&chan->ref_count, 1);
+        atomic_fetch_add(&chan->ref_count, 1);
     return chan;
 }
 
@@ -1158,10 +1145,10 @@ CHANAPI int32_t channel_deinit(Channel* chan)
     if(chan == NULL)
         return 0;
 
-    int32_t refs = (int32_t) chan_atomic_sub32(&chan->ref_count, 1) - 1;
+    int32_t refs = (int32_t) atomic_fetch_sub(&chan->ref_count, 1) - 1;
     if(refs == 0)
     {
-        if(chan_atomic_load32(&chan->allocated))
+        if(atomic_load(&chan->allocated))
             chan_aligned_free(chan, CHAN_CACHE_LINE);
         else
             memset(chan, 0, sizeof *chan);
@@ -1172,18 +1159,22 @@ CHANAPI int32_t channel_deinit(Channel* chan)
 
 //SYNC
 
+#if 0
 CHANAPI bool sync_wait(volatile void* state, uint32_t current, isize timeout, Sync_Wait wait)
 {
     if(wait.notify_bit) 
     {
-        chan_atomic_or32(state, wait.notify_bit);
+        atomic_fetch_or(state, wait.notify_bit);
         current |= wait.notify_bit;
     }
 
     if(wait.wait)
         return wait.wait((void*) state, current, timeout);
     else
-        return false;
+    {
+        chan_pause();
+        return true;
+    }
 }
 
 CHANAPI void sync_wake(volatile void* state, uint32_t prev, Sync_Wait wait)
@@ -1203,10 +1194,10 @@ CHANAPI void sync_wake(volatile void* state, uint32_t prev, Sync_Wait wait)
 CHANAPI void sync_set_and_wake(volatile void* state, uint32_t to, Sync_Wait wait)
 {
     if(wait.wake == NULL)
-        chan_atomic_store32(state, to);
+        atomic_store(state, to);
     else
     {
-        uint32_t prev = chan_atomic_exchange32(state, to);
+        uint32_t prev = atomic_exchange(state, to);
         sync_wake(state, prev, wait);
     }
 }
@@ -1214,7 +1205,7 @@ CHANAPI void sync_set_and_wake(volatile void* state, uint32_t to, Sync_Wait wait
 CHANAPI uint32_t sync_wait_for_equal(volatile void* state, uint32_t desired, Sync_Wait wait)
 {
     for(;;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) == (desired & ~wait.notify_bit))
             return current & ~wait.notify_bit;
 
@@ -1225,7 +1216,7 @@ CHANAPI uint32_t sync_wait_for_equal(volatile void* state, uint32_t desired, Syn
 CHANAPI uint32_t sync_wait_for_not_equal(volatile void* state, uint32_t desired, Sync_Wait wait)
 {
     for(;;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         sync_mem_log_val("wait neq", current);
         if((current & ~wait.notify_bit) != (desired & ~wait.notify_bit))
         {
@@ -1241,7 +1232,7 @@ CHANAPI uint32_t sync_wait_for_not_equal(volatile void* state, uint32_t desired,
 CHANAPI uint32_t sync_wait_for_smaller(volatile void* state, uint32_t desired, Sync_Wait wait)
 {
     for(;;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) < (desired & ~wait.notify_bit))
             return current & ~wait.notify_bit;
             
@@ -1255,7 +1246,7 @@ CHANAPI uint32_t sync_wait_for_smaller(volatile void* state, uint32_t desired, S
 CHANAPI uint32_t sync_wait_for_greater(volatile void* state, uint32_t desired, Sync_Wait wait)
 {
     for(;;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) > (desired & ~wait.notify_bit))
             return current & ~wait.notify_bit;
             
@@ -1295,7 +1286,7 @@ CHANAPI bool sync_timed_wait(volatile void* state, uint32_t current, Sync_Timed_
 CHANAPI bool sync_timed_wait_for_equal(volatile void* state, uint32_t desired, double timeout, Sync_Wait wait)
 {
     for(Sync_Timed_Wait timed_wait = sync_timed_wait_start(timeout);;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) == (desired & ~wait.notify_bit))
             return true;
 
@@ -1307,7 +1298,7 @@ CHANAPI bool sync_timed_wait_for_equal(volatile void* state, uint32_t desired, d
 CHANAPI bool sync_timed_wait_for_not_equal(volatile void* state, uint32_t desired, double timeout, Sync_Wait wait)
 {
     for(Sync_Timed_Wait timed_wait = sync_timed_wait_start(timeout);;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) != (desired & ~wait.notify_bit))
             return true;
 
@@ -1319,7 +1310,7 @@ CHANAPI bool sync_timed_wait_for_not_equal(volatile void* state, uint32_t desire
 CHANAPI bool sync_timed_wait_for_smaller(volatile void* state, uint32_t desired, double timeout, Sync_Wait wait)
 {
     for(Sync_Timed_Wait timed_wait = sync_timed_wait_start(timeout);;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) < (desired & ~wait.notify_bit))
             return true;
 
@@ -1331,7 +1322,7 @@ CHANAPI bool sync_timed_wait_for_smaller(volatile void* state, uint32_t desired,
 CHANAPI bool sync_timed_wait_for_greater(volatile void* state, uint32_t desired, double timeout, Sync_Wait wait)
 {
     for(Sync_Timed_Wait timed_wait = sync_timed_wait_start(timeout);;) {
-        uint32_t current = chan_atomic_load32(state);
+        uint32_t current = atomic_load(state);
         if((current & ~wait.notify_bit) > (desired & ~wait.notify_bit))
             return true;
 
@@ -1339,22 +1330,37 @@ CHANAPI bool sync_timed_wait_for_greater(volatile void* state, uint32_t desired,
             return false;
     }
 }
+#endif
 
 CHANAPI bool sync_once_begin(volatile Sync_Once* once, Sync_Wait wait)
 {
-    uint32_t before_value = chan_atomic_load32(once);
+    uint32_t before_value = atomic_load(once);
     if(before_value != SYNC_ONCE_INIT)
         return false;
 
-    if(chan_atomic_cas32(once, SYNC_ONCE_UNINIT, SYNC_ONCE_INITIALIZING))
+    uint32_t curr_val = SYNC_ONCE_UNINIT;
+    if(atomic_compare_exchange_strong(once, &curr_val, SYNC_ONCE_INITIALIZING))
         return true;
     else
-        sync_wait_for_equal(once, SYNC_ONCE_INIT, wait);
+    {
+        for(;;) {
+            uint32_t current = atomic_load(once);
+            if(current == SYNC_ONCE_INIT)
+                break;
+
+            if(wait.wait)
+                return wait.wait((void*) once, current, -1);
+            else
+                chan_pause();
+        }
+    }
     return false;
 }
 CHANAPI void sync_once_end(volatile Sync_Once* once, Sync_Wait wait)
 {
-    sync_set_and_wake(once, SYNC_ONCE_INIT, wait);
+    atomic_store(once, SYNC_ONCE_INIT);
+    if(wait.wake)
+        wait.wake((void*) once);
 }
 CHANAPI bool sync_once(volatile Sync_Once* once, void(*func)(void* context), void* context, Sync_Wait wait)
 {
@@ -1369,12 +1375,12 @@ CHANAPI bool sync_once(volatile Sync_Once* once, void(*func)(void* context), voi
 
 CHANAPI int32_t wait_group_count(volatile Wait_Group* wg)
 {
-    return (int32_t) chan_atomic_load32(&wg->count);
+    return (int32_t) atomic_load(&wg->atomic_count);
 }
 CHANAPI Wait_Group* wait_group_push(volatile Wait_Group* wg, isize count)
 {
     if(count > 0)
-        chan_atomic_add32(&wg->count, (uint32_t) count);
+        atomic_fetch_add(&wg->atomic_count, (uint32_t) count);
     return (Wait_Group*) wg;
 }
 CHANAPI bool wait_group_pop(volatile Wait_Group* wg, isize count, Sync_Wait wait)
@@ -1384,13 +1390,13 @@ CHANAPI bool wait_group_pop(volatile Wait_Group* wg, isize count, Sync_Wait wait
         sync_mem_log_val("wait_group_pop negative", (uint64_t) -count);
     else
     {
-        int32_t old_val = (int32_t) chan_atomic_sub32(&wg->count, (uint32_t) count);
+        int32_t old_val = (int32_t) atomic_fetch_sub(&wg->atomic_count, (uint32_t) count);
         sync_mem_log_val2("wait_group_pop", (uint32_t) old_val, (uint32_t) old_val - (uint32_t) count);
 
         //if this was the pop that got it over the line wake 
         if(old_val - count <= 0 && old_val > 0)
         {
-            chan_atomic_add32(&wg->wakes, 1);
+            atomic_fetch_add(&wg->atomic_wakes, 1);
             sync_mem_log("wait_group_pop WAKE");
             wait.wake(wg);
             out = true;
@@ -1401,9 +1407,9 @@ CHANAPI bool wait_group_pop(volatile Wait_Group* wg, isize count, Sync_Wait wait
 }
 CHANAPI void wait_group_wait(volatile Wait_Group* wg, Sync_Wait wait)
 {
-    Wait_Group before = {chan_atomic_load64(wg)};
+    Wait_Group before = {atomic_load(&wg->combined)};
     Wait_Group curr = before;
-    for(;; curr.combined = chan_atomic_load64(wg)) {
+    for(;; curr.combined = atomic_load(&wg->combined)) {
         sync_mem_log_val2("wait_group_wait", (uint32_t) curr.count, curr.wakes);
         if(curr.count <= 0 || before.wakes != curr.wakes)
         {
@@ -1432,9 +1438,9 @@ CHANAPI bool wait_group_wait_timed(volatile Wait_Group* wg, double timeout, Sync
     isize wait_ticks = (isize) (timeout*freq_s);
     isize start_ticks = chan_perf_counter();
 
-    Wait_Group before = {chan_atomic_load64(wg)};
+    Wait_Group before = {atomic_load(&wg->combined)};
     Wait_Group curr = before;
-    for(;; curr.combined = chan_atomic_load64(wg)) {
+    for(;; curr.combined = atomic_load(&wg->combined)) {
         sync_mem_log_val2("wait_group_wait_timed", (uint32_t) curr.count, curr.wakes);
         if(curr.count <= 0 || before.wakes != curr.wakes)
         {
@@ -1457,180 +1463,6 @@ CHANAPI bool wait_group_wait_timed(volatile Wait_Group* wg, double timeout, Sync
             chan_pause();
     }
 }
-
-//#define CHAN_TESTING
-
-#ifdef _MSC_VER
-    #ifdef CHAN_TESTING
-        CHAN_OS_API void chan_random_sleep();
-        #define CHAN_RAND_SLEEP() chan_random_sleep()
-    #else
-        #define CHAN_RAND_SLEEP()
-    #endif
-
-    //#include <winnt.h>
-    //#include <stdatomic.h>
-    CHAN_INTRINSIC uint64_t chan_atomic_load64(const volatile void* target)
-    {
-        CHAN_RAND_SLEEP();
-        uint64_t out = (uint64_t) __iso_volatile_load64((const long long*) target);
-        //MemoryBarrier(); //???
-        return out;
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_load32(const volatile void* target)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint32_t) __iso_volatile_load32((const int*) target);
-    }
-    CHAN_INTRINSIC void chan_atomic_store64(volatile void* target, uint64_t value)
-    {
-        CHAN_RAND_SLEEP();
-        __iso_volatile_store64((long long*) target, (long long) value);
-    }
-    CHAN_INTRINSIC void chan_atomic_store32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        __iso_volatile_store32((int*) target, (int) value);
-    }
-    CHAN_INTRINSIC bool chan_atomic_cas64(volatile void* target, uint64_t old_value, uint64_t new_value)
-    {
-        CHAN_RAND_SLEEP();
-        return _InterlockedCompareExchange64((long long*) target, (long long) new_value, (long long) old_value) == (long long) old_value;
-    }
-    CHAN_INTRINSIC bool chan_atomic_cas32(volatile void* target, uint32_t old_value, uint32_t new_value)
-    {
-        CHAN_RAND_SLEEP();
-        return _InterlockedCompareExchange((long*) target, (long) new_value, (long) old_value) == (long) old_value;
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_exchange64(volatile void* target, uint64_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint64_t) _InterlockedExchange64((long long*) target, (long long) value);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_exchange32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint32_t) _InterlockedExchange((long*) target, (long) value);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_add64(volatile void* target, uint64_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint64_t) _InterlockedExchangeAdd64((long long*) (void*) target, (long long) value);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_add32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint32_t) _InterlockedExchangeAdd((long*) (void*) target, (long long) value);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_sub64(volatile void* target, uint64_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return chan_atomic_add64(target, (uint64_t) -(int64_t) value);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_sub32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return chan_atomic_add32(target, (uint64_t) -(int64_t) value);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_or64(volatile void* target, uint64_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint64_t) _InterlockedOr64((long long*) (void*) target, (long long) value);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_or32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint32_t) _InterlockedOr((long*) (void*) target, (long) value);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_and64(volatile void* target, uint64_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint64_t) _InterlockedAnd64((long long*) (void*) target, (long long) value);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_and32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint32_t) _InterlockedAnd((long*) (void*) target, (long) value);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_xor32(volatile void* target, uint32_t value)
-    {
-        CHAN_RAND_SLEEP();
-        return (uint32_t) _InterlockedXor((long*) (void*) target, (long) value);
-    }
-    CHAN_INTRINSIC bool chan_atomic_cas128(volatile void* target, uint64_t old_value_lo, uint64_t old_value_hi, uint64_t new_value_lo, uint64_t new_value_hi)
-    {
-        long long new_val[] = {(long long) old_value_lo, (long long) old_value_hi};
-        return (bool) _InterlockedCompareExchange128((volatile long long*) target, (long long) new_value_hi, (long long) new_value_lo, new_val);
-    }
-#elif defined(__GNUC__) || defined(__clang__)
-    //for reference see: https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
-    CHAN_INTRINSIC bool chan_atomic_cas64(volatile void* target, uint64_t old_value, uint64_t new_value)
-    {
-        return __atomic_compare_exchange_n(target, &old_value, new_value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC bool chan_atomic_cas32(volatile void* target, uint32_t old_value, uint32_t new_value)
-    {
-        return __atomic_compare_exchange_n(target, &old_value, new_value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_load64(volatile const uint64_t* target)
-    {
-        return (uint64_t) __atomic_load_n(target, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_load32(volatile const uint32_t* target)
-    {
-        return (uint32_t) __atomic_load_n(target, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC void chan_atomic_store64(volatile void* target, uint64_t value)
-    {
-        __atomic_store_n(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC void chan_atomic_store32(volatile void* target, uint32_t value)
-    {
-        __atomic_store_n(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_exchange64(volatile void* target, uint64_t value)
-    {
-        return (uint64_t) __atomic_exchange_n(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_exchange32(volatile void* target, uint32_t value)
-    {
-        return (uint32_t) __atomic_exchange_n(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_add32(volatile void* target, uint32_t value)
-    {
-        return (uint32_t) __atomic_add_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_add64(volatile void* target, uint64_t value)
-    {
-        return (uint64_t) __atomic_add_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_sub32(volatile void* target, uint32_t value)
-    {
-        return (uint32_t) __atomic_sub_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_sub64(volatile void* target, uint64_t value)
-    {
-        return (uint64_t) __atomic_sub_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_and32(volatile void* target, uint32_t value)
-    {
-        return (uint32_t) __atomic_and_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_and64(volatile void* target, uint64_t value)
-    {
-        return (uint64_t) __atomic_and_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint32_t chan_atomic_or32(volatile void* target, uint32_t value)
-    {
-        return (uint32_t) __atomic_or_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-    CHAN_INTRINSIC uint64_t chan_atomic_or64(volatile void* target, uint64_t value)
-    {
-        return (uint64_t) __atomic_or_fetch(target, value, __ATOMIC_SEQ_CST);
-    }
-#else
-    #error UNSUPPORTED COMPILER
-#endif
 
 //ARCH DETECTION
 #define CHAN_ARCH_UNKNOWN   0
@@ -1769,11 +1601,11 @@ CHAN_INTRINSIC void chan_pause()
         if(timeout_or_minus_one_if_infinite < 0)
             wait = (DWORD) -1; //INFINITE
 
-        CHAN_RAND_SLEEP();
+        //CHAN_RAND_SLEEP();
         bool value_changed = (bool) WaitOnAddress(state, &undesired, sizeof undesired, wait);
         if(!value_changed)
             sync_mem_log_val("futex timed out", value_changed);
-        CHAN_RAND_SLEEP();
+        //CHAN_RAND_SLEEP();
         return value_changed;
     }
     CHAN_OS_API bool chan_wait_yield(volatile void* state, uint32_t undesired, isize timeout_or_minus_one_if_infinite)
@@ -1930,9 +1762,9 @@ typedef struct _Test_Channel_Linearization_Thread {
     Channel* requests;
     Wait_Group* done;
     
-    uint64_t done_ticket;
+    _CHAN_ATOMIC(uint64_t) done_ticket;
     uint32_t _;
-    uint32_t id;
+    _CHAN_ATOMIC(uint32_t) id;
 
     char name[30];
     bool print;
@@ -1989,7 +1821,7 @@ void _test_channel_linearization_consumer(void* arg)
             if(context->print) 
                 printf("   %s stopped #%i\n", context->name, i+1);
 
-            chan_atomic_store64(&context->done_ticket, ticket);
+            atomic_store(&context->done_ticket, ticket);
             wait_group_pop(context->done, 1, SYNC_WAIT_BLOCK);
         }
         else if(request == _TEST_CHANNEL_REQUEST_EXIT)
@@ -1997,7 +1829,7 @@ void _test_channel_linearization_consumer(void* arg)
             if(context->print) 
                 printf("   %s exited with %s\n", context->name, context->okay ? "okay" : "fail");
 
-            chan_atomic_store64(&context->done_ticket, ticket);
+            atomic_store(&context->done_ticket, ticket);
             wait_group_pop(context->done, 1, SYNC_WAIT_BLOCK);
             break;
         }
@@ -2041,7 +1873,7 @@ void _test_channel_linearization_producer(void* arg)
                 printf("   %s stopped #%i\n", context->name, i+1);
             
             sync_mem_log("prdoucer stopped");
-            chan_atomic_store64(&context->done_ticket, ticket);
+            atomic_store(&context->done_ticket, ticket);
             wait_group_pop(context->done, 1, SYNC_WAIT_BLOCK);
         }
         else if(request == _TEST_CHANNEL_REQUEST_EXIT)
@@ -2049,7 +1881,7 @@ void _test_channel_linearization_producer(void* arg)
             if(context->print) 
                 printf("   %s exited\n", context->name);
         
-            chan_atomic_store64(&context->done_ticket, ticket);
+            atomic_store(&context->done_ticket, ticket);
             wait_group_pop(context->done, 1, SYNC_WAIT_BLOCK);
             break;
         }
@@ -2141,10 +1973,10 @@ void test_channel_linearization(isize buffer_capacity, isize producer_count, isi
         {
             printf("   Wait stuck\n");
             for(isize i = 0; i < producer_count; i++)
-                if(chan_atomic_load64(&producers[i].done_ticket) != gen)
+                if(atomic_load(&producers[i].done_ticket) != gen)
                     printf("   producer #%lli stuck\n", i);
             for(isize i = 0; i < consumers_count; i++)
-                if(chan_atomic_load64(&consumers[i].done_ticket) != gen)
+                if(atomic_load(&consumers[i].done_ticket) != gen)
                     printf("   consumer #%lli stuck\n", i);
             printf("   Wait stuck done\n");
         }
@@ -2187,9 +2019,9 @@ typedef struct _Test_Channel_Cycle_Thread {
     Channel* requests;
     Wait_Group* done;
     
-    uint64_t done_ticket;
+    _CHAN_ATOMIC(uint64_t) done_ticket;
+    _CHAN_ATOMIC(uint32_t) id;
     uint32_t _;
-    uint32_t id;
 
     char name[31];
     bool print;
@@ -2232,7 +2064,7 @@ void _test_channel_cycle_runner(void* arg)
             if(context->print) 
                 printf("   %s stopped #%i\n", context->name, i+1);
         
-            chan_atomic_store64(&context->done_ticket, ticket);
+            atomic_store(&context->done_ticket, ticket);
             wait_group_pop(context->done, 1, SYNC_WAIT_BLOCK);
         }
         else if(request == _TEST_CHANNEL_REQUEST_EXIT)
@@ -2240,7 +2072,7 @@ void _test_channel_cycle_runner(void* arg)
             if(context->print) 
                 printf("   %s exited\n", context->name);
         
-            chan_atomic_store64(&context->done_ticket, ticket);
+            atomic_store(&context->done_ticket, ticket);
             wait_group_pop(context->done, 1, SYNC_WAIT_BLOCK);
             break;
         }
@@ -2346,10 +2178,10 @@ void test_channel_cycle(isize buffer_capacity, isize a_count, isize b_count, isi
         {
             printf("   Wait stuck\n");
             for(isize i = 0; i < a_count; i++)
-                if(chan_atomic_load64(&a_threads[i].done_ticket) != gen)
+                if(atomic_load(&a_threads[i].done_ticket) != gen)
                     printf("   a #%lli stuck\n", i);
             for(isize i = 0; i < b_count; i++)
-                if(chan_atomic_load64(&b_threads[i].done_ticket) != gen)
+                if(atomic_load(&b_threads[i].done_ticket) != gen)
                     printf("   b #%lli stuck\n", i);
             printf("   Wait stuck done\n");
         }
@@ -2716,9 +2548,9 @@ void _test_channel_throughput_runner(void* arg)
     
     printf("%s completed\n", context->is_consumer ? "consumer" : "producer");
 
-    chan_atomic_store64(&context->operations, operations);
-    chan_atomic_store64(&context->ticks_before, ticks_before);
-    chan_atomic_store64(&context->ticks_after, ticks_after);
+    atomic_store(&context->operations, operations);
+    atomic_store(&context->ticks_before, ticks_before);
+    atomic_store(&context->ticks_after, ticks_after);
     wait_group_pop(context->wait_group_done, 1, SYNC_WAIT_BLOCK);
 }
 
