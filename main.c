@@ -46,7 +46,6 @@
 #include "todo.h"
 #include "asset_loading.h"
 #include "camera.h"
-#include "channel.h"
 
 #include "glfw/glfw3.h"
 #include "control.h"
@@ -2774,9 +2773,11 @@ void error_func(void* context, Platform_Sandbox_Error error)
     log_captured_callstack(log_error(">APP"), error.call_stack, error.call_stack_size);
 }
 
+#include "_test_channel.h"
 //#include "mdump2.h"
 #include "lib/_test_all.h"
 
+#include <stdlib.h>
 void run_test_func(void* context)
 {
     PROFILE_SCOPE() 
