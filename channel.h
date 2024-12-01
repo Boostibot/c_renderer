@@ -1,3 +1,5 @@
+#define JOT_ALL_IMPL
+
 #ifndef JOT_CHANNEL
 #define JOT_CHANNEL
 
@@ -201,12 +203,21 @@ CHANAPI Channel_Res channel_ticket_try_pop_weak(Channel* chan, void* item, uint6
 
 //These functions can be used for Sync_Wait_Func/Sync_Wake_Func interfaces in the channel.
 CHAN_INTRINSIC void chan_pause();
-CHAN_OS_API void chan_yield();
-CHAN_OS_API int64_t chan_perf_counter();
-CHAN_OS_API int64_t chan_perf_frequency();
+
 CHAN_OS_API void chan_wake_block(volatile void* state);
 CHAN_OS_API bool chan_wait_block(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite);
 CHAN_OS_API bool chan_wait_yield(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite);
+
+CHAN_OS_API void chan_futex_wake_all(volatile uint32_t* state);
+CHAN_OS_API void chan_futex_wake_single(volatile uint32_t* state);
+CHAN_OS_API bool chan_futex_wait(volatile uint32_t* state, uint32_t undesired, double timeout_or_negatove_if_infinite);
+CHAN_OS_API void chan_yield();
+CHAN_OS_API void chan_sleep(double seconds);
+CHAN_OS_API int64_t chan_perf_counter();
+CHAN_OS_API int64_t chan_perf_frequency();
+CHAN_OS_API bool chan_start_thread(void (*func)(void* context), void* context);
+
+
 
 #endif
 
@@ -1004,19 +1015,39 @@ CHANAPI int32_t channel_deinit(Channel* chan)
     return refs;
 }
 
+CHANAPI bool chan_wait_yield(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
+{
+    (void) state; (void) undesired; (void) timeout_or_negatove_if_infinite;
+    chan_yield();
+    return true;
+}
+
+CHANAPI bool chan_wait_block(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
+{
+    return chan_futex_wait((uint32_t*) state, undesired, timeout_or_negatove_if_infinite);
+}
+
+CHANAPI void chan_wake_block(volatile void* state)
+{
+    chan_futex_wake_all((uint32_t*) state);
+}
+
 //ARCH DETECTION
 #define CHAN_ARCH_UNKNOWN   0
 #define CHAN_ARCH_X86       1
 #define CHAN_ARCH_X64       2
-#define CHAN_ARCH_ARM       3
+#define CHAN_ARCH_ARM32     3
+#define CHAN_ARCH_ARM64     4
 
 #ifndef CHAN_ARCH
-    #if defined(_M_CEE_PURE) || defined(_M_IX86)
+    #if defined(_M_CEE_PURE) || defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
         #define CHAN_ARCH CHAN_ARCH_X86
-    #elif defined(_M_X64) && !defined(_M_ARM64EC)
+    #elif defined(__x86_64__) || defined(_M_X64) || defined(__amd64__) && !defined(_M_ARM64EC) 
         #define CHAN_ARCH CHAN_ARCH_X64
-    #elif defined(_M_ARM) || defined(_M_ARM64) || defined(_M_ARM64EC)
-        #define CHAN_ARCH CHAN_ARCH_ARM
+    #elif defined(_M_ARM64) || defined(_M_ARM64EC) || defined(__aarch64__) || defined(__ARM_ARCH_ISA_A64)
+        #define CHAN_ARCH CHAN_ARCH_ARM64
+    #elif defined(_M_ARM32) || defined(_M_ARM32EC) || defined(__arm__) || defined(__ARM_ARCH)
+        #define CHAN_ARCH CHAN_ARCH_ARM32
     #else
         #define CHAN_ARCH CHAN_ARCH_UNKNOWN
     #endif
@@ -1028,7 +1059,7 @@ CHANAPI int32_t channel_deinit(Channel* chan)
 #define CHAN_OS_UNIX        2
 #define CHAN_OS_APPLE_OSX   3
 
-#if !defined(CHAN_OS) || CHAN_OS == CHAN_OS_UNKNOWN
+#if !defined(CHAN_OS)
     #undef CHAN_OS
     #if defined(_WIN32) || defined(_WIN64)
         #define CHAN_OS CHAN_OS_WINDOWS // Windows
@@ -1046,20 +1077,24 @@ CHANAPI int32_t channel_deinit(Channel* chan)
     #ifdef _MSC_VER
         #include <intrin.h>
         #if CHAN_ARCH == CHAN_ARCH_X86 || CHAN_ARCH == CHAN_ARCH_X64
-            CHAN_INTRINSIC void chan_pause() { _mm_pause(); }
+            #define _CHAN_PAUSE_IMPL() _mm_pause()
         #elif CHAN_ARCH == CHAN_ARCH_ARM
-            CHAN_INTRINSIC void chan_pause() { __yield(); }
+            #define _CHAN_PAUSE_IMPL() __yield()
         #endif
     #elif defined(__GNUC__) || defined(__clang__) 
         #if CHAN_ARCH == CHAN_ARCH_X86 || CHAN_ARCH == CHAN_ARCH_X64
             #include <x86intrin.h>
-            CHAN_INTRINSIC void chan_pause() { _mm_pause(); }
-        #elif CHAN_ARCH == CHAN_ARCH_ARM
-            CHAN_INTRINSIC void chan_pause() { volatile("yield"); }
+            #define _CHAN_PAUSE_IMPL() _mm_pause()
+        #elif CHAN_ARCH == CHAN_ARCH_ARM64
+            #define _CHAN_PAUSE_IMPL() asm volatile("yield")
         #endif
-    #else
-        CHAN_INTRINSIC void chan_pause() {}
     #endif
+
+    CHAN_INTRINSIC void chan_pause() { 
+        #ifdef _CHAN_PAUSE_IMPL
+            _CHAN_PAUSE_IMPL();
+        #endif
+    } 
 #endif
 
 #if CHAN_OS == CHAN_OS_WINDOWS
@@ -1074,7 +1109,15 @@ CHANAPI int32_t channel_deinit(Channel* chan)
     BOOL __stdcall SwitchToThread(void);
     void __stdcall Sleep(DWORD);
     
-    CHAN_OS_API bool chan_wait_block(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
+    CHAN_OS_API void chan_futex_wake_all(volatile uint32_t* state) {
+        WakeByAddressAll((void*) state);
+    }
+    
+    CHAN_OS_API void chan_futex_wake_single(volatile uint32_t* state) {
+        WakeByAddressSingle((void*) state);
+    }
+    
+    CHAN_OS_API bool chan_futex_wait(volatile uint32_t* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
     {
         DWORD wait = 0;
         if(timeout_or_negatove_if_infinite < 0)
@@ -1088,23 +1131,10 @@ CHANAPI int32_t channel_deinit(Channel* chan)
         return value_changed;
     }
     
-    CHAN_OS_API void chan_yield()
-    {
+    CHAN_OS_API void chan_yield() {
         SwitchToThread();
     }
 
-    CHAN_OS_API bool chan_wait_yield(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
-    {
-        (void) state; (void) undesired; (void) timeout_or_negatove_if_infinite;
-        SwitchToThread();
-        return true;
-    }
-
-    CHAN_OS_API void chan_wake_block(volatile void* state)
-    {
-        WakeByAddressAll((void*) state);
-    }
-    
     CHAN_OS_API void chan_sleep(double seconds)
     {
         if(seconds >= 0)
@@ -1131,98 +1161,159 @@ CHANAPI int32_t channel_deinit(Channel* chan)
         return ticks;
     }
 
+    uintptr_t _beginthread(
+        void( __cdecl *start_address )( void * ),
+        unsigned stack_size,
+        void *arglist
+    );
+
+    CHAN_OS_API bool chan_start_thread(void (*func)(void* context), void* context)
+    {
+        return _beginthread(func, 0, context) != 0;
+    }
+
 #elif CHAN_OS == CHAN_OS_UNIX
     #include <linux/futex.h> 
     #include <sys/syscall.h> 
     #include <unistd.h>
+    #include <sched.h>
+    #include <errno.h>
 
-    CHAN_OS_API void chan_wake_block(volatile void* state) {
-        uint32_t num_wakes = UINT32_MAX;
-        long ret = syscall(SYS_futex, state, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, num_wakes, NULL, NULL, 0);
-        if (ret == -1) {
-            ASSERT(false);
-            perror("Futex wake");
-            __debugbreak();
-        }
+    CHAN_OS_API void chan_futex_wake_all(volatile uint32_t* state) {
+        syscall(SYS_futex, (void*) state, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, INT32_MAX, NULL, NULL, 0);
     }
     
-    CHAN_OS_API bool chan_wait_block(volatile void* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
+    CHAN_OS_API void chan_futex_wake_single(volatile uint32_t* state) {
+        syscall(SYS_futex, (void*) state, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, 1, NULL, NULL, 0);
+    }
+    
+    CHAN_OS_API bool chan_futex_wait(volatile uint32_t* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
     {
         struct timespec tm = {0};
         struct timespec* tm_ptr = NULL;
         if(timeout_or_negatove_if_infinite >= 0)
         {
+            uint64_t nanosecs = (uint64_t) (timeout_or_negatove_if_infinite*1000000000LL);
+            tm.tv_sec = nanosecs / 1000000000LL; 
+            tm.tv_nsec = nanosecs % 1000000000LL; 
             tm_ptr = &tm;
-            timespec
         }
-        for (;;) {
-            long ret = syscall(SYS_futex, addr, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, undesired, NULL, NULL, 0);
-            if (ret == -1) {
-                if (errno != EAGAIN) {
-                    perror("Futex wait");
-                    __debugbreak();
-                } else {
-                    return;
-                }
-            } else if (ret == 0) {
-                return;
-            }
-        }
+        long ret = syscall(SYS_futex, (void*) state, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, undesired, tm_ptr, NULL, 0);
+        if (ret == -1 && errno == ETIMEDOUT) 
+            return false;
+        return true;
     }
-
 
 #elif CHAN_OS == CHAN_OS_APPLE_OSX
-    
-    //Adopted from https://github.com/colrdavidson/Odin/blob/auto_tracing/src/spall_native_auto.h#L575
-    // Probably broken untill I test it
-    #include <mach-o/ldsyms.h>
-    #include <mach-o/dyld.h>
-    #include <sys/types.h>
-    #include <sys/sysctl.h>
-    #include <dlfcn.h>
+    #error Add OSX support. The following is just a sketch that probably does not even compile (missing headers). \
+         I do not have a OSX machine so testing this code is difficult
 
-    #define UL_COMPARE_AND_WAIT 0x00000001
-    #define ULF_WAKE_ALL        0x00000100
-    #define ULF_NO_ERRNO        0x01000000
-
-    /* timeout is specified in microseconds */
-    int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout);
+    //Taken from: https://github.com/colrdavidson/Odin/blob/auto_tracing/src/spall_native_auto.h#L575
+    // and from: https://outerproduct.net/futex-dictionary.html#macos
+    int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout_us);
     int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
 
-    SPALL_FN SPALL_FORCE_INLINE void spall_signal(Spall_Futex *addr) {
-        for (;;) {
-            int ret = __ulock_wake(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, addr, 0);
-            if (ret >= 0) {
-                return;
-            }
-            ret = -ret;
-            if (ret == EINTR || ret == EFAULT) {
-                continue;
-            }
-            if (ret == ENOENT) {
-                return;
-            }
-            ASSERT(false);
-        }
-    }
+    #define UL_COMPARE_AND_WAIT		1
+    #define ULF_WAKE_ALL			0x00000100
+    #define ULF_NO_ERRNO			0x01000000
 
-    SPALL_FN SPALL_FORCE_INLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
-        for (;;) {
-            int ret = __ulock_wait(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, addr, val, 0);
-            if (ret >= 0) {
-                return;
-            }
-            ret = -ret;
-            if (ret == EINTR || ret == EFAULT) {
-                continue;
-            }
-            if (ret == ENOENT) {
-                return;
-            }
-            
-            ASSERT(false);
+    CHAN_OS_API void chan_futex_wake_all(volatile uint32_t* state) {
+        __ulock_wake(UL_COMPARE_AND_WAIT | ULF_WAKE_ALL | ULF_NO_ERRNO, state, 0);
+    }
+    
+    CHAN_OS_API void chan_futex_wake_single(volatile uint32_t* state) {
+        __ulock_wake(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, state, 0);
+    }
+    
+    CHAN_OS_API bool chan_futex_wait(volatile uint32_t* state, uint32_t undesired, double timeout_or_negatove_if_infinite)
+    {
+        uint32_t timeout = 0;
+        if(timeout_or_negatove_if_infinite >= 0)
+        {
+            uint64_t microsecs = (uint64_t) (timeout_or_negatove_if_infinite*1000000LL);
+            if(microsecs == 0)
+                timeout = 1;
+            else if (microsecs > UINT32_MAX)
+                timeout = UINT32_MAX;
+            else
+                microsecs = (uint32_t) microsecs;
         }
+
+        int ret = __ulock_wait(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, state, undesired, timeout);
+        return ret >= 0;
     }
 #endif
 
+#if CHAN_OS == CHAN_OS_APPLE_OSX || CHAN_OS == CHAN_OS_UNIX
+    #include <unistd.h>
+    #include <sched.h>
+    CHAN_OS_API void chan_yield()
+    {
+        sched_yield();
+    }
+    
+    #include <time.h>
+    CHAN_OS_API void chan_sleep(double seconds)
+    {
+        if(seconds > 0)
+        {
+            uint64_t nanosecs = (uint64_t) (seconds*1000000000LL);
+            struct timespec ts = {0};
+            ts.tv_sec = nanosecs / 1000000000LL; 
+            ts.tv_nsec = nanosecs % 1000000000LL; 
+
+            while(nanosleep(&ts, &ts) == -1);
+        }
+    }
+
+    CHAN_OS_API int64_t chan_perf_counter()
+    {
+        struct timespec ts = {0};
+        (void) clock_gettime(CLOCK_MONOTONIC_RAW , &ts);
+        return (int64_t) ts.tv_nsec + ts.tv_sec * 1000000000LL;
+    }
+    
+    CHAN_OS_API int64_t chan_perf_frequency()
+    {
+	    return (int64_t) 1000000000LL;
+    }
+    
+    #include <pthread.h>
+    int pthread_create(pthread_t *restrict thread,
+                        const pthread_attr_t *restrict attr,
+                        void *(*start_routine)(void *),
+                        void *restrict arg);
+
+    CHAN_OS_API void* _chan_thread_func(void* func_and_context)
+    {
+        typedef void (*Void_Func)(void* context);
+
+        Void_Func func = (Void_Func) func_and_context;
+        void* context = ((void**) func_and_context)[1];
+
+        func(context);
+        free(func_and_context);
+    }
+
+    CHAN_OS_API bool chan_start_thread(void (*func)(void* context), void* context)
+    {
+        int error = 1;
+        void** func_and_context = (void**) malloc(sizeof(void*)*2);
+        if(func_and_context)
+        {
+            func_and_context[0] = func;
+            func_and_context[1] = context;
+
+            pthread_attr_t attr = {0};
+            pthread_attr_init(&attr);
+            pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+            error = pthread_create(NULL, NULL, _chan_thread_func, func_and_context);
+        }
+
+        if(error)
+            free(func_and_context);
+        
+        return error == 0;
+    }
+#endif
 #endif

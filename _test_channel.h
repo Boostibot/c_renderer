@@ -61,23 +61,6 @@
     }
 #endif
 
-CHAN_OS_API void chan_start_thread(void(*start_address)(void *), void* args);
-
-
-#if CHAN_OS == CHAN_OS_WINDOWS
-    uintptr_t _beginthread(
-        void( __cdecl *start_address )( void * ),
-        unsigned stack_size,
-        void *arglist
-    );
-
-    CHAN_OS_API void chan_start_thread(void(*start_address)(void *), void* args)
-    {
-        _beginthread(start_address, 0, args);
-        chan_set_thread_name("", false);
-    }
-#endif
-
 #include <time.h>
 #include <stdio.h>
 #include <math.h>
@@ -271,7 +254,7 @@ void test_channel_linearization(isize buffer_capacity, isize producer_count, isi
         producers[i].done = &done;
         producers[i].requests = requests[i];
         snprintf(producers[i].name, sizeof producers[i].name, "producer #%02lli", i);
-        chan_start_thread(_test_channel_linearization_producer, &producers[i]);
+        TEST(chan_start_thread(_test_channel_linearization_producer, &producers[i]));
     }
     
     for(isize i = 0; i < consumers_count; i++)
@@ -284,7 +267,7 @@ void test_channel_linearization(isize buffer_capacity, isize producer_count, isi
         consumers[i].okay = true;
         consumers[i].requests = requests[producer_count + i];
         snprintf(consumers[i].name, sizeof consumers[i].name, "consumer #%02lli", i);
-        chan_start_thread(_test_channel_linearization_consumer, &consumers[i]);
+        TEST(chan_start_thread(_test_channel_linearization_consumer, &consumers[i]));
     }
 
     //Run threads for some time and repeatedly interrupt them with calls to close. 
@@ -475,7 +458,7 @@ void test_channel_cycle(isize buffer_capacity, isize a_count, isize b_count, isi
         snprintf(state.name, sizeof state.name, "A -> B #%lli", i);
 
         a_threads[i] = state;
-        chan_start_thread(_test_channel_cycle_runner, a_threads + i);
+        TEST(chan_start_thread(_test_channel_cycle_runner, a_threads + i));
     }
     
     for(isize i = 0; i < b_count; i++)
@@ -491,7 +474,7 @@ void test_channel_cycle(isize buffer_capacity, isize a_count, isize b_count, isi
         snprintf(state.name, sizeof state.name, "B -> A #%lli", i);
 
         b_threads[i] = state;
-        chan_start_thread(_test_channel_cycle_runner, b_threads + i);
+        TEST(chan_start_thread(_test_channel_cycle_runner, b_threads + i));
     }
 
     for(uint32_t gen = 0; gen < (uint32_t) stop_count; gen++)
@@ -917,7 +900,7 @@ void test_channel_throughput(isize buffer_capacity, isize a_count, isize b_count
         threads[i].wait_group_started = &wait_group_started;
         threads[i].is_consumer = i >= a_count;
 
-        chan_start_thread(_test_channel_throughput_runner, threads + i);
+        TEST(chan_start_thread(_test_channel_throughput_runner, threads + i));
     }
 
     sync_set_and_wake(&run_status, _TEST_CHANNEL_STATUS_RUN, SYNC_WAIT_SPIN);
