@@ -278,15 +278,6 @@
     <ClInclude Include="lib\profile.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="sync.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="channel.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="_test_channel.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\equi_to_cubemap.glsl">

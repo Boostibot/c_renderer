@@ -292,11 +292,8 @@
     <ClInclude Include="asset_descriptions.h" />
     <ClInclude Include="asset_loading.h" />
     <ClInclude Include="shapes.h" />
-    <ClInclude Include="sync.h" />
-    <ClInclude Include="channel.h" />
     <ClInclude Include="thread_pool.h" />
     <ClInclude Include="todo.h" />
-    <ClInclude Include="_test_channel.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
