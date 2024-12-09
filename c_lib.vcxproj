@@ -158,7 +158,7 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
-      <AdditionalOptions>/utf-8 /TC /experimental:c11atomics</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /wd4068 /TC /experimental:c11atomics</AdditionalOptions>
       <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
@@ -175,7 +175,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
-      <AdditionalOptions>/utf-8 /wd4296 %(AdditionalOptions) /experimental:c11atomics</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /wd4068 /wd4296 %(AdditionalOptions) /experimental:c11atomics</AdditionalOptions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <Optimization>MaxSpeed</Optimization>
@@ -202,7 +202,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessToFile>false</PreprocessToFile>
-      <AdditionalOptions>/utf-8 /wd4296 /wd4189 /wd4101 %(AdditionalOptions) /experimental:c11atomics</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /wd4068 /wd4296 /wd4189 /wd4101 %(AdditionalOptions) /experimental:c11atomics</AdditionalOptions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -222,6 +222,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="asset_types.h" />
+    <ClInclude Include="sync_pool.h" />
+    <ClInclude Include="unfinished_atomic_stack.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="clock.h" />
     <ClInclude Include="control.h" />
@@ -242,6 +244,7 @@
     <ClInclude Include="lib\arena_stack.h" />
     <ClInclude Include="lib\array.h" />
     <ClInclude Include="lib\assert.h" />
+    <ClInclude Include="lib\channel.h" />
     <ClInclude Include="lib\defines.h" />
     <ClInclude Include="lib\file.h" />
     <ClInclude Include="lib\guid.h" />
@@ -252,7 +255,6 @@
     <ClInclude Include="lib\json.h" />
     <ClInclude Include="lib\list.h" />
     <ClInclude Include="lib\log.h" />
-    <ClInclude Include="lib\log_file.h" />
     <ClInclude Include="lib\lpf.h" />
     <ClInclude Include="lib\map.h" />
     <ClInclude Include="lib\string_map.h" />
@@ -268,6 +270,8 @@
     <ClInclude Include="lib\sort.h" />
     <ClInclude Include="lib\stable_array.h" />
     <ClInclude Include="lib\string.h" />
+    <ClInclude Include="lib\sync.h" />
+    <ClInclude Include="lib\chase_lev_queue.h" />
     <ClInclude Include="lib\_string_map.h" />
     <ClInclude Include="lib\time.h" />
     <ClInclude Include="lib\vformat.h" />

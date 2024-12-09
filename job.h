@@ -1,10 +1,11 @@
 #pragma once
 #include "lib/string.h"
 #include "lib/platform.h"
+#include "lib/sync.h"
 
-
+typedef struct Atomic_Transfer_Block Atomic_Transfer_Block;
 typedef struct Atomic_Transfer_Block {
-  struct Atomic_Transfer_Block* next;
+  struct Atomic_Transfer_Block* _Atomic next;
   int64_t total_size;
   int64_t parts_count;
   //offsets
@@ -43,11 +44,11 @@ void atomic_transfer_write_parts(Atomic_Transfer_Block** channel, const void** p
             curr_pos += sizes[i];
         }
   
+        TODO();
         int64_t cur_transfer = 0;
-        do {
-            cur_transfer = platform_atomic_load64(channel);
-            platform_atomic_store64(&block->next, cur_transfer);
-        } while(platform_atomic_cas64(channel, cur_transfer, (int64_t) block) == false);
+        (void) cur_transfer;
+        
+        sync_list_push(channel, block);
     }
 }
 
@@ -58,21 +59,12 @@ void atomic_transfer_write(Atomic_Transfer_Block** channel, const void* data, in
 
 Atomic_Transfer_Block* atomic_transfer_read_last(Atomic_Transfer_Block** channel)
 {
-    Atomic_Transfer_Block* cur_transfer = NULL;
-    do {
-        cur_transfer = (Atomic_Transfer_Block*) platform_atomic_load64(channel);
-        if(cur_transfer == NULL)
-            break;
-
-    } while(platform_atomic_cas64(channel, (int64_t) cur_transfer, (int64_t) platform_atomic_load64(&cur_transfer->next)) == false);
-
-  return cur_transfer;
+    return sync_list_pop_all((Atomic_Transfer_Block* _Atomic*) (void*) channel);
 }
 
 Atomic_Transfer_Block* atomic_transfer_read(Atomic_Transfer_Block** channel)
 {
-  Atomic_Transfer_Block* read = (Atomic_Transfer_Block*) platform_atomic_exchange64(channel, 0);
-  return read;
+    return sync_list_pop_all((Atomic_Transfer_Block* _Atomic*) (void*) channel);
 }
 
 void* atomic_transfer_block_part(Atomic_Transfer_Block* block, int64_t index)

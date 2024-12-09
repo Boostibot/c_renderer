@@ -203,9 +203,6 @@
     <ClInclude Include="lib\log.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\log_file.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
     <ClInclude Include="lib\lpf.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
@@ -277,6 +274,21 @@
     </ClInclude>
     <ClInclude Include="lib\profile.h">
       <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\sync.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\channel.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\chase_lev_queue.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unfinished_atomic_stack.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sync_pool.h">
+      <Filter>Resource Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

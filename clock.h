@@ -15,7 +15,8 @@
 // cannot be linear. The composition of the Clock struct makes these cases 
 // not representable.
 
-#include "time.h"
+#include "lib/time.h"
+#include "lib/defines.h"
 
 #define INFINITY_F64 (1e300 * 1e300)
 #define INFINITY_F32 (1e300f * 1e300f)

@@ -183,16 +183,16 @@ void shape_append(Shape* shape, const Vertex* vertices, isize vertices_count, co
     for(isize i = 0; i < trinagles_count; i++)
     {
         Triangle_Index index = indices[i];
-        CHECK_BOUNDS(index.vertex_i[0], vertices_count);
-        CHECK_BOUNDS(index.vertex_i[1], vertices_count);
-        CHECK_BOUNDS(index.vertex_i[2], vertices_count);
+        ASSERT_BOUNDS(index.vertex_i[0], vertices_count);
+        ASSERT_BOUNDS(index.vertex_i[1], vertices_count);
+        ASSERT_BOUNDS(index.vertex_i[2], vertices_count);
         
         Triangle_Index offset_index = index;
         offset_index.vertex_i[0] += (u32) vertex_count_before;
         offset_index.vertex_i[1] += (u32) vertex_count_before;
         offset_index.vertex_i[2] += (u32) vertex_count_before;
 
-        CHECK_BOUNDS(triangle_count_before + i, shape->triangles.len);
+        ASSERT_BOUNDS(triangle_count_before + i, shape->triangles.len);
         shape->triangles.data[triangle_count_before + i] = offset_index;
     }
     PROFILE_STOP();
@@ -287,9 +287,9 @@ Winding_Order triangle_get_winding_order_at_index(const Vertex* vertices, isize 
 {
     !dummy_func ? (void) &vertex_count : (void) 0;
 
-    CHECK_BOUNDS(trinagle.vertex_i[0], vertex_count);
-    CHECK_BOUNDS(trinagle.vertex_i[1], vertex_count);
-    CHECK_BOUNDS(trinagle.vertex_i[2], vertex_count);
+    ASSERT_BOUNDS(trinagle.vertex_i[0], vertex_count);
+    ASSERT_BOUNDS(trinagle.vertex_i[1], vertex_count);
+    ASSERT_BOUNDS(trinagle.vertex_i[2], vertex_count);
 
     Vertex v1 = vertices[trinagle.vertex_i[0]];
     Vertex v2 = vertices[trinagle.vertex_i[1]];
@@ -318,7 +318,7 @@ u32 shape_assembly_add_vertex_custom(Hash* hash, Vertex_Array* vertices, Vertex 
         //If it is the right one and return its index.
         //We still check for exact equality of the vertex. It will almost always
         //succeed because the chances of hash colision are astronomically low.
-        CHECK_BOUNDS(entry, vertices->len);
+        ASSERT_BOUNDS(entry, vertices->len);
         Vertex found_vertex = vertices->data[entry];
         bool is_equal = memcmp(&vertex, &found_vertex, sizeof found_vertex) == 0;
         if(is_equal == false)
@@ -332,7 +332,7 @@ u32 shape_assembly_add_vertex_custom(Hash* hash, Vertex_Array* vertices, Vertex 
         }
     }
     
-    CHECK_BOUNDS(entry, vertices->len);
+    ASSERT_BOUNDS(entry, vertices->len);
     PROFILE_STOP();
     return (u32) entry;
 
@@ -514,7 +514,7 @@ Shape shapes_make_voleyball_sphere(isize iters, f32 radius)
     return out;
 }
 
-Shape shapes_make_uv_sphere(isize iters, f32 radius)
+Shape shapes_make_uv_sphere(Allocator* alloc, isize iters, f32 radius)
 {
     (void) radius;
     PROFILE_START();
@@ -522,8 +522,8 @@ Shape shapes_make_uv_sphere(isize iters, f32 radius)
     ASSERT(iters >= 0);
 
     //add the initial triangles
-    Vertex_Array vertices = {0};
-    Triangle_Index_Array triangles = {0};
+    Vertex_Array vertices = {alloc};
+    Triangle_Index_Array triangles = {alloc};
 
     u32 y_segments = (u32) iters;
     u32 x_segments = (u32) iters;

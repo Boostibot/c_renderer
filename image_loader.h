@@ -100,12 +100,15 @@ EXTERNAL bool image_read_from_file(Image* image, String path, isize desired_chan
 {
     LOG_INFO("ASSET", "Loading image '%.*s'", STRING_PRINT(path));
 
-    bool state = true;
+    bool state = false;
     Arena_Frame arena = scratch_arena_frame_acquire();
     {
         String_Builder file_content = {arena.alloc};
-        state = state && file_read_entire(path, &file_content, log_error(">ASSET"));
-        state = state && image_read_from_memory(image, file_content.string, desired_channels, format, flags);
+        Platform_Error error = file_read_entire(path, &file_content, NULL);
+        if(error)
+            LOG_ERROR("ASSET", "Error loading image at path '%.*s' because of OS error '%s'", STRING_PRINT(path), translate_error(arena.alloc, error));
+        else
+            state = image_read_from_memory(image, file_content.string, desired_channels, format, flags);
     }
     arena_frame_release(&arena);
     return state;
@@ -214,23 +217,28 @@ EXTERNAL bool image_write_to_memory(Subimage image, String_Builder* into, Image_
 
 EXTERNAL bool image_write_to_file_formatted(Subimage image, String path, Image_File_Format file_format)
 {
-    bool state = true;
+    bool state = false;
     PROFILE_SCOPE() 
-        SCRATCH_ARENA(arena) 
-        {
+        SCRATCH_ARENA(arena) {
             String_Builder formatted = {arena.alloc};
             LOG_INFO("ASSET", "Writing and image '%.*s'", STRING_PRINT(path));
 
-            state = state && image_write_to_memory(image, &formatted, file_format);
-            state = state && file_write_entire(path, formatted.string, log_error(">ASSET"));
+            if(image_write_to_memory(image, &formatted, file_format)) {
+                Platform_Error error = file_write_entire(path, formatted.string);
+                if(error)
+                    LOG_ERROR("ASSET", "Error saving image at path '%.*s' because of OS error '%s'", STRING_PRINT(path), translate_error(arena.alloc, error));
+                else
+                    state = true;
+            }
         }
+
     return state;
 }
 
 EXTERNAL bool image_write_to_file(Subimage image, String path)
 {
     isize last_dot_i = string_find_last_char(path, '.') + 1;
-    CHECK_BOUNDS(last_dot_i, path.len + 1);
+    ASSERT_BOUNDS(last_dot_i, path.len + 1);
     
     String extension = string_tail(path, last_dot_i);
     Image_File_Format file_format = image_file_format_from_extension(extension);

@@ -436,8 +436,10 @@ void asset_loading_finish_execute_all(Atomic_Transfer_Block** channel)
 
 bool asset_job_launch(Platform_Thread_Func func, void* context, isize context_size)
 {
+    TODO(); (void) context_size;
+
     Platform_Thread thread = {0};
-    Platform_Error error = platform_thread_launch(&thread, 0, func, context, context_size);
+    Platform_Error error = platform_thread_launch(&thread, 0, func, context);
     if(error)
     {
         SCRATCH_ARENA(arena)
@@ -487,6 +489,8 @@ EXTERNAL int _material_read_entire_thread(void* context)
     Material_Asset* out_material = ((_Material_Read_Entire_Context*) context)->out_material;
     Atomic_Transfer_Block** channel = ((_Material_Read_Entire_Context*) context)->channel;
 
+    TODO();
+
     bool state = true;
     SCRATCH_ARENA(arena)
     {
@@ -494,9 +498,11 @@ EXTERNAL int _material_read_entire_thread(void* context)
         Hash_String path = out_material->asset.path;
 
         String_Builder file_content = {arena.alloc};
-        state = file_read_entire(path.string, &file_content, log_error("ASSET"));
-        if(state == false)
-            LOG_ERROR("ASSET", "Error loading material file '%s'", path.data);
+        Platform_Error error = file_read_entire(path.string, &file_content, NULL);
+        if(error) {
+            LOG_ERROR("ASSET", "Error loading material file '%s': '%s'", path.data, translate_error(arena.alloc, error));
+            state = false;
+        }
         else
         {   
             Array(Format_Obj_Mtl_Error) mtl_errors = {arena.alloc};

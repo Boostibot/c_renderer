@@ -8,7 +8,7 @@
 #pragma warning(disable:4255) //Disable "no function prototype given: converting '()' to '(void)"  
 #pragma warning(disable:5045) //Disable "Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified"  
 #pragma warning(disable:4201) //Disable "nonstandard extension used: nameless struct/union" 
-#pragma warning(disable:4296) //Disable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic CHECK_BOUNDS)
+#pragma warning(disable:4296) //Disable "expression is always true" (used for example in 0 <= val && val <= max where val is unsigned. This is used in generic ASSERT_BOUNDS)
 #pragma warning(disable:4996) //Disable "This function or variable may be unsafe. Consider using localtime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details."
 #pragma warning(disable:6255) //Disable use _malloca instead of _alloca.
 
@@ -17,10 +17,14 @@
 #define JOT_ALL_TEST
 #define JOT_COUPLED
 #define HASH_DEBUG 0
-#define RUN_TESTS
+//#define RUN_TESTS
 //#define RUN_JUST_TESTS
 //#define DO_PROFILE 0
 //#include "mdump.h"
+
+//void log(void* self, const char* fmt, va_list args);
+
+//log_error = log(log_wrap_error(self), fmt, args)
 
 #include "lib/assert.h"
 #include "lib/profile.h"
@@ -28,7 +32,6 @@
 #include "lib/platform.h"
 #include "lib/allocator.h"
 #include "lib/hash.h"
-#include "lib/log_file.h"
 #include "lib/file.h"
 #include "lib/allocator_debug.h"
 #include "lib/allocator_malloc.h"
@@ -293,10 +296,11 @@ int main()
     platform_init();
     arena_stack_init(scratch_arena_stack(), "scratch arena", 0, 0, 0);
 
-    TEST(profile_init(PROFILE_NATIVE_OUTPUT));
+    //TODO();
+    //TEST(profile_init(PROFILE_NATIVE_OUTPUT));
 
     File_Logger file_logger = {0};
-    file_logger_init_use(&file_logger, allocator_get_malloc(), "logs");
+    file_logger_init(&file_logger, "logs", FILE_LOGGER_USE);
 
     Debug_Allocator debug_alloc = {0};
     debug_allocator_init_use(&debug_alloc, allocator_get_malloc(), DEBUG_ALLOCATOR_DEINIT_LEAK_CHECK | DEBUG_ALLOCATOR_CAPTURE_CALLSTACK);
@@ -633,7 +637,7 @@ void gl_texture_array_set(GL_Texture_Array* array, i32 layer, i32 x, i32 y, Imag
 {
     glBindTexture(GL_TEXTURE_2D_ARRAY, array->handle);
     //@TODO: change from check bounds to error notify
-    CHECK_BOUNDS(layer, array->layer_count);
+    ASSERT_BOUNDS(layer, array->layer_count);
 
     if(image.width > 0 && image.height > 0)
     {
@@ -652,7 +656,7 @@ void gl_texture_array_set(GL_Texture_Array* array, i32 layer, i32 x, i32 y, Imag
 bool gl_texture_array_fill_layer(GL_Texture_Array* array, i32 layer, Image image, bool regenerate_mips)
 {
     bool state = true;
-    CHECK_BOUNDS(layer, array->layer_count);
+    ASSERT_BOUNDS(layer, array->layer_count);
     
     if(image.width > array->width || image.height > array->height)
     {
@@ -2317,7 +2321,7 @@ void render_render(Render* render, Camera camera)
 
                 if(resolution_index)
                 {
-                    CHECK_BOUNDS(resolution_index - 1, render->texture_manager.resolutions.len);
+                    ASSERT_BOUNDS(resolution_index - 1, render->texture_manager.resolutions.len);
                     GL_Texture_Array* resolution_array = &render->texture_manager.resolutions.data[resolution_index - 1].array;
 
                     glActiveTexture(GL_TEXTURE0 + i);
@@ -2650,7 +2654,8 @@ void run_func(void* context)
         
             if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
             {
-                profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
+                TODO("print json");
+                //profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
             }
         
             if(control_was_pressed(&app->controls, CONTROL_DEBUG_1))
@@ -2755,7 +2760,7 @@ void run_func(void* context)
     //profile_log_all(log_info("APP"), true);
 
     LOG_INFO("RESOURCES", "Resources allocation stats:");
-    log_allocator_stats(log_info(">RESOURCES"), resources_alloc.alloc);
+    log_allocator_stats(">RESOURCES", LOG_INFO, resources_alloc.alloc);
 
     debug_allocator_deinit(&resources_alloc);
     debug_allocator_deinit(&renderer_alloc);
@@ -2768,12 +2773,12 @@ void error_func(void* context, Platform_Sandbox_Error error)
     (void) context;
     const char* msg = platform_exception_to_string(error.exception);
     
+
     LOG_ERROR("APP", "%s exception occurred", msg);
     LOG_TRACE("APP", "printing trace:");
-    log_captured_callstack(log_error(">APP"), error.call_stack, error.call_stack_size);
+    log_captured_callstack(LOG_TRACE, ">APP", error.call_stack, error.call_stack_size);
 }
 
-#include "_test_channel.h"
 //#include "mdump2.h"
 #include "lib/_test_all.h"
 
@@ -2803,12 +2808,11 @@ void run_test_func(void* context)
 	        }
         }
 
-        test_channel(10.0);
         exit(0);
         (void) context;
         test_all(3.0);
 
-        profile_flush(true);
-        profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
+        //profile_flush(true);
+        //profile_to_chrome_json_files(PROFILE_JSON_OUTPUT, PROFILE_NATIVE_OUTPUT, NULL, NULL);
     }
 }

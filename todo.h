@@ -50,7 +50,7 @@ EXTERNAL void todo_deinit(Todo* todo);
 EXTERNAL void todo_parse_source(Todo_Array* todos, String path, String todo_marker, String source);
 EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo_marker);
 EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo_marker, isize depth);
-EXTERNAL bool log_todos(Log log, const char* marker, isize depth);
+EXTERNAL bool log_todos(const char* marker, isize depth);
 
 #endif
 
@@ -191,7 +191,7 @@ EXTERNAL bool todo_parse_file(Todo_Array* todos, String path, String todo)
     Arena_Frame arena = scratch_arena_frame_acquire();
     String_Builder source = {arena.alloc};
 
-    bool file_error = file_read_entire(path, &source, log_error("todo"));
+    bool file_error = file_read_entire(path, &source, NULL);
     todo_parse_source(todos, path, source.string, todo);
     
     arena_frame_release(&arena);
@@ -227,7 +227,7 @@ EXTERNAL bool todo_parse_folder(Todo_Array* todos, String path, String todo, isi
     return state;
 }
 
-EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
+EXTERNAL bool log_todos(const char* marker, isize depth)
 {
     Todo_Array todos = {0};
     bool state = todo_parse_folder(&todos, STRING("./"), string_of(marker), depth);
@@ -253,7 +253,7 @@ EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
             }
         }
     
-        LOG(log, "Logging TODOs (%lli):", (lli) todos.len);
+        LOG_INFO("todos", "Logging TODOs (%lli):", (lli) todos.len);
         for(isize i = 0; i < todos.len; i++)
         {
             Todo todo = todos.data[i];
@@ -263,9 +263,9 @@ EXTERNAL bool log_todos(Log log, const char* marker, isize depth)
                 path = string_safe_tail(path, common_path_prefix.len);
 
             if(todo.signature.len > 0)
-                LOG(log_indented(log), "%-20s %4lli %s(%s) %s\n", path.data, (lli) todo.line, todo.marker.data, todo.signature.data, todo.comment.data);
+                LOG_INFO(">todos", "%-20s %4lli %s(%s) %s\n", path.data, (lli) todo.line, todo.marker.data, todo.signature.data, todo.comment.data);
             else
-                LOG(log_indented(log), "%-20s %4lli %s %s\n", path.data, (lli) todo.line, todo.marker.data, todo.comment.data);
+                LOG_INFO(">todos", "%-20s %4lli %s %s\n", path.data, (lli) todo.line, todo.marker.data, todo.comment.data);
         }
     
         for(isize i = 0; i < todos.len; i++)

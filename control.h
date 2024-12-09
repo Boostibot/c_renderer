@@ -1,4 +1,6 @@
 #include "lib/defines.h"
+#include "lib/log.h"
+#include "lib/assert.h"
 #include "glfw/glfw3.h"
 
 #define CONTROL_MAPPING_SETS 3
@@ -131,13 +133,13 @@ u8* control_mapping_get_entry(Control_Mapping* mapping, Input_Type type, isize i
     switch(type)
     {
         case INPUT_TYPE_MOUSE:        
-            CHECK_BOUNDS(index, GLFW_MOUSE_LAST + 1); 
+            ASSERT_BOUNDS(index, GLFW_MOUSE_LAST + 1); 
             return &mapping->mouse[index];
         case INPUT_TYPE_MOUSE_BUTTON: 
-            CHECK_BOUNDS(index, GLFW_MOUSE_BUTTON_LAST + 1); 
+            ASSERT_BOUNDS(index, GLFW_MOUSE_BUTTON_LAST + 1); 
             return &mapping->mouse_buttons[index];
         case INPUT_TYPE_KEY:          
-            CHECK_BOUNDS(index, GLFW_KEY_LAST + 1); 
+            ASSERT_BOUNDS(index, GLFW_KEY_LAST + 1); 
             return &mapping->keys[index];
         default: ASSERT(false); return NULL;
     }
